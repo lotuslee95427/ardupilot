@@ -239,6 +239,12 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
+// NewMode - allow vehicle to be flipped over after a crash
+#ifndef MODE_NEWMODE_ENABLED
+# define MODE_NEWMODE_ENABLED 1
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
 // Flowhold - use optical flow to hover in place
 #ifndef MODE_FLOWHOLD_ENABLED
 # define MODE_FLOWHOLD_ENABLED AP_OPTICALFLOW_ENABLED
