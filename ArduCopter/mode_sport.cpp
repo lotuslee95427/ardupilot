@@ -4,16 +4,20 @@
 
 /*
  * Init and run calls for sport flight mode
+ * 初始化和运行运动飞行模式的调用
  */
 
 // sport_init - initialise sport controller
+// sport_init - 初始化运动控制器
 bool ModeSport::init(bool ignore_checks)
 {
     // set vertical speed and acceleration limits
+    // 设置垂直速度和加速度限制
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
     pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
     // initialise the vertical position controller
+    // 初始化垂直位置控制器
     if (!pos_control->is_active_z()) {
         pos_control->init_z_controller();
     }
@@ -22,29 +26,38 @@ bool ModeSport::init(bool ignore_checks)
 }
 
 // sport_run - runs the sport controller
+// sport_run - 运行运动控制器
 // should be called at 100hz or more
+// 应该以100hz或更高频率调用
 void ModeSport::run()
 {
     // set vertical speed and acceleration limits
+    // 设置垂直速度和加速度限制
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
     // apply SIMPLE mode transform
+    // 应用简单模式转换
     update_simple_mode();
 
     // get pilot's desired roll and pitch rates
+    // 获取飞行员期望的横滚和俯仰速率
 
     // calculate rate requests
+    // 计算速率请求
     float target_roll_rate = channel_roll->get_control_in() * g2.command_model_acro_rp.get_rate() * 100.0 / ROLL_PITCH_YAW_INPUT_MAX;
     float target_pitch_rate = channel_pitch->get_control_in() * g2.command_model_acro_rp.get_rate() * 100.0 / ROLL_PITCH_YAW_INPUT_MAX;
 
     // get attitude targets
+    // 获取姿态目标
     const Vector3f att_target = attitude_control->get_att_target_euler_cd();
 
     // Calculate trainer mode earth frame rate command for roll
+    // 计算教练模式下地球框架的横滚速率命令
     int32_t roll_angle = wrap_180_cd(att_target.x);
     target_roll_rate -= constrain_int32(roll_angle, -ACRO_LEVEL_MAX_ANGLE, ACRO_LEVEL_MAX_ANGLE) * g.acro_balance_roll;
 
     // Calculate trainer mode earth frame rate command for pitch
+    // 计算教练模式下地球框架的俯仰速率命令
     int32_t pitch_angle = wrap_180_cd(att_target.y);
     target_pitch_rate -= constrain_int32(pitch_angle, -ACRO_LEVEL_MAX_ANGLE, ACRO_LEVEL_MAX_ANGLE) * g.acro_balance_pitch;
 
@@ -62,22 +75,27 @@ void ModeSport::run()
     }
 
     // get pilot's desired yaw rate
+    // 获取飞行员期望的偏航速率
     float target_yaw_rate = get_pilot_desired_yaw_rate();
 
     // get pilot desired climb rate
+    // 获取飞行员期望的爬升率
     float target_climb_rate = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
     target_climb_rate = constrain_float(target_climb_rate, -get_pilot_speed_dn(), g.pilot_speed_up);
 
     // Sport State Machine Determination
+    // 运动状态机确定
     AltHoldModeState sport_state = get_alt_hold_state(target_climb_rate);
 
     // State Machine
+    // 状态机
     switch (sport_state) {
 
     case AltHoldModeState::MotorStopped:
         attitude_control->reset_rate_controller_I_terms();
         attitude_control->reset_yaw_target_and_rate(false);
         pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+        // 强制油门输出衰减到零
         break;
 
     case AltHoldModeState::Landed_Ground_Idle:
@@ -87,18 +105,22 @@ void ModeSport::run()
     case AltHoldModeState::Landed_Pre_Takeoff:
         attitude_control->reset_rate_controller_I_terms_smoothly();
         pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+        // 强制油门输出衰减到零
         break;
 
     case AltHoldModeState::Takeoff:
         // initiate take-off
+        // 开始起飞
         if (!takeoff.running()) {
             takeoff.start(constrain_float(g.pilot_takeoff_alt,0.0f,1000.0f));
         }
 
         // get avoidance adjusted climb rate
+        // 获取避障调整后的爬升率
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
         // set position controller targets adjusted for pilot input
+        // 设置根据飞行员输入调整的位置控制器目标
         takeoff.do_pilot_takeoff(target_climb_rate);
         break;
 
@@ -106,22 +128,27 @@ void ModeSport::run()
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
         // get avoidance adjusted climb rate
+        // 获取避障调整后的爬升率
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
 #if AP_RANGEFINDER_ENABLED
         // update the vertical offset based on the surface measurement
+        // 根据表面测量更新垂直偏移
         copter.surface_tracking.update_surface_offset();
 #endif
 
         // Send the commanded climb rate to the position controller
+        // 将命令的爬升率发送到位置控制器
         pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
         break;
     }
 
     // call attitude controller
+    // 调用姿态控制器
     attitude_control->input_euler_rate_roll_pitch_yaw(target_roll_rate, target_pitch_rate, target_yaw_rate);
 
     // run the vertical position controller and set output throttle
+    // 运行垂直位置控制器并设置输出油门
     pos_control->update_z_controller();
 }
 
