@@ -346,21 +346,22 @@ void AC_AttitudeControl_Multi::update_althold_lean_angle_max(float throttle_in)
     float althold_lean_angle_max = acosf(constrain_float(throttle_in / (AC_ATTITUDE_CONTROL_ANGLE_LIMIT_THROTTLE_MAX * thr_max), 0.0f, 1.0f));
     _althold_lean_angle_max = _althold_lean_angle_max + (_dt / (_dt + _angle_limit_tc)) * (althold_lean_angle_max - _althold_lean_angle_max);
 }
-
 void AC_AttitudeControl_Multi::set_throttle_out(float throttle_in, bool apply_angle_boost, float filter_cutoff)
 {
-    _throttle_in = throttle_in;
-    update_althold_lean_angle_max(throttle_in);
-    _motors.set_throttle_filter_cutoff(filter_cutoff);
+    _throttle_in = throttle_in; // 保存输入的油门值
+    update_althold_lean_angle_max(throttle_in); // 更新姿态保持模式下的最大倾斜角度
+    _motors.set_throttle_filter_cutoff(filter_cutoff); // 设置油门滤波器的截止频率
     if (apply_angle_boost) {
         // Apply angle boost
-        throttle_in = get_throttle_boosted(throttle_in);
+        // 应用角度提升
+        throttle_in = get_throttle_boosted(throttle_in); // 获取提升后的油门值
     } else {
         // Clear angle_boost for logging purposes
+        // 清除角度提升值以便记录日志
         _angle_boost = 0.0f;
     }
-    _motors.set_throttle(throttle_in);
-    _motors.set_throttle_avg_max(get_throttle_avg_max(MAX(throttle_in, _throttle_in)));
+    _motors.set_throttle(throttle_in); // 设置电机的油门值
+    _motors.set_throttle_avg_max(get_throttle_avg_max(MAX(throttle_in, _throttle_in))); // 设置电机的平均最大油门值
 }
 
 void AC_AttitudeControl_Multi::set_throttle_mix_max(float ratio)

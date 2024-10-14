@@ -6,6 +6,7 @@
 /*
   implement FLOWHOLD mode, for position hold using optical flow
   without rangefinder
+  实现FLOWHOLD模式,使用光流传感器进行位置保持,无需测距仪
  */
 
 const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
@@ -15,6 +16,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Range: 0.1 6.0
     // @Increment: 0.1
     // @User: Advanced
+    // FlowHold水平方向P增益
 
     // @Param: _XY_I
     // @DisplayName: FlowHold I gain
@@ -22,6 +24,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Range: 0.02 1.00
     // @Increment: 0.01
     // @User: Advanced
+    // FlowHold水平方向I增益
 
     // @Param: _XY_IMAX
     // @DisplayName: FlowHold Integrator Max
@@ -30,6 +33,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Increment: 10
     // @Units: cdeg
     // @User: Advanced
+    // FlowHold水平方向积分器最大值
 
     // @Param: _XY_FILT_HZ
     // @DisplayName: FlowHold filter on input to control
@@ -37,6 +41,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Range: 0 100
     // @Units: Hz
     // @User: Advanced
+    // FlowHold水平方向控制输入滤波器
     AP_SUBGROUPINFO(flow_pi_xy, "_XY_",  1, ModeFlowHold, AC_PI_2D),
 
     // @Param: _FLOW_MAX
@@ -44,6 +49,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Description: Controls maximum apparent flow rate in flowhold
     // @Range: 0.1 2.5
     // @User: Standard
+    // 控制FlowHold模式下的最大视觉流速率
     AP_GROUPINFO("_FLOW_MAX", 2, ModeFlowHold, flow_max, 0.6),
 
     // @Param: _FILT_HZ
@@ -52,6 +58,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Range: 1 100
     // @Units: Hz
     // @User: Standard
+    // 光流数据的滤波频率
     AP_GROUPINFO("_FILT_HZ", 3, ModeFlowHold, flow_filter_hz, 5),
 
     // @Param: _QUAL_MIN
@@ -59,6 +66,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Description: Minimum flow quality to use flow position hold
     // @Range: 0 255
     // @User: Standard
+    // 使用光流进行位置保持的最小光流质量
     AP_GROUPINFO("_QUAL_MIN", 4, ModeFlowHold, flow_min_quality, 10),
 
     // 5 was FLOW_SPEED
@@ -69,6 +77,7 @@ const AP_Param::GroupInfo ModeFlowHold::var_info[] = {
     // @Range: 1 30
     // @User: Standard
     // @Units: deg/s
+    // 控制摇杆释放时的减速率
     AP_GROUPINFO("_BRAKE_RATE", 6, ModeFlowHold, brake_rate_dps, 8),
 
     AP_GROUPEND
@@ -81,31 +90,33 @@ ModeFlowHold::ModeFlowHold(void) : Mode()
 
 #define CONTROL_FLOWHOLD_EARTH_FRAME 0
 
-// flowhold_init - initialise flowhold controller
+// flowhold_init - 初始化flowhold控制器
 bool ModeFlowHold::init(bool ignore_checks)
 {
     if (!copter.optflow.enabled() || !copter.optflow.healthy()) {
         return false;
     }
 
-    // set vertical speed and acceleration limits
+    // 设置垂直速度和加速度限制
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
     pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
-    // initialise the vertical position controller
+    // 初始化垂直位置控制器
     if (!copter.pos_control->is_active_z()) {
         pos_control->init_z_controller();
     }
 
+    // 设置光流滤波器的截止频率
     flow_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), flow_filter_hz.get());
 
     quality_filtered = 0;
     flow_pi_xy.reset_I();
     limited = false;
 
+    // 设置PI控制器的dt
     flow_pi_xy.set_dt(1.0/copter.scheduler.get_loop_rate_hz());
 
-    // start with INS height
+    // 从INS获取初始高度
     last_ins_height = copter.inertial_nav.get_position_z_up_cm() * 0.01;
     height_offset = 0;
 
@@ -113,39 +124,39 @@ bool ModeFlowHold::init(bool ignore_checks)
 }
 
 /*
-  calculate desired attitude from flow sensor. Called when flow sensor is healthy
+  计算从光流传感器得到的期望姿态。当光流传感器健康时调用
  */
 void ModeFlowHold::flowhold_flow_to_angle(Vector2f &bf_angles, bool stick_input)
 {
     uint32_t now = AP_HAL::millis();
 
-    // get corrected raw flow rate
+    // 获取校正后的原始光流速率
     Vector2f raw_flow = copter.optflow.flowRate() - copter.optflow.bodyRate();
 
-    // limit sensor flow, this prevents oscillation at low altitudes
+    // 限制传感器光流,防止低高度时的振荡
     raw_flow.x = constrain_float(raw_flow.x, -flow_max, flow_max);
     raw_flow.y = constrain_float(raw_flow.y, -flow_max, flow_max);
 
-    // filter the flow rate
+    // 滤波光流速率
     Vector2f sensor_flow = flow_filter.apply(raw_flow);
 
-    // scale by height estimate, limiting it to height_min to height_max
+    // 根据高度估计缩放,限制高度在height_min到height_max之间
     float ins_height = copter.inertial_nav.get_position_z_up_cm() * 0.01;
     float height_estimate = ins_height + height_offset;
 
-    // compensate for height, this converts to (approx) m/s
+    // 补偿高度,将单位转换为(近似)m/s
     sensor_flow *= constrain_float(height_estimate, height_min, height_max);
 
-    // rotate controller input to earth frame
+    // 将控制器输入旋转到地球坐标系
     Vector2f input_ef = copter.ahrs.body_to_earth2D(sensor_flow);
 
-    // run PI controller
+    // 运行PI控制器
     flow_pi_xy.set_input(input_ef);
 
-    // get earth frame controller attitude in centi-degrees
+    // 获取地球坐标系下的控制器姿态(单位:厘度)
     Vector2f ef_output;
 
-    // get P term
+    // 获取P项
     ef_output = flow_pi_xy.get_p();
 
     if (stick_input) {
@@ -153,7 +164,7 @@ void ModeFlowHold::flowhold_flow_to_angle(Vector2f &bf_angles, bool stick_input)
         braking = true;
     }
     if (!stick_input && braking) {
-        // stop braking if either 3s has passed, or we have slowed below 0.3m/s
+        // 如果3秒过去或速度低于0.3m/s,停止制动
         if (now - last_stick_input_ms > 3000 || sensor_flow.length() < 0.3) {
             braking = false;
 #if 0
@@ -164,18 +175,18 @@ void ModeFlowHold::flowhold_flow_to_angle(Vector2f &bf_angles, bool stick_input)
     }
 
     if (!stick_input && !braking) {
-        // get I term
+        // 获取I项
         if (limited) {
-            // only allow I term to shrink in length
+            // 只允许I项长度缩小
             xy_I = flow_pi_xy.get_i_shrink();
         } else {
-            // normal I term operation
+            // 正常I项操作
             xy_I = flow_pi_xy.get_pi();
         }
     }
 
     if (!stick_input && braking) {
-        // calculate brake angle for each axis separately
+        // 分别计算每个轴的制动角度
         for (uint8_t i=0; i<2; i++) {
             float &velocity = sensor_flow[i];
             float abs_vel_cms = fabsf(velocity)*100;
@@ -192,13 +203,13 @@ void ModeFlowHold::flowhold_flow_to_angle(Vector2f &bf_angles, bool stick_input)
     ef_output += xy_I;
     ef_output *= copter.aparm.angle_max;
 
-    // convert to body frame
+    // 转换到机体坐标系
     bf_angles += copter.ahrs.earth_to_body2D(ef_output);
 
-    // set limited flag to prevent integrator windup
+    // 设置限制标志以防止积分器饱和
     limited = fabsf(bf_angles.x) > copter.aparm.angle_max || fabsf(bf_angles.y) > copter.aparm.angle_max;
 
-    // constrain to angle limit
+    // 限制到最大角度
     bf_angles.x = constrain_float(bf_angles.x, -copter.aparm.angle_max, copter.aparm.angle_max);
     bf_angles.y = constrain_float(bf_angles.y, -copter.aparm.angle_max, copter.aparm.angle_max);
 
@@ -226,31 +237,31 @@ void ModeFlowHold::flowhold_flow_to_angle(Vector2f &bf_angles, bool stick_input)
 #endif  // HAL_LOGGING_ENABLED
 }
 
-// flowhold_run - runs the flowhold controller
-// should be called at 100hz or more
+// flowhold_run - 运行flowhold控制器
+// 应该以100Hz或更高的频率调用
 void ModeFlowHold::run()
 {
     update_height_estimate();
 
-    // set vertical speed and acceleration limits
+    // 设置垂直速度和加速度限制
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
-    // apply SIMPLE mode transform to pilot inputs
+    // 应用SIMPLE模式变换到飞行员输入
     update_simple_mode();
 
-    // check for filter change
+    // 检查滤波器变化
     if (!is_equal(flow_filter.get_cutoff_freq(), flow_filter_hz.get())) {
         flow_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), flow_filter_hz.get());
     }
 
-    // get pilot desired climb rate
+    // 获取飞行员期望的爬升速率
     float target_climb_rate = copter.get_pilot_desired_climb_rate(copter.channel_throttle->get_control_in());
     target_climb_rate = constrain_float(target_climb_rate, -get_pilot_speed_dn(), copter.g.pilot_speed_up);
 
-    // get pilot's desired yaw rate
+    // 获取飞行员期望的偏航速率
     float target_yaw_rate = get_pilot_desired_yaw_rate();
 
-    // Flow Hold State Machine Determination
+    // 确定FlowHold状态机状态
     AltHoldModeState flowhold_state = get_alt_hold_state(target_climb_rate);
 
     if (copter.optflow.healthy()) {
@@ -260,30 +271,30 @@ void ModeFlowHold::run()
         quality_filtered = 0;
     }
 
-    // Flow Hold State Machine
+    // FlowHold状态机
     switch (flowhold_state) {
 
     case AltHoldModeState::MotorStopped:
         copter.motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
         copter.attitude_control->reset_rate_controller_I_terms();
         copter.attitude_control->reset_yaw_target_and_rate();
-        copter.pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+        copter.pos_control->relax_z_controller(0.0f);   // 强制油门输出衰减到零
         flow_pi_xy.reset_I();
         break;
 
     case AltHoldModeState::Takeoff:
-        // set motors to full range
+        // 将电机设置为全范围
         copter.motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // initiate take-off
+        // 初始化起飞
         if (!takeoff.running()) {
             takeoff.start(constrain_float(g.pilot_takeoff_alt,0.0f,1000.0f));
         }
 
-        // get avoidance adjusted climb rate
+        // 获取经过避障调整的爬升速率
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
-        // set position controller targets adjusted for pilot input
+        // 设置根据飞行员输入调整的位置控制器目标
         takeoff.do_pilot_takeoff(target_climb_rate);
         break;
 
@@ -293,29 +304,29 @@ void ModeFlowHold::run()
 
     case AltHoldModeState::Landed_Pre_Takeoff:
         attitude_control->reset_rate_controller_I_terms_smoothly();
-        pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+        pos_control->relax_z_controller(0.0f);   // 强制油门输出衰减到零
         break;
 
     case AltHoldModeState::Flying:
         copter.motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // get avoidance adjusted climb rate
+        // 获取经过避障调整的爬升速率
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
 #if AP_RANGEFINDER_ENABLED
-        // update the vertical offset based on the surface measurement
+        // 根据表面测量更新垂直偏移
         copter.surface_tracking.update_surface_offset();
 #endif
 
-        // Send the commanded climb rate to the position controller
+        // 将命令的爬升速率发送到位置控制器
         pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
         break;
     }
 
-    // flowhold attitude target calculations
+    // flowhold姿态目标计算
     Vector2f bf_angles;
 
-    // calculate alt-hold angles
+    // 计算定高角度
     int16_t roll_in = copter.channel_roll->get_control_in();
     int16_t pitch_in = copter.channel_pitch->get_control_in();
     float angle_max = copter.aparm.angle_max;
@@ -323,7 +334,7 @@ void ModeFlowHold::run()
 
     if (quality_filtered >= flow_min_quality &&
         AP_HAL::millis() - copter.arm_time_ms > 3000) {
-        // don't use for first 3s when we are just taking off
+        // 在起飞后的前3秒内不使用
         Vector2f flow_angles;
 
         flowhold_flow_to_angle(flow_angles, (roll_in != 0) || (pitch_in != 0));
@@ -335,26 +346,26 @@ void ModeFlowHold::run()
     bf_angles.y = constrain_float(bf_angles.y, -angle_max, angle_max);
 
 #if AP_AVOIDANCE_ENABLED
-    // apply avoidance
+    // 应用避障
     copter.avoid.adjust_roll_pitch(bf_angles.x, bf_angles.y, copter.aparm.angle_max);
 #endif
 
-    // call attitude controller
+    // 调用姿态控制器
     copter.attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(bf_angles.x, bf_angles.y, target_yaw_rate);
 
-    // run the vertical position controller and set output throttle
+    // 运行垂直位置控制器并设置输出油门
     pos_control->update_z_controller();
 }
 
 /*
-  update height estimate using integrated accelerometer ratio with optical flow
+  使用与光流集成的加速度计比率更新高度估计
  */
 void ModeFlowHold::update_height_estimate(void)
 {
     float ins_height = copter.inertial_nav.get_position_z_up_cm() * 0.01;
 
 #if 1
-    // assume on ground when disarmed, or if we have only just started spooling the motors up
+    // 当解除武装或刚开始启动电机时,假设在地面上
     if (!hal.util->get_soft_armed() ||
         copter.motors->get_desired_spool_state() != AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED ||
         AP_HAL::millis() - copter.arm_time_ms < 1500) {
@@ -364,28 +375,28 @@ void ModeFlowHold::update_height_estimate(void)
     }
 #endif
 
-    // get delta velocity in body frame
+    // 获取机体坐标系下的速度增量
     Vector3f delta_vel;
     float delta_vel_dt;
     if (!copter.ins.get_delta_velocity(delta_vel, delta_vel_dt)) {
         return;
     }
 
-    // integrate delta velocity in earth frame
+    // 将速度增量积分到地球坐标系
     const Matrix3f &rotMat = copter.ahrs.get_rotation_body_to_ned();
     delta_vel = rotMat * delta_vel;
     delta_velocity_ne.x += delta_vel.x;
     delta_velocity_ne.y += delta_vel.y;
 
     if (!copter.optflow.healthy()) {
-        // can't update height model with no flow sensor
+        // 没有光流传感器时无法更新高度模型
         last_flow_ms = AP_HAL::millis();
         delta_velocity_ne.zero();
         return;
     }
 
     if (last_flow_ms == 0) {
-        // just starting up
+        // 刚开始启动
         last_flow_ms = copter.optflow.last_update();
         delta_velocity_ne.zero();
         height_offset = 0;
@@ -393,22 +404,22 @@ void ModeFlowHold::update_height_estimate(void)
     }
 
     if (copter.optflow.last_update() == last_flow_ms) {
-        // no new flow data
+        // 没有新的光流数据
         return;
     }
 
-    // convert delta velocity back to body frame to match the flow sensor
+    // 将速度增量转换回机体坐标系以匹配光流传感器
     Vector2f delta_vel_bf = copter.ahrs.earth_to_body2D(delta_velocity_ne);
 
-    // and convert to an rate equivalent, to be comparable to flow
+    // 并转换为等效速率,以便与光流可比
     Vector2f delta_vel_rate(-delta_vel_bf.y, delta_vel_bf.x);
 
-    // get body flow rate in radians per second
+    // 获取机体坐标系下的光流速率(弧度/秒)
     Vector2f flow_rate_rps = copter.optflow.flowRate() - copter.optflow.bodyRate();
 
     uint32_t dt_ms = copter.optflow.last_update() - last_flow_ms;
     if (dt_ms > 500) {
-        // too long between updates, ignore
+        // 更新间隔太长,忽略
         last_flow_ms = copter.optflow.last_update();
         delta_velocity_ne.zero();
         last_flow_rate_rps = flow_rate_rps;
@@ -418,40 +429,40 @@ void ModeFlowHold::update_height_estimate(void)
     }
 
     /*
-      basic equation is:
+      基本方程是:
       height_m = delta_velocity_mps / delta_flowrate_rps;
      */
 
-    // get delta_flowrate_rps
+    // 获取delta_flowrate_rps
     Vector2f delta_flowrate = flow_rate_rps - last_flow_rate_rps;
     last_flow_rate_rps = flow_rate_rps;
     last_flow_ms = copter.optflow.last_update();
 
     /*
-      update height estimate
+      更新高度估计
      */
     const float min_velocity_change = 0.04;
     const float min_flow_change = 0.04;
     const float height_delta_max = 0.25;
 
     /*
-      for each axis update the height estimate
+      对每个轴更新高度估计
      */
     float delta_height = 0;
     uint8_t total_weight = 0;
     float height_estimate = ins_height + height_offset;
 
     for (uint8_t i=0; i<2; i++) {
-        // only use height estimates when we have significant delta-velocity and significant delta-flow
+        // 只在有显著速度增量和显著光流增量时使用高度估计
         float abs_flow = fabsf(delta_flowrate[i]);
         if (abs_flow < min_flow_change ||
             fabsf(delta_vel_rate[i]) < min_velocity_change) {
             continue;
         }
-        // get instantaneous height estimate
+        // 获取瞬时高度估计
         float height = delta_vel_rate[i] / delta_flowrate[i];
         if (height <= 0) {
-            // discard negative heights
+            // 丢弃负高度
             continue;
         }
         delta_height += (height - height_estimate) * abs_flow;
@@ -462,24 +473,23 @@ void ModeFlowHold::update_height_estimate(void)
     }
 
     if (delta_height < 0) {
-        // bias towards lower heights, as we'd rather have too low
-        // gain than have oscillation. This also compensates a bit for
-        // the discard of negative heights above
+        // 偏向较低高度,因为我们宁愿增益过低也不要出现振荡
+        // 这也部分补偿了上面丢弃负高度的影响
         delta_height *= 2;
     }
 
-    // don't update height by more than height_delta_max, this is a simple way of rejecting noise
+    // 高度变化不超过height_delta_max,这是一种简单的噪声抑制方法
     float new_offset = height_offset + constrain_float(delta_height, -height_delta_max, height_delta_max);
 
-    // apply a simple filter
+    // 应用简单滤波
     height_offset = 0.8 * height_offset + 0.2 * new_offset;
 
     if (ins_height + height_offset < height_min) {
-        // height estimate is never allowed below the minimum
+        // 高度估计永远不允许低于最小值
         height_offset = height_min - ins_height;
     }
 
-    // new height estimate for logging
+    // 用于记录的新高度估计
     height_estimate = ins_height + height_offset;
 
 #if HAL_LOGGING_ENABLED

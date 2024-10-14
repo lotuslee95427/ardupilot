@@ -3,68 +3,68 @@
 #if MODE_FLIP_ENABLED
 
 /*
- * Init and run calls for flip flight mode
- *      original implementation in 2010 by Jose Julio
- *      Adapted and updated for AC2 in 2011 by Jason Short
+ * 翻转飞行模式的初始化和运行调用
+ *      原始实现由Jose Julio在2010年完成
+ *      由Jason Short在2011年为AC2进行了适配和更新
  *
- *      Controls:
- *          RC7_OPTION - RC12_OPTION parameter must be set to "Flip" (AUXSW_FLIP) which is "2"
- *          Pilot switches to Stabilize, Acro or AltHold flight mode and puts ch7/ch8 switch to ON position
- *          Vehicle will Roll right by default but if roll or pitch stick is held slightly left, forward or back it will flip in that direction
- *          Vehicle should complete the roll within 2.5sec and will then return to the original flight mode it was in before flip was triggered
- *          Pilot may manually exit flip by switching off ch7/ch8 or by moving roll stick to >40deg left or right
+ *      控制:
+ *          RC7_OPTION - RC12_OPTION参数必须设置为"Flip"(AUXSW_FLIP),即"2"
+ *          飞行员切换到Stabilize、Acro或AltHold飞行模式,并将ch7/ch8开关置于ON位置
+ *          默认情况下,飞行器将向右翻滚,但如果横滚或俯仰摇杆稍微向左、前或后倾斜,它将朝那个方向翻转
+ *          飞行器应在2.5秒内完成翻滚,然后返回到触发翻转前的原始飞行模式
+ *          飞行员可以通过关闭ch7/ch8或将横滚摇杆向左或向右移动>40度来手动退出翻转
  *
- *      State machine approach:
- *          FlipState::Start (while copter is leaning <45deg) : roll right at 400deg/sec, increase throttle
- *          FlipState::Roll (while copter is between +45deg ~ -90) : roll right at 400deg/sec, reduce throttle
- *          FlipState::Recover (while copter is between -90deg and original target angle) : use earth frame angle controller to return vehicle to original attitude
+ *      状态机方法:
+ *          FlipState::Start (当飞行器倾斜<45度时) : 以400度/秒的速度向右翻滚,增加油门
+ *          FlipState::Roll (当飞行器在+45度~-90度之间) : 以400度/秒的速度向右翻滚,减少油门
+ *          FlipState::Recover (当飞行器在-90度和原始目标角度之间) : 使用地球坐标系角度控制器将飞行器恢复到原始姿态
  */
 
-#define FLIP_THR_INC        0.20f   // throttle increase during FlipState::Start stage (under 45deg lean angle)
-#define FLIP_THR_DEC        0.24f   // throttle decrease during FlipState::Roll stage (between 45deg ~ -90deg roll)
-#define FLIP_ROTATION_RATE  40000   // rotation rate request in centi-degrees / sec (i.e. 400 deg/sec)
-#define FLIP_TIMEOUT_MS     2500    // timeout after 2.5sec.  Vehicle will switch back to original flight mode
-#define FLIP_RECOVERY_ANGLE 500     // consider successful recovery when roll is back within 5 degrees of original
+#define FLIP_THR_INC        0.20f   // FlipState::Start阶段的油门增加量(45度倾斜角度以下)
+#define FLIP_THR_DEC        0.24f   // FlipState::Roll阶段的油门减少量(45度~-90度翻滚之间)
+#define FLIP_ROTATION_RATE  40000   // 旋转速率请求,单位为百分之一度/秒(即400度/秒)
+#define FLIP_TIMEOUT_MS     2500    // 2.5秒后超时。飞行器将切换回原始飞行模式
+#define FLIP_RECOVERY_ANGLE 500     // 当翻滚角度回到原始角度的5度以内时,认为恢复成功
 
-#define FLIP_ROLL_RIGHT      1      // used to set flip_dir
-#define FLIP_ROLL_LEFT      -1      // used to set flip_dir
+#define FLIP_ROLL_RIGHT      1      // 用于设置flip_dir,表示向右翻滚
+#define FLIP_ROLL_LEFT      -1      // 用于设置flip_dir,表示向左翻滚
 
-#define FLIP_PITCH_BACK      1      // used to set flip_dir
-#define FLIP_PITCH_FORWARD  -1      // used to set flip_dir
+#define FLIP_PITCH_BACK      1      // 用于设置flip_dir,表示向后俯仰
+#define FLIP_PITCH_FORWARD  -1      // 用于设置flip_dir,表示向前俯仰
 
-// flip_init - initialise flip controller
+// flip_init - 初始化翻转控制器
 bool ModeFlip::init(bool ignore_checks)
 {
-    // only allow flip from some flight modes, for example ACRO, Stabilize, AltHold or FlowHold flight modes
+    // 只允许从某些飞行模式进行翻转,例如ACRO、Stabilize、AltHold或FlowHold飞行模式
     if (!copter.flightmode->allows_flip()) {
         return false;
     }
 
-    // if in acro or stabilize ensure throttle is above zero
+    // 如果在acro或stabilize模式下,确保油门高于零
     if (copter.ap.throttle_zero && (copter.flightmode->mode_number() == Mode::Number::ACRO || copter.flightmode->mode_number() == Mode::Number::STABILIZE)) {
         return false;
     }
 
-    // ensure roll input is less than 40deg
+    // 确保横滚输入小于40度
     if (abs(channel_roll->get_control_in()) >= 4000) {
         return false;
     }
 
-    // only allow flip when flying
+    // 只有在飞行时才允许翻转
     if (!motors->armed() || copter.ap.land_complete) {
         return false;
     }
 
-    // capture original flight mode so that we can return to it after completion
+    // 捕获原始飞行模式,以便在完成后返回
     orig_control_mode = copter.flightmode->mode_number();
 
-    // initialise state
+    // 初始化状态
     _state = FlipState::Start;
     start_time_ms = millis();
 
     roll_dir = pitch_dir = 0;
 
-    // choose direction based on pilot's roll and pitch sticks
+    // 根据飞行员的横滚和俯仰摇杆选择方向
     if (channel_pitch->get_control_in() > 300) {
         pitch_dir = FLIP_PITCH_BACK;
     } else if (channel_pitch->get_control_in() < -300) {
@@ -75,10 +75,10 @@ bool ModeFlip::init(bool ignore_checks)
         roll_dir = FLIP_ROLL_LEFT;
     }
 
-    // log start of flip
+    // 记录翻转开始
     LOGGER_WRITE_EVENT(LogEvent::FLIP_START);
 
-    // capture current attitude which will be used during the FlipState::Recovery stage
+    // 捕获当前姿态,将在FlipState::Recovery阶段使用
     const float angle_max = copter.aparm.angle_max;
     orig_attitude.x = constrain_float(ahrs.roll_sensor, -angle_max, angle_max);
     orig_attitude.y = constrain_float(ahrs.pitch_sensor, -angle_max, angle_max);
@@ -87,23 +87,23 @@ bool ModeFlip::init(bool ignore_checks)
     return true;
 }
 
-// run - runs the flip controller
-// should be called at 100hz or more
+// run - 运行翻转控制器
+// 应该以100Hz或更高的频率调用
 void ModeFlip::run()
 {
-    // if pilot inputs roll > 40deg or timeout occurs abandon flip
+    // 如果飞行员输入横滚>40度或超时,则放弃翻转
     if (!motors->armed() || (abs(channel_roll->get_control_in()) >= 4000) || (abs(channel_pitch->get_control_in()) >= 4000) || ((millis() - start_time_ms) > FLIP_TIMEOUT_MS)) {
         _state = FlipState::Abandon;
     }
 
-    // get pilot's desired throttle
+    // 获取飞行员期望的油门
     float throttle_out = get_pilot_desired_throttle();
 
-    // set motors to full range
+    // 将电机设置为全范围
     motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-    // get corrected angle based on direction and axis of rotation
-    // we flip the sign of flip_angle to minimize the code repetition
+    // 根据旋转方向和轴获取校正后的角度
+    // 我们翻转flip_angle的符号以最小化代码重复
     int32_t flip_angle;
 
     if (roll_dir != 0) {
@@ -112,105 +112,105 @@ void ModeFlip::run()
         flip_angle = ahrs.pitch_sensor * pitch_dir;
     }
 
-    // state machine
+    // 状态机
     switch (_state) {
 
     case FlipState::Start:
-        // under 45 degrees request 400deg/sec roll or pitch
+        // 45度以下请求400度/秒的横滚或俯仰
         attitude_control->input_rate_bf_roll_pitch_yaw(FLIP_ROTATION_RATE * roll_dir, FLIP_ROTATION_RATE * pitch_dir, 0.0);
 
-        // increase throttle
+        // 增加油门
         throttle_out += FLIP_THR_INC;
 
-        // beyond 45deg lean angle move to next stage
+        // 超过45度倾斜角度进入下一阶段
         if (flip_angle >= 4500) {
             if (roll_dir != 0) {
-                // we are rolling
+                // 我们正在翻滚
             _state = FlipState::Roll;
             } else {
-                // we are pitching
+                // 我们正在俯仰
                 _state = FlipState::Pitch_A;
         }
         }
         break;
 
     case FlipState::Roll:
-        // between 45deg ~ -90deg request 400deg/sec roll
+        // 在45度~-90度之间请求400度/秒的横滚
         attitude_control->input_rate_bf_roll_pitch_yaw(FLIP_ROTATION_RATE * roll_dir, 0.0, 0.0);
-        // decrease throttle
+        // 减少油门
         throttle_out = MAX(throttle_out - FLIP_THR_DEC, 0.0f);
 
-        // beyond -90deg move on to recovery
+        // 超过-90度进入恢复阶段
         if ((flip_angle < 4500) && (flip_angle > -9000)) {
             _state = FlipState::Recover;
         }
         break;
 
     case FlipState::Pitch_A:
-        // between 45deg ~ -90deg request 400deg/sec pitch
+        // 在45度~-90度之间请求400度/秒的俯仰
         attitude_control->input_rate_bf_roll_pitch_yaw(0.0f, FLIP_ROTATION_RATE * pitch_dir, 0.0);
-        // decrease throttle
+        // 减少油门
         throttle_out = MAX(throttle_out - FLIP_THR_DEC, 0.0f);
 
-        // check roll for inversion
+        // 检查横滚是否倒置
         if ((labs(ahrs.roll_sensor) > 9000) && (flip_angle > 4500)) {
             _state = FlipState::Pitch_B;
         }
         break;
 
     case FlipState::Pitch_B:
-        // between 45deg ~ -90deg request 400deg/sec pitch
+        // 在45度~-90度之间请求400度/秒的俯仰
         attitude_control->input_rate_bf_roll_pitch_yaw(0.0, FLIP_ROTATION_RATE * pitch_dir, 0.0);
-        // decrease throttle
+        // 减少油门
         throttle_out = MAX(throttle_out - FLIP_THR_DEC, 0.0f);
 
-        // check roll for inversion
+        // 检查横滚是否恢复
         if ((labs(ahrs.roll_sensor) < 9000) && (flip_angle > -4500)) {
             _state = FlipState::Recover;
         }
         break;
 
     case FlipState::Recover: {
-        // use originally captured earth-frame angle targets to recover
+        // 使用最初捕获的地球坐标系角度目标进行恢复
         attitude_control->input_euler_angle_roll_pitch_yaw(orig_attitude.x, orig_attitude.y, orig_attitude.z, false);
 
-        // increase throttle to gain any lost altitude
+        // 增加油门以恢复任何失去的高度
         throttle_out += FLIP_THR_INC;
 
         float recovery_angle;
         if (roll_dir != 0) {
-            // we are rolling
+            // 我们正在翻滚
             recovery_angle = fabsf(orig_attitude.x - (float)ahrs.roll_sensor);
         } else {
-            // we are pitching
+            // 我们正在俯仰
             recovery_angle = fabsf(orig_attitude.y - (float)ahrs.pitch_sensor);
         }
 
-        // check for successful recovery
+        // 检查是否成功恢复
         if (fabsf(recovery_angle) <= FLIP_RECOVERY_ANGLE) {
-            // restore original flight mode
+            // 恢复原始飞行模式
             if (!copter.set_mode(orig_control_mode, ModeReason::FLIP_COMPLETE)) {
-                // this should never happen but just in case
+                // 这种情况不应该发生,但以防万一
                 copter.set_mode(Mode::Number::STABILIZE, ModeReason::UNKNOWN);
             }
-            // log successful completion
+            // 记录成功完成
             LOGGER_WRITE_EVENT(LogEvent::FLIP_END);
         }
         break;
 
     }
     case FlipState::Abandon:
-        // restore original flight mode
+        // 恢复原始飞行模式
         if (!copter.set_mode(orig_control_mode, ModeReason::FLIP_COMPLETE)) {
-            // this should never happen but just in case
+            // 这种情况不应该发生,但以防万一
             copter.set_mode(Mode::Number::STABILIZE, ModeReason::UNKNOWN);
         }
-        // log abandoning flip
+        // 记录放弃翻转
         LOGGER_WRITE_ERROR(LogErrorSubsystem::FLIP, LogErrorCode::FLIP_ABANDONED);
         break;
     }
 
-    // output pilot's throttle without angle boost
+    // 输出飞行员的油门,不带角度增益
     attitude_control->set_throttle_out(throttle_out, false, g.throttle_filt);
 }
 

@@ -342,56 +342,71 @@ void AC_AttitudeControl::input_quaternion(Quaternion& attitude_desired_quat, Vec
 }
 
 // Command an euler roll and pitch angle and an euler yaw rate with angular velocity feedforward and smoothing
+// 命令欧拉滚转和俯仰角度以及欧拉偏航速率，带有角速度前馈和平滑处理
 void AC_AttitudeControl::input_euler_angle_roll_pitch_euler_rate_yaw(float euler_roll_angle_cd, float euler_pitch_angle_cd, float euler_yaw_rate_cds)
 {
     // Convert from centidegrees on public interface to radians
+    // 将公共接口上的百分之一度转换为弧度
     float euler_roll_angle = radians(euler_roll_angle_cd * 0.01f);
     float euler_pitch_angle = radians(euler_pitch_angle_cd * 0.01f);
     float euler_yaw_rate = radians(euler_yaw_rate_cds * 0.01f);
 
     // update attitude target
+    // 更新姿态目标
     update_attitude_target();
 
     // calculate the attitude target euler angles
+    // 计算姿态目标的欧拉角
     _attitude_target.to_euler(_euler_angle_target);
 
     // Add roll trim to compensate tail rotor thrust in heli (will return zero on multirotors)
+    // 添加滚转微调以补偿直升机尾桨推力（在多旋翼上将返回零）
     euler_roll_angle += get_roll_trim_rad();
 
     if (_rate_bf_ff_enabled) {
         // translate the roll pitch and yaw acceleration limits to the euler axis
+        // 将滚转、俯仰和偏航加速度限制转换为欧拉轴
         const Vector3f euler_accel = euler_accel_limit(_attitude_target, Vector3f{get_accel_roll_max_radss(), get_accel_pitch_max_radss(), get_accel_yaw_max_radss()});
 
         // When acceleration limiting and feedforward are enabled, the sqrt controller is used to compute an euler
         // angular velocity that will cause the euler angle to smoothly stop at the input angle with limited deceleration
         // and an exponential decay specified by smoothing_gain at the end.
+        // 当启用加速度限制和前馈时，sqrt控制器用于计算欧拉角速度，该速度将使欧拉角在输入角度处平滑停止，具有有限的减速和由smoothing_gain指定的指数衰减。
         _euler_rate_target.x = input_shaping_angle(wrap_PI(euler_roll_angle - _euler_angle_target.x), _input_tc, euler_accel.x, _euler_rate_target.x, _dt);
         _euler_rate_target.y = input_shaping_angle(wrap_PI(euler_pitch_angle - _euler_angle_target.y), _input_tc, euler_accel.y, _euler_rate_target.y, _dt);
 
         // When yaw acceleration limiting is enabled, the yaw input shaper constrains angular acceleration about the yaw axis, slewing
         // the output rate towards the input rate.
+        // 当启用偏航加速度限制时，偏航输入整形器约束绕偏航轴的角加速度，将输出速率调整到输入速率。
         _euler_rate_target.z = input_shaping_ang_vel(_euler_rate_target.z, euler_yaw_rate, euler_accel.z, _dt, _rate_y_tc);
 
         // Convert euler angle derivative of desired attitude into a body-frame angular velocity vector for feedforward
+        // 将期望姿态的欧拉角导数转换为机体坐标系的角速度向量以进行前馈
         euler_rate_to_ang_vel(_attitude_target, _euler_rate_target, _ang_vel_target);
         // Limit the angular velocity
+        // 限制角速度
         ang_vel_limit(_ang_vel_target, radians(_ang_vel_roll_max), radians(_ang_vel_pitch_max), radians(_ang_vel_yaw_max));
         // Convert body-frame angular velocity into euler angle derivative of desired attitude
+        // 将机体坐标系的角速度转换为期望姿态的欧拉角导数
         ang_vel_to_euler_rate(_attitude_target, _ang_vel_target, _euler_rate_target);
     } else {
         // When feedforward is not enabled, the target euler angle is input into the target and the feedforward rate is zeroed.
+        // 当未启用前馈时，目标欧拉角输入到目标中，前馈速率为零。
         _euler_angle_target.x = euler_roll_angle;
         _euler_angle_target.y = euler_pitch_angle;
         _euler_angle_target.z += euler_yaw_rate * _dt;
         // Compute quaternion target attitude
+        // 计算四元数目标姿态
         _attitude_target.from_euler(_euler_angle_target.x, _euler_angle_target.y, _euler_angle_target.z);
 
         // Set rate feedforward requests to zero
+        // 将速率前馈请求设置为零
         _euler_rate_target.zero();
         _ang_vel_target.zero();
     }
 
     // Call quaternion attitude controller
+    // 调用四元数姿态控制器
     attitude_controller_run_quat();
 }
 
