@@ -14,62 +14,62 @@
  */
 
 /*
- *  ArduCopter (also known as APM, APM:Copter or just Copter)
+ *  ArduCopter (也被称为 APM, APM:Copter 或简称 Copter)
  *  Wiki:           copter.ardupilot.org
- *  Creator:        Jason Short
- *  Lead Developer: Randy Mackay
- *  Lead Tester:    Marco Robustini
- *  Based on code and ideas from the Arducopter team: Leonard Hall, Andrew Tridgell, Robert Lefebvre, Pat Hickey, Michael Oborne, Jani Hirvinen,
+ *  创建者:        Jason Short
+ *  首席开发者: Randy Mackay
+ *  首席测试员:    Marco Robustini
+ *  基于 Arducopter 团队的代码和想法: Leonard Hall, Andrew Tridgell, Robert Lefebvre, Pat Hickey, Michael Oborne, Jani Hirvinen,
                                                       Olivier Adler, Kevin Hester, Arthur Benemann, Jonathan Challinger, John Arne Birkeland,
-                                                      Jean-Louis Naudin, Mike Smith, and more
- *  Thanks to: Chris Anderson, Jordi Munoz, Jason Short, Doug Weibel, Jose Julio
+                                                      Jean-Louis Naudin, Mike Smith, 等等
+ *  感谢: Chris Anderson, Jordi Munoz, Jason Short, Doug Weibel, Jose Julio
  *
- *  Special Thanks to contributors (in alphabetical order by first name):
+ *  特别感谢贡献者 (按名字字母顺序排列):
  *
- *  Adam M Rivera       :Auto Compass Declination
- *  Amilcar Lucas       :Camera mount library
- *  Andrew Tridgell     :General development, Mavlink Support
- *  Andy Piper          :Harmonic notch, In-flight FFT, Bi-directional DShot, various drivers
- *  Angel Fernandez     :Alpha testing
- *  AndreasAntonopoulous:GeoFence
- *  Arthur Benemann     :DroidPlanner GCS
- *  Benjamin Pelletier  :Libraries
- *  Bill King           :Single Copter
- *  Christof Schmid     :Alpha testing
- *  Craig Elder         :Release Management, Support
- *  Dani Saez           :V Octo Support
- *  Doug Weibel         :DCM, Libraries, Control law advice
- *  Emile Castelnuovo   :VRBrain port, bug fixes
- *  Gregory Fletcher    :Camera mount orientation math
- *  Guntars             :Arming safety suggestion
- *  HappyKillmore       :Mavlink GCS
- *  Hein Hollander      :Octo Support, Heli Testing
- *  Igor van Airde      :Control Law optimization
- *  Jack Dunkle         :Alpha testing
- *  James Goppert       :Mavlink Support
- *  Jani Hiriven        :Testing feedback
- *  Jean-Louis Naudin   :Auto Landing
- *  John Arne Birkeland :PPM Encoder
- *  Jose Julio          :Stabilization Control laws, MPU6k driver
- *  Julien Dubois       :PosHold flight mode
+ *  Adam M Rivera       :自动罗盘偏角
+ *  Amilcar Lucas       :相机云台库
+ *  Andrew Tridgell     :总体开发, Mavlink 支持
+ *  Andy Piper          :谐波陷波滤波器, 飞行中 FFT, 双向 DShot, 各种驱动程序
+ *  Angel Fernandez     :Alpha 测试
+ *  AndreasAntonopoulous:地理围栏
+ *  Arthur Benemann     :DroidPlanner 地面站
+ *  Benjamin Pelletier  :库
+ *  Bill King           :单旋翼直升机
+ *  Christof Schmid     :Alpha 测试
+ *  Craig Elder         :发布管理, 支持
+ *  Dani Saez           :V 型八旋翼支持
+ *  Doug Weibel         :DCM, 库, 控制律建议
+ *  Emile Castelnuovo   :VRBrain 移植, bug 修复
+ *  Gregory Fletcher    :相机云台方向数学
+ *  Guntars             :解锁安全建议
+ *  HappyKillmore       :Mavlink 地面站
+ *  Hein Hollander      :八旋翼支持, 直升机测试
+ *  Igor van Airde      :控制律优化
+ *  Jack Dunkle         :Alpha 测试
+ *  James Goppert       :Mavlink 支持
+ *  Jani Hiriven        :测试反馈
+ *  Jean-Louis Naudin   :自动着陆
+ *  John Arne Birkeland :PPM 编码器
+ *  Jose Julio          :稳定控制律, MPU6k 驱动
+ *  Julien Dubois       :PosHold 飞行模式
  *  Julian Oes          :Pixhawk
- *  Jonathan Challinger :Inertial Navigation, CompassMot, Spin-When-Armed
- *  Kevin Hester        :Andropilot GCS
- *  Max Levine          :Tri Support, Graphics
- *  Leonard Hall        :Flight Dynamics, Throttle, Loiter and Navigation Controllers
- *  Marco Robustini     :Lead tester
- *  Michael Oborne      :Mission Planner GCS
- *  Mike Smith          :Pixhawk driver, coding support
- *  Olivier Adler       :PPM Encoder, piezo buzzer
- *  Pat Hickey          :Hardware Abstraction Layer (HAL)
- *  Robert Lefebvre     :Heli Support, Copter LEDs
- *  Roberto Navoni      :Library testing, Porting to VRBrain
- *  Sandro Benigno      :Camera support, MinimOSD
- *  Sandro Tognana      :PosHold flight mode
+ *  Jonathan Challinger :惯性导航, CompassMot, 解锁时旋转
+ *  Kevin Hester        :Andropilot 地面站
+ *  Max Levine          :三旋翼支持, 图形
+ *  Leonard Hall        :飞行动力学, 油门, 悬停和导航控制器
+ *  Marco Robustini     :首席测试员
+ *  Michael Oborne      :Mission Planner 地面站
+ *  Mike Smith          :Pixhawk 驱动, 编码支持
+ *  Olivier Adler       :PPM 编码器, 压电蜂鸣器
+ *  Pat Hickey          :硬件抽象层 (HAL)
+ *  Robert Lefebvre     :直升机支持, Copter LED
+ *  Roberto Navoni      :库测试, 移植到 VRBrain
+ *  Sandro Benigno      :相机支持, MinimOSD
+ *  Sandro Tognana      :PosHold 飞行模式
  *  Sebastian Quilter   :SmartRTL
- *  ..and many more.
+ *  ..以及更多人.
  *
- *  Code commit statistics can be found here: https://github.com/ArduPilot/ardupilot/graphs/contributors
+ *  代码提交统计可以在这里找到: https://github.com/ArduPilot/ardupilot/graphs/contributors
  *  Wiki: https://copter.ardupilot.org/
  *
  */
@@ -86,33 +86,32 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 #define FAST_TASK(func) FAST_TASK_CLASS(Copter, &copter, func)
 
 /*
-  scheduler table - all tasks should be listed here.
+  调度器表 - 所有任务都应该列在这里。
 
-  All entries in this table must be ordered by priority.
+  此表中的所有条目必须按优先级排序。
 
-  This table is interleaved with the table in AP_Vehicle to determine
-  the order in which tasks are run.  Convenience methods SCHED_TASK
-  and SCHED_TASK_CLASS are provided to build entries in this structure:
+  此表与 AP_Vehicle 中的表交错，以确定任务运行的顺序。
+  提供了便利方法 SCHED_TASK 和 SCHED_TASK_CLASS 来构建此结构中的条目:
 
-SCHED_TASK arguments:
- - name of static function to call
- - rate (in Hertz) at which the function should be called
- - expected time (in MicroSeconds) that the function should take to run
- - priority (0 through 255, lower number meaning higher priority)
+SCHED_TASK 参数:
+ - 要调用的静态函数的名称
+ - 应该调用该函数的频率 (以赫兹为单位)
+ - 函数运行应该花费的预期时间 (以微秒为单位)
+ - 优先级 (0 到 255，数字越小表示优先级越高)
 
-SCHED_TASK_CLASS arguments:
- - class name of method to be called
- - instance on which to call the method
- - method to call on that instance
- - rate (in Hertz) at which the method should be called
- - expected time (in MicroSeconds) that the method should take to run
- - priority (0 through 255, lower number meaning higher priority)
+SCHED_TASK_CLASS 参数:
+ - 要调用的方法的类名
+ - 要在其上调用方法的实例
+ - 要在该实例上调用的方法
+ - 应该调用该方法的频率 (以赫兹为单位)
+ - 方法运行应该花费的预期时间 (以微秒为单位)
+ - 优先级 (0 到 255，数字越小表示优先级越高)
 
  */
 const AP_Scheduler::Task Copter::scheduler_tasks[] = {
-    // update INS immediately to get current gyro data populated
+    // 立即更新 INS 以获取当前陀螺仪数据
     FAST_TASK_CLASS(AP_InertialSensor, &copter.ins, update),
-    // run low level rate controllers that only require IMU data
+    // 运行只需要 IMU 数据的低级速率控制器
     FAST_TASK(run_rate_controller),
 #if AC_CUSTOMCONTROL_MULTI_ENABLED
     FAST_TASK(run_custom_controller),
@@ -120,27 +119,27 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #if FRAME_CONFIG == HELI_FRAME
     FAST_TASK(heli_update_autorotation),
 #endif //HELI_FRAME
-    // send outputs to the motors library immediately
+    // 立即向电机库发送输出
     FAST_TASK(motors_output),
-     // run EKF state estimator (expensive)
+     // 运行 EKF 状态估计器 (耗时)
     FAST_TASK(read_AHRS),
 #if FRAME_CONFIG == HELI_FRAME
     FAST_TASK(update_heli_control_dynamics),
 #endif //HELI_FRAME
-    // Inertial Nav
+    // 惯性导航
     FAST_TASK(read_inertia),
-    // check if ekf has reset target heading or position
+    // 检查 ekf 是否重置了目标航向或位置
     FAST_TASK(check_ekf_reset),
-    // run the attitude controllers
+    // 运行姿态控制器
     FAST_TASK(update_flight_mode),
-    // update home from EKF if necessary
+    // 如有必要，从 EKF 更新 home 位置
     FAST_TASK(update_home_from_EKF),
-    // check if we've landed or crashed
+    // 检查我们是否已着陆或坠毁
     FAST_TASK(update_land_and_crash_detectors),
-    // surface tracking update
+    // 表面跟踪更新
     FAST_TASK(update_rangefinder_terrain_offset),
 #if HAL_MOUNT_ENABLED
-    // camera mount's fast update
+    // 相机云台的快速更新
     FAST_TASK_CLASS(AP_Mount, &copter.camera_mount, update_fast),
 #endif
 #if HAL_LOGGING_ENABLED
@@ -261,6 +260,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #endif
 };
 
+// 获取调度器任务
 void Copter::get_scheduler_tasks(const AP_Scheduler::Task *&tasks,
                                  uint8_t &task_count,
                                  uint32_t &log_bit)
@@ -275,10 +275,10 @@ constexpr int8_t Copter::_failsafe_priorities[7];
 
 #if AP_SCRIPTING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
 #if MODE_GUIDED_ENABLED
-// set target location (for use by external control and scripting)
+// 设置目标位置 (用于外部控制和脚本)
 bool Copter::set_target_location(const Location& target_loc)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
@@ -290,10 +290,10 @@ bool Copter::set_target_location(const Location& target_loc)
 
 #if AP_SCRIPTING_ENABLED
 #if MODE_GUIDED_ENABLED
-// start takeoff to given altitude (for use by scripting)
+// 开始起飞到给定高度 (用于脚本)
 bool Copter::start_takeoff(float alt)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
@@ -305,10 +305,10 @@ bool Copter::start_takeoff(float alt)
     return false;
 }
 
-// set target position (for use by scripting)
+// 设置目标位置 (用于脚本)
 bool Copter::set_target_pos_NED(const Vector3f& target_pos, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative, bool terrain_alt)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
@@ -318,10 +318,10 @@ bool Copter::set_target_pos_NED(const Vector3f& target_pos, bool use_yaw, float 
     return mode_guided.set_destination(pos_neu_cm, use_yaw, yaw_deg * 100.0, use_yaw_rate, yaw_rate_degs * 100.0, yaw_relative, terrain_alt);
 }
 
-// set target position and velocity (for use by scripting)
+// 设置目标位置和速度 (用于脚本)
 bool Copter::set_target_posvel_NED(const Vector3f& target_pos, const Vector3f& target_vel)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
@@ -332,10 +332,10 @@ bool Copter::set_target_posvel_NED(const Vector3f& target_pos, const Vector3f& t
     return mode_guided.set_destination_posvelaccel(pos_neu_cm, vel_neu_cms, Vector3f());
 }
 
-// set target position, velocity and acceleration (for use by scripting)
+// 设置目标位置、速度和加速度 (用于脚本)
 bool Copter::set_target_posvelaccel_NED(const Vector3f& target_pos, const Vector3f& target_vel, const Vector3f& target_accel, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
@@ -347,80 +347,87 @@ bool Copter::set_target_posvelaccel_NED(const Vector3f& target_pos, const Vector
     return mode_guided.set_destination_posvelaccel(pos_neu_cm, vel_neu_cms, accel_neu_cms, use_yaw, yaw_deg * 100.0, use_yaw_rate, yaw_rate_degs * 100.0, yaw_relative);
 }
 
+// 设置目标速度 (用于脚本)
 bool Copter::set_target_velocity_NED(const Vector3f& vel_ned)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
 
-    // convert vector to neu in cm
+    // 将向量转换为 neu，单位为 cm/s
     const Vector3f vel_neu_cms(vel_ned.x * 100.0f, vel_ned.y * 100.0f, -vel_ned.z * 100.0f);
     mode_guided.set_velocity(vel_neu_cms);
     return true;
 }
 
-// set target velocity and acceleration (for use by scripting)
+// 设置目标速度和加速度 (用于脚本)
 bool Copter::set_target_velaccel_NED(const Vector3f& target_vel, const Vector3f& target_accel, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool relative_yaw)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
 
-    // convert vector to neu in cm
+    // 将向量转换为 NEU 坐标系，单位为 cm/s 和 cm/s/s
     const Vector3f vel_neu_cms(target_vel.x * 100.0f, target_vel.y * 100.0f, -target_vel.z * 100.0f);
     const Vector3f accel_neu_cms(target_accel.x * 100.0f, target_accel.y * 100.0f, -target_accel.z * 100.0f);
 
+    // 调用引导模式的 set_velaccel 函数设置目标速度和加速度
     mode_guided.set_velaccel(vel_neu_cms, accel_neu_cms, use_yaw, yaw_deg * 100.0, use_yaw_rate, yaw_rate_degs * 100.0, relative_yaw);
     return true;
 }
 
-// set target roll pitch and yaw angles with throttle (for use by scripting)
+// 设置目标滚转、俯仰和偏航角度以及爬升率 (用于脚本)
 bool Copter::set_target_angle_and_climbrate(float roll_deg, float pitch_deg, float yaw_deg, float climb_rate_ms, bool use_yaw_rate, float yaw_rate_degs)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
 
+    // 创建四元数并从欧拉角转换
     Quaternion q;
     q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
 
+    // 调用引导模式的 set_angle 函数设置目标姿态和爬升率
     mode_guided.set_angle(q, Vector3f{}, climb_rate_ms*100, false);
     return true;
 }
 
-// set target roll pitch and yaw rates with throttle (for use by scripting)
+// 设置目标滚转、俯仰和偏航角速率以及油门 (用于脚本)
 bool Copter::set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle)
 {
-    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    // 如果车辆不在引导模式或自动引导模式，则退出
     if (!flightmode->in_guided_mode()) {
         return false;
     }
 
-    // Zero quaternion indicates rate control
+    // 创建零四元数表示角速率控制
     Quaternion q;
     q.zero();
 
-    // Convert from degrees per second to radians per second
+    // 将角速率从度/秒转换为弧度/秒
     Vector3f ang_vel_body { roll_rate_dps, pitch_rate_dps, yaw_rate_dps };
     ang_vel_body *= DEG_TO_RAD;
 
-    // Pass to guided mode
+    // 调用引导模式的 set_angle 函数设置目标角速率和油门
     mode_guided.set_angle(q, ang_vel_body, throttle, true);
     return true;
 }
 #endif
 
 #if MODE_CIRCLE_ENABLED
-// circle mode controls
+// 圆形模式控制
+
+// 获取圆形半径
 bool Copter::get_circle_radius(float &radius_m)
 {
     radius_m = circle_nav->get_radius() * 0.01f;
     return true;
 }
 
+// 设置圆形速率
 bool Copter::set_circle_rate(float rate_dps)
 {
     circle_nav->set_rate(rate_dps);
@@ -428,20 +435,20 @@ bool Copter::set_circle_rate(float rate_dps)
 }
 #endif
 
-// set desired speed (m/s). Used for scripting.
+// 设置期望速度 (m/s)。用于脚本。
 bool Copter::set_desired_speed(float speed)
 {
     return flightmode->set_speed_xy(speed * 100.0f);
 }
 
 #if MODE_AUTO_ENABLED
-// returns true if mode supports NAV_SCRIPT_TIME mission commands
+// 返回模式是否支持 NAV_SCRIPT_TIME 任务命令
 bool Copter::nav_scripting_enable(uint8_t mode)
 {
     return mode == (uint8_t)mode_auto.mode_number();
 }
 
-// lua scripts use this to retrieve the contents of the active command
+// Lua 脚本使用此函数检索活动命令的内容
 bool Copter::nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4)
 {
     if (flightmode != &mode_auto) {
@@ -451,7 +458,7 @@ bool Copter::nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg
     return mode_auto.nav_script_time(id, cmd, arg1, arg2, arg3, arg4);
 }
 
-// lua scripts use this to indicate when they have complete the command
+// Lua 脚本使用此函数指示命令已完成
 void Copter::nav_script_time_done(uint16_t id)
 {
     if (flightmode != &mode_auto) {
@@ -462,27 +469,26 @@ void Copter::nav_script_time_done(uint16_t id)
 }
 #endif
 
-// returns true if the EKF failsafe has triggered.  Only used by Lua scripts
+// 返回 EKF 故障保护是否已触发。仅供 Lua 脚本使用
 bool Copter::has_ekf_failsafed() const
 {
     return failsafe.ekf;
 }
 
-// get target location (for use by scripting)
+// 获取目标位置 (供脚本使用)
 bool Copter::get_target_location(Location& target_loc)
 {
     return flightmode->get_wp(target_loc);
 }
 
 /*
-  update_target_location() acts as a wrapper for set_target_location
+  update_target_location() 作为 set_target_location 的包装器
  */
 bool Copter::update_target_location(const Location &old_loc, const Location &new_loc)
 {
     /*
-      by checking the caller has provided the correct old target
-      location we prevent a race condition where the user changes mode
-      or commands a different target in the controlling lua script
+      通过检查调用者是否提供了正确的旧目标位置，
+      我们可以防止用户在控制 Lua 脚本中更改模式或命令不同目标时出现竞态条件
     */
     Location next_WP_loc;
     flightmode->get_wp(next_WP_loc);
@@ -496,18 +502,19 @@ bool Copter::update_target_location(const Location &old_loc, const Location &new
 
 #endif // AP_SCRIPTING_ENABLED
 
-// returns true if vehicle is landing.
+// 返回车辆是否正在着陆
 bool Copter::is_landing() const
 {
     return flightmode->is_landing();
 }
 
-// returns true if vehicle is taking off.
+// 返回车辆是否正在起飞
 bool Copter::is_taking_off() const
 {
     return flightmode->is_taking_off();
 }
 
+// 返回当前模式是否需要任务
 bool Copter::current_mode_requires_mission() const
 {
 #if MODE_AUTO_ENABLED
@@ -517,213 +524,143 @@ bool Copter::current_mode_requires_mission() const
 #endif
 }
 
-// rc_loops - reads user input from transmitter/receiver
-// called at 100hz
+// rc_loops - 读取用户从发射机/接收机的输入
+// 以 100Hz 的频率调用
 void Copter::rc_loop()
 {
-    // Read radio and 3-position switch on radio
+    // 读取无线电和无线电上的三位开关
     // -----------------------------------------
     read_radio();
     rc().read_mode_switch();
 }
 
-// throttle_loop - should be run at 50 hz
+// throttle_loop - 应以 50 Hz 运行
 // ---------------------------
 void Copter::throttle_loop()
 {
-    // update throttle_low_comp value (controls priority of throttle vs attitude control)
+    // 更新 throttle_low_comp 值 (控制油门与姿态控制的优先级)
     update_throttle_mix();
 
-    // check auto_armed status
+    // 检查 auto_armed 状态
     update_auto_armed();
 
 #if FRAME_CONFIG == HELI_FRAME
-    // update rotor speed
+    // 更新旋翼速度
     heli_update_rotor_speed_targets();
 
-    // update trad heli swash plate movement
+    // 更新传统直升机斜盘运动
     heli_update_landing_swash();
 #endif
 
-    // compensate for ground effect (if enabled)
+    // 补偿地面效应 (如果启用)
     update_ground_effect_detector();
     update_ekf_terrain_height_stable();
 }
 
-// update_batt_compass - read battery and compass
-// should be called at 10hz
+// update_batt_compass - 读取电池和罗盘
+// 应以 10Hz 的频率调用
 void Copter::update_batt_compass(void)
 {
-    // read battery before compass because it may be used for motor interference compensation
+    // 在罗盘之前读取电池，因为它可能用于电机干扰补偿
     battery.read();
 
     if(AP::compass().available()) {
-        // update compass with throttle value - used for compassmot
+        // 用油门值更新罗盘 - 用于 compassmot
         compass.set_throttle(motors->get_throttle());
         compass.set_voltage(battery.voltage());
         compass.read();
     }
 }
 
-#if HAL_LOGGING_ENABLED
-// Full rate logging of attitude, rate and pid loops
-// should be run at loop rate
-void Copter::loop_rate_logging()
-{
-    if (should_log(MASK_LOG_ATTITUDE_FAST) && !copter.flightmode->logs_attitude()) {
-        Log_Write_Attitude();
-        Log_Write_PIDS(); // only logs if PIDS bitmask is set
-    }
-#if AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
-    if (should_log(MASK_LOG_FTN_FAST)) {
-        AP::ins().write_notch_log_messages();
-    }
-#endif
-    if (should_log(MASK_LOG_IMU_FAST)) {
-        AP::ins().Write_IMU();
-    }
-}
-
-// ten_hz_logging_loop
-// should be run at 10hz
-void Copter::ten_hz_logging_loop()
-{
-    // always write AHRS attitude at 10Hz
-    ahrs.Write_Attitude(attitude_control->get_att_target_euler_rad() * RAD_TO_DEG);
-    // log attitude controller data if we're not already logging at the higher rate
-    if (should_log(MASK_LOG_ATTITUDE_MED) && !should_log(MASK_LOG_ATTITUDE_FAST) && !copter.flightmode->logs_attitude()) {
-        Log_Write_Attitude();
-    }
-    if (!should_log(MASK_LOG_ATTITUDE_FAST) && !copter.flightmode->logs_attitude()) {
-    // log at 10Hz if PIDS bitmask is selected, even if no ATT bitmask is selected; logs at looprate if ATT_FAST and PIDS bitmask set
-        Log_Write_PIDS();
-    }
-    // log EKF attitude data always at 10Hz unless ATTITUDE_FAST, then do it in the 25Hz loop
-    if (!should_log(MASK_LOG_ATTITUDE_FAST)) {
-        Log_Write_EKF_POS();
-    }
-    if ((FRAME_CONFIG == HELI_FRAME) || should_log(MASK_LOG_MOTBATT)) {
-        // always write motors log if we are a heli
-        motors->Log_Write();
-    }
-    if (should_log(MASK_LOG_RCIN)) {
-        logger.Write_RCIN();
-#if AP_RSSI_ENABLED
-        if (rssi.enabled()) {
-            logger.Write_RSSI();
-        }
-#endif
-    }
-    if (should_log(MASK_LOG_RCOUT)) {
-        logger.Write_RCOUT();
-    }
-    if (should_log(MASK_LOG_NTUN) && (flightmode->requires_GPS() || landing_with_GPS() || !flightmode->has_manual_throttle())) {
-        pos_control->write_log();
-    }
-    if (should_log(MASK_LOG_IMU) || should_log(MASK_LOG_IMU_FAST) || should_log(MASK_LOG_IMU_RAW)) {
-        AP::ins().Write_Vibration();
-    }
-    if (should_log(MASK_LOG_CTUN)) {
-        attitude_control->control_monitor_log();
-#if HAL_PROXIMITY_ENABLED
-        g2.proximity.log();  // Write proximity sensor distances
-#endif
-#if AP_BEACON_ENABLED
-        g2.beacon.log();
-#endif
-    }
-#if AP_WINCH_ENABLED
-    if (should_log(MASK_LOG_ANY)) {
-        g2.winch.write_log();
-    }
-#endif
-#if HAL_MOUNT_ENABLED
-    if (should_log(MASK_LOG_CAMERA)) {
-        camera_mount.write_log();
-    }
-#endif
-}
-
-// twentyfive_hz_logging - should be run at 25hz
+// 25Hz 日志记录 - 应以 25Hz 的频率运行
 void Copter::twentyfive_hz_logging()
 {
+    // 如果需要记录快速姿态日志
     if (should_log(MASK_LOG_ATTITUDE_FAST)) {
-        Log_Write_EKF_POS();
+        Log_Write_EKF_POS();  // 记录 EKF 位置信息
     }
 
+    // 如果需要记录 IMU 日志,但不需要快速 IMU 日志
     if (should_log(MASK_LOG_IMU) && !(should_log(MASK_LOG_IMU_FAST))) {
-        AP::ins().Write_IMU();
+        AP::ins().Write_IMU();  // 记录 IMU 数据
     }
 
 #if MODE_AUTOROTATE_ENABLED
+    // 如果需要记录中等或快速姿态日志
     if (should_log(MASK_LOG_ATTITUDE_MED) || should_log(MASK_LOG_ATTITUDE_FAST)) {
-        //update autorotation log
+        // 更新自转日志
         g2.arot.Log_Write_Autorotation();
     }
 #endif
 #if HAL_GYROFFT_ENABLED
+    // 如果需要记录快速 FFT 日志
     if (should_log(MASK_LOG_FTN_FAST)) {
-        gyro_fft.write_log_messages();
+        gyro_fft.write_log_messages();  // 记录陀螺仪 FFT 数据
     }
 #endif
 }
 #endif  // HAL_LOGGING_ENABLED
 
-// three_hz_loop - 3hz loop
+// 3Hz 循环 - 每秒运行 3 次
 void Copter::three_hz_loop()
 {
-    // check if we've lost contact with the ground station
+    // 检查是否失去与地面站的联系
     failsafe_gcs_check();
 
-    // check if we've lost terrain data
+    // 检查是否失去地形数据
     failsafe_terrain_check();
 
-    // check for deadreckoning failsafe
+    // 检查航位推算失效保护
     failsafe_deadreckon_check();
 
-    //update transmitter based in flight tuning
+    // 更新基于发射机的飞行中调整
     tuning();
 
-    // check if avoidance should be enabled based on alt
+    // 根据高度检查是否应启用避障
     low_alt_avoidance();
 }
 
-// one_hz_loop - runs at 1Hz
+// 1Hz 循环 - 每秒运行一次
 void Copter::one_hz_loop()
 {
 #if HAL_LOGGING_ENABLED
+    // 如果需要记录任何日志
     if (should_log(MASK_LOG_ANY)) {
-        Log_Write_Data(LogDataID::AP_STATE, ap.value);
+        Log_Write_Data(LogDataID::AP_STATE, ap.value);  // 记录 AP 状态
     }
 #endif
 
+    // 如果电机未解锁
     if (!motors->armed()) {
+        // 更新互锁使用状态
         update_using_interlock();
 
-        // check the user hasn't updated the frame class or type
+        // 检查用户是否更新了机架类别或类型
         motors->set_frame_class_and_type((AP_Motors::motor_frame_class)g2.frame_class.get(), (AP_Motors::motor_frame_type)g.frame_type.get());
 
 #if FRAME_CONFIG != HELI_FRAME
-        // set all throttle channel settings
+        // 设置所有油门通道设置
         motors->update_throttle_range();
 #endif
     }
 
-    // update assigned functions and enable auxiliary servos
+    // 更新分配的功能并启用辅助舵机
     SRV_Channels::enable_aux_servos();
 
 #if HAL_LOGGING_ENABLED
-    // log terrain data
+    // 记录地形数据
     terrain_logging();
 #endif
 
 #if HAL_ADSB_ENABLED
+    // 设置 ADSB 是否在飞行状态
     adsb.set_is_flying(!ap.land_complete);
 #endif
 
+    // 更新飞行状态标志
     AP_Notify::flags.flying = !ap.land_complete;
 
-    // slowly update the PID notches with the average loop rate
+    // 使用平均循环速率缓慢更新 PID 陷波器
     attitude_control->set_notch_sample_rate(AP::scheduler().get_filtered_loop_rate_hz());
     pos_control->get_accel_z_pid().set_notch_sample_rate(AP::scheduler().get_filtered_loop_rate_hz());
 #if AC_CUSTOMCONTROL_MULTI_ENABLED
@@ -731,55 +668,56 @@ void Copter::one_hz_loop()
 #endif
 }
 
+// 初始化简单模式方位
 void Copter::init_simple_bearing()
 {
-    // capture current cos_yaw and sin_yaw values
+    // 捕获当前的 cos_yaw 和 sin_yaw 值
     simple_cos_yaw = ahrs.cos_yaw();
     simple_sin_yaw = ahrs.sin_yaw();
 
-    // initialise super simple heading (i.e. heading towards home) to be 180 deg from simple mode heading
+    // 初始化超级简单模式航向(即朝向家的航向)为简单模式航向的反方向
     super_simple_last_bearing = wrap_360_cd(ahrs.yaw_sensor+18000);
     super_simple_cos_yaw = simple_cos_yaw;
     super_simple_sin_yaw = simple_sin_yaw;
 
 #if HAL_LOGGING_ENABLED
-    // log the simple bearing
+    // 记录简单模式方位
     if (should_log(MASK_LOG_ANY)) {
         Log_Write_Data(LogDataID::INIT_SIMPLE_BEARING, ahrs.yaw_sensor);
     }
 #endif
 }
 
-// update_simple_mode - rotates pilot input if we are in simple mode
+// 更新简单模式 - 如果我们处于简单模式,则旋转飞行员输入
 void Copter::update_simple_mode(void)
 {
     float rollx, pitchx;
 
-    // exit immediately if no new radio frame or not in simple mode
+    // 如果没有新的无线电帧或不在简单模式,立即退出
     if (simple_mode == SimpleMode::NONE || !ap.new_radio_frame) {
         return;
     }
 
-    // mark radio frame as consumed
+    // 标记无线电帧已被消耗
     ap.new_radio_frame = false;
 
     if (simple_mode == SimpleMode::SIMPLE) {
-        // rotate roll, pitch input by -initial simple heading (i.e. north facing)
+        // 通过初始简单航向(即朝北)旋转横滚、俯仰输入
         rollx = channel_roll->get_control_in()*simple_cos_yaw - channel_pitch->get_control_in()*simple_sin_yaw;
         pitchx = channel_roll->get_control_in()*simple_sin_yaw + channel_pitch->get_control_in()*simple_cos_yaw;
     }else{
-        // rotate roll, pitch input by -super simple heading (reverse of heading to home)
+        // 通过超级简单航向(朝向家的反方向)旋转横滚、俯仰输入
         rollx = channel_roll->get_control_in()*super_simple_cos_yaw - channel_pitch->get_control_in()*super_simple_sin_yaw;
         pitchx = channel_roll->get_control_in()*super_simple_sin_yaw + channel_pitch->get_control_in()*super_simple_cos_yaw;
     }
 
-    // rotate roll, pitch input from north facing to vehicle's perspective
+    // 将横滚、俯仰输入从朝北旋转到飞行器的视角
     channel_roll->set_control_in(rollx*ahrs.cos_yaw() + pitchx*ahrs.sin_yaw());
     channel_pitch->set_control_in(-rollx*ahrs.sin_yaw() + pitchx*ahrs.cos_yaw());
 }
 
-// update_super_simple_bearing - adjusts simple bearing based on location
-// should be called after home_bearing has been updated
+// 更新超级简单模式方位 - 根据位置调整简单方位
+// 应在更新 home_bearing 后调用
 void Copter::update_super_simple_bearing(bool force_update)
 {
     if (!force_update) {
@@ -793,7 +731,7 @@ void Copter::update_super_simple_bearing(bool force_update)
 
     const int32_t bearing = home_bearing();
 
-    // check the bearing to home has changed by at least 5 degrees
+    // 检查朝向家的方位是否至少改变了 5 度
     if (labs(super_simple_last_bearing - bearing) < 500) {
         return;
     }
@@ -804,16 +742,17 @@ void Copter::update_super_simple_bearing(bool force_update)
     super_simple_sin_yaw = sinf(angle_rad);
 }
 
+// 读取 AHRS (姿态航向参考系统)
 void Copter::read_AHRS(void)
 {
-    // we tell AHRS to skip INS update as we have already done it in FAST_TASK.
+    // 我们告诉 AHRS 跳过 INS 更新,因为我们已经在 FAST_TASK 中完成了
     ahrs.update(true);
 }
 
-// read baro and log control tuning
+// 读取气压计并记录控制调整
 void Copter::update_altitude()
 {
-    // read in baro altitude
+    // 读取气压高度
     read_barometer();
 
 #if HAL_LOGGING_ENABLED
@@ -831,34 +770,34 @@ void Copter::update_altitude()
 #endif
 }
 
-// vehicle specific waypoint info helpers
+// 飞行器特定的航点信息辅助函数
 bool Copter::get_wp_distance_m(float &distance) const
 {
-    // see GCS_MAVLINK_Copter::send_nav_controller_output()
+    // 参见 GCS_MAVLINK_Copter::send_nav_controller_output()
     distance = flightmode->wp_distance() * 0.01;
     return true;
 }
 
-// vehicle specific waypoint info helpers
+// 飞行器特定的航点信息辅助函数
 bool Copter::get_wp_bearing_deg(float &bearing) const
 {
-    // see GCS_MAVLINK_Copter::send_nav_controller_output()
+    // 参见 GCS_MAVLINK_Copter::send_nav_controller_output()
     bearing = flightmode->wp_bearing() * 0.01;
     return true;
 }
 
-// vehicle specific waypoint info helpers
+// 飞行器特定的航点信息辅助函数
 bool Copter::get_wp_crosstrack_error_m(float &xtrack_error) const
 {
-    // see GCS_MAVLINK_Copter::send_nav_controller_output()
+    // 参见 GCS_MAVLINK_Copter::send_nav_controller_output()
     xtrack_error = flightmode->crosstrack_error() * 0.01;
     return true;
 }
 
-// get the target earth-frame angular velocities in rad/s (Z-axis component used by some gimbals)
+// 获取目标地球坐标系角速度(rad/s)(Z轴分量被某些云台使用)
 bool Copter::get_rate_ef_targets(Vector3f& rate_ef_targets) const
 {
-    // always returns zero vector if landed or disarmed
+    // 如果已着陆或未解锁,始终返回零向量
     if (copter.ap.land_complete) {
         rate_ef_targets.zero();
     } else {
@@ -868,7 +807,7 @@ bool Copter::get_rate_ef_targets(Vector3f& rate_ef_targets) const
 }
 
 /*
-  constructor for main Copter class
+  Copter 主类的构造函数
  */
 Copter::Copter(void)
     :
