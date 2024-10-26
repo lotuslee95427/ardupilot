@@ -1,3 +1,5 @@
+// AP_Logger_Backend.cpp - 日志记录后端实现
+
 #include "AP_Logger_config.h"
 
 #if HAL_LOGGING_ENABLED
@@ -20,6 +22,7 @@
 
 extern const AP_HAL::HAL& hal;
 
+// 构造函数,初始化前端对象和启动消息写入器
 AP_Logger_Backend::AP_Logger_Backend(AP_Logger &front,
                                      class LoggerMessageWriter_DFLogStart *writer) :
     _front(front),
@@ -28,59 +31,70 @@ AP_Logger_Backend::AP_Logger_Backend(AP_Logger &front,
     writer->set_logger_backend(this);
 }
 
+// 返回日志类型数量
 uint8_t AP_Logger_Backend::num_types() const
 {
     return _front._num_types;
 }
 
+// 返回指定索引的日志结构
 const struct LogStructure *AP_Logger_Backend::structure(uint8_t num) const
 {
     return _front.structure(num);
 }
 
+// 返回单位数量
 uint8_t AP_Logger_Backend::num_units() const
 {
     return _front._num_units;
 }
 
+// 返回指定索引的单位结构
 const struct UnitStructure *AP_Logger_Backend::unit(uint8_t num) const
 {
     return _front.unit(num);
 }
 
+// 返回乘数数量
 uint8_t AP_Logger_Backend::num_multipliers() const
 {
     return _front._num_multipliers;
 }
 
+// 返回指定索引的乘数结构
 const struct MultiplierStructure *AP_Logger_Backend::multiplier(uint8_t num) const
 {
     return _front.multiplier(num);
 }
 
+// 返回车辆启动消息写入器
 AP_Logger_Backend::vehicle_startup_message_Writer AP_Logger_Backend::vehicle_message_writer() const {
     return _front._vehicle_messages;
 }
 
+// 10Hz周期性任务
 void AP_Logger_Backend::periodic_10Hz(const uint32_t now)
 {
 }
 
+// 1Hz周期性任务
 void AP_Logger_Backend::periodic_1Hz()
 {
     if (_rotate_pending && !logging_enabled()) {
         _rotate_pending = false;
-        // handle log rotation once we stop logging
+        // 停止日志记录时处理日志轮转
         stop_logging_async();
     }
     df_stats_log();
 }
 
+// 全速率周期性任务
 void AP_Logger_Backend::periodic_fullrate()
 {
     push_log_blocks();
 }
 
+// 执行所有周期性任务
 void AP_Logger_Backend::periodic_tasks()
 {
     uint32_t now = AP_HAL::millis();
@@ -95,6 +109,7 @@ void AP_Logger_Backend::periodic_tasks()
     periodic_fullrate();
 }
 
+// 开始新日志时重置变量
 void AP_Logger_Backend::start_new_log_reset_variables()
 {
     _dropped = 0;
@@ -103,28 +118,25 @@ void AP_Logger_Backend::start_new_log_reset_variables()
     _formats_written.clearall();
 }
 
-// We may need to make sure data is loggable before starting the
-// EKF; when allow_start_ekf we should be able to log that data
+// 检查是否允许启动EKF
 bool AP_Logger_Backend::allow_start_ekf() const
 {
     if (!_startup_messagewriter->fmt_done()) {
         return false;
     }
-    // we need to push all startup messages out, or the code in
-    // WriteBlockCheckStartupMessages bites us.
+    // 需要推送所有启动消息
     if (!_startup_messagewriter->finished()) {
         return false;
     }
     return true;
 }
 
-// this method can be overridden to do extra things with your buffer.
-// for example, in AP_Logger_MAVLink we may push messages into the UART.
+// 推送日志块,可被子类重写以实现额外功能
 void AP_Logger_Backend::push_log_blocks() {
     WriteMoreStartupMessages();
 }
 
-// source more messages from the startup message writer:
+// 写入更多启动消息
 void AP_Logger_Backend::WriteMoreStartupMessages()
 {
 #if APM_BUILD_TYPE(APM_BUILD_Replay)
@@ -141,11 +153,10 @@ void AP_Logger_Backend::WriteMoreStartupMessages()
 }
 
 /*
- * support for Write():
+ * Write()函数的支持代码
  */
 
-
-// output a FMT message if not already done so
+// 如果未发送过,则输出FMT消息
 void AP_Logger_Backend::Safe_Write_Emit_FMT(uint8_t msg_type)
 {
     if (have_emitted_format_for_type(LogMessages(msg_type))) {
@@ -154,19 +165,20 @@ void AP_Logger_Backend::Safe_Write_Emit_FMT(uint8_t msg_type)
     Write_Emit_FMT(msg_type);
 }
 
+// 写入FMT消息
 bool AP_Logger_Backend::Write_Emit_FMT(uint8_t msg_type)
 {
 #if APM_BUILD_TYPE(APM_BUILD_Replay)
     if (msg_type < REPLAY_LOG_NEW_MSG_MIN || msg_type > REPLAY_LOG_NEW_MSG_MAX) {
-        // don't re-emit FMU msgs unless they are in the replay range
+        // 不重新发送FMU消息,除非在回放范围内
         return true;
     }
 #endif
 
-    // get log structure from front end:
+    // 从前端获取日志结构:
     struct AP_Logger::log_write_fmt_strings ls = {};
     struct LogStructure logstruct = {
-        // these will be overwritten, but need to keep the compiler happy:
+        // 这些将被覆盖,但需要保持编译器满意:
         0,
         0,
         ls.name,
@@ -176,9 +188,7 @@ bool AP_Logger_Backend::Write_Emit_FMT(uint8_t msg_type)
         ls.multipliers
     };
     if (!_front.fill_logstructure(logstruct, msg_type)) {
-        // this is a bug; we've been asked to write out the FMT
-        // message for a msg_type, but the frontend can't supply the
-        // required information
+        // 这是一个bug;我们被要求写出msg_type的FMT消息,但前端无法提供所需信息
         INTERNAL_ERROR(AP_InternalError::error_t::logger_missing_logstructure);
         return false;
     }
@@ -193,11 +203,11 @@ bool AP_Logger_Backend::Write_Emit_FMT(uint8_t msg_type)
     return true;
 }
 
+// 写入日志消息
 bool AP_Logger_Backend::Write(const uint8_t msg_type, va_list arg_list, bool is_critical, bool is_streaming)
 {
-    // stack-allocate a buffer so we can WriteBlock(); this could be
-    // 255 bytes!  If we were willing to lose the WriteBlock
-    // abstraction we could do WriteBytes() here instead?
+    // 在栈上分配缓冲区以便可以WriteBlock();这可能是255字节!
+    // 如果我们愿意失去WriteBlock抽象,我们可以在这里使用WriteBytes()
     const char *fmt  = nullptr;
     uint8_t msg_len;
     AP_Logger::log_write_fmt *f;
@@ -326,6 +336,7 @@ bool AP_Logger_Backend::Write(const uint8_t msg_type, va_list arg_list, bool is_
     return WritePrioritisedBlock(buffer, msg_len, is_critical, is_streaming);
 }
 
+// 检查是否可以开始新日志
 bool AP_Logger_Backend::StartNewLogOK() const
 {
     if (logging_started()) {
@@ -343,8 +354,7 @@ bool AP_Logger_Backend::StartNewLogOK() const
     return true;
 }
 
-// validate that pBuffer looks like a message, extract message type.
-// Returns false if this doesn't look like a valid message.
+// 从缓冲区验证消息类型并提取消息类型
 bool AP_Logger_Backend::message_type_from_block(const void *pBuffer, uint16_t size, LogMessages &type) const
 {
     if (size < 3) {
@@ -352,7 +362,7 @@ bool AP_Logger_Backend::message_type_from_block(const void *pBuffer, uint16_t si
     }
     if (((uint8_t*)pBuffer)[0] != HEAD_BYTE1 ||
         ((uint8_t*)pBuffer)[1] != HEAD_BYTE2) {
-        // Not passed a message
+        // 不是有效消息
         INTERNAL_ERROR(AP_InternalError::error_t::flow_of_control);
         return false;
     }
@@ -361,20 +371,20 @@ bool AP_Logger_Backend::message_type_from_block(const void *pBuffer, uint16_t si
 }
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+// 验证WritePrioritisedBlock的参数
 void AP_Logger_Backend::validate_WritePrioritisedBlock(const void *pBuffer,
                                                        uint16_t size)
 {
-    // just check the first few packets to avoid too much overhead
-    // (finding the structures is expensive)
+    // 仅检查前几个数据包以避免过多开销
+    // (查找结构开销很大)
     static uint16_t count = 0;
     if (count > 65534) {
         return;
     }
     count++;
 
-    // we assume here that we ever WritePrioritisedBlock for a single
-    // message.  If this assumption becomes false we can't do these
-    // checks.
+    // 我们假设这里每次WritePrioritisedBlock只写一条消息
+    // 如果这个假设不成立,我们就不能做这些检查
     if (size < 3) {
         AP_HAL::panic("Short prioritised block");
     }
@@ -397,7 +407,7 @@ void AP_Logger_Backend::validate_WritePrioritisedBlock(const void *pBuffer,
         name_src = s->name;
     }
     if (type_len != size) {
-        char name[5] = {}; // get a null-terminated string
+        char name[5] = {}; // 获取一个以null结尾的字符串
         if (name_src != nullptr) {
             memcpy(name, name_src, 4);
         } else {
@@ -409,14 +419,15 @@ void AP_Logger_Backend::validate_WritePrioritisedBlock(const void *pBuffer,
 }
 #endif
 
+// 确保格式已发送
 bool AP_Logger_Backend::ensure_format_emitted(const void *pBuffer, uint16_t size)
 {
 #if APM_BUILD_TYPE(APM_BUILD_Replay)
-    // we trust that Replay will correctly emit formats as required
+    // 我们相信Replay会正确发送所需的格式
     return true;
 #endif
 
-    // extract the ID:
+    // 提取ID:
     LogMessages type;
     if (!message_type_from_block(pBuffer, size, type)) {
         return false;
@@ -425,9 +436,9 @@ bool AP_Logger_Backend::ensure_format_emitted(const void *pBuffer, uint16_t size
         return true;
     }
 
-    // make sure the FMT message has gone out!
+    // 确保FMT消息已发送!
     if (type == LOG_FORMAT_MSG) {
-        // kind of?  Our caller is just about to emit this....
+        // 某种程度上?我们的调用者正要发送这个....
         return true;
     }
     if (!have_emitted_format_for_type(LOG_FORMAT_MSG) &&
@@ -438,6 +449,7 @@ bool AP_Logger_Backend::ensure_format_emitted(const void *pBuffer, uint16_t size
     return Write_Emit_FMT(type);
 }
 
+// 写入优先级块
 bool AP_Logger_Backend::WritePrioritisedBlock(const void *pBuffer, uint16_t size, bool is_critical, bool writev_streaming)
 {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL && !APM_BUILD_TYPE(APM_BUILD_Replay)
@@ -467,6 +479,7 @@ bool AP_Logger_Backend::WritePrioritisedBlock(const void *pBuffer, uint16_t size
     return _WritePrioritisedBlock(pBuffer, size, is_critical);
 }
 
+// 检查是否应该记录日志
 bool AP_Logger_Backend::ShouldLog(bool is_critical)
 {
     if (!_front.WritesEnabled()) {
@@ -478,7 +491,7 @@ bool AP_Logger_Backend::ShouldLog(bool is_critical)
 
     if (!_startup_messagewriter->finished() &&
         !hal.scheduler->in_main_thread()) {
-        // only the main thread may write startup messages out
+        // 只有主线程可以写入启动消息
         return false;
     }
 
@@ -486,7 +499,7 @@ bool AP_Logger_Backend::ShouldLog(bool is_critical)
         _front._last_mavlink_log_transfer_message_handled_ms != 0) {
         if (AP_HAL::millis() - _front._last_mavlink_log_transfer_message_handled_ms < 10000) {
             if (!_front.vehicle_is_armed()) {
-                // user is transferring files via mavlink
+                // 用户正在通过mavlink传输文件
                 return false;
             }
         } else {
@@ -495,9 +508,8 @@ bool AP_Logger_Backend::ShouldLog(bool is_critical)
     }
 
     if (is_critical && have_logged_armed && !_front._params.file_disarm_rot) {
-        // if we have previously logged while armed then we log all
-        // critical messages from then on. That fixes a problem where
-        // logs show the wrong flight mode if you disarm then arm again
+        // 如果我们之前在武装状态下记录过日志,那么从那时起我们记录所有关键消息
+        // 这修复了如果你解除武装然后再次武装,日志显示错误飞行模式的问题
         return true;
     }
     
@@ -512,6 +524,7 @@ bool AP_Logger_Backend::ShouldLog(bool is_critical)
     return true;
 }
 
+// 为武装做准备
 void AP_Logger_Backend::PrepForArming()
 {
     if (_rotate_pending) {
@@ -524,9 +537,10 @@ void AP_Logger_Backend::PrepForArming()
     PrepForArming_start_logging();
 }
 
+// 写入格式化消息
 bool AP_Logger_Backend::Write_MessageF(const char *fmt, ...)
 {
-    char msg[65] {}; // sizeof(log_Message.msg) + null-termination
+    char msg[65] {}; // sizeof(log_Message.msg) + null结尾
 
     va_list ap;
     va_start(ap, fmt);
@@ -537,7 +551,7 @@ bool AP_Logger_Backend::Write_MessageF(const char *fmt, ...)
 }
 
 #if HAL_RALLY_ENABLED
-// Write rally points
+// 写入集结点
 bool AP_Logger_Backend::Write_RallyPoint(uint8_t total,
                                          uint8_t sequence,
                                          const RallyLocation &rally_point)
@@ -555,16 +569,16 @@ bool AP_Logger_Backend::Write_RallyPoint(uint8_t total,
     return WriteBlock(&pkt_rally, sizeof(pkt_rally));
 }
 
-// Write rally points
+// 写入所有集结点
 bool AP_Logger_Backend::Write_Rally()
 {
-    // kick off asynchronous write:
+    // 启动异步写入:
     return _startup_messagewriter->writeallrallypoints();
 }
 #endif
 
 #if HAL_LOGGER_FENCE_ENABLED
-// Write a fence point
+// 写入围栏点
 bool AP_Logger_Backend::Write_FencePoint(uint8_t total, uint8_t sequence, const AC_PolyFenceItem &fence_point)
 {
     const struct log_Fence pkt_fence{
@@ -581,15 +595,15 @@ bool AP_Logger_Backend::Write_FencePoint(uint8_t total, uint8_t sequence, const 
     return WriteBlock(&pkt_fence, sizeof(pkt_fence));
 }
 
-// Write all fence points
+// 写入所有围栏点
 bool AP_Logger_Backend::Write_Fence()
 {
-    // kick off asynchronous write:
+    // 启动异步写入:
     return _startup_messagewriter->writeallfence();
 }
 #endif // HAL_LOGGER_FENCE_ENABLED
 
-
+// 写入版本信息
 bool AP_Logger_Backend::Write_VER()
 {
     const AP_FWVersion &fwver = AP::fwversion();
@@ -617,11 +631,9 @@ bool AP_Logger_Backend::Write_VER()
 }
 
 /*
-  convert a list entry number back into a log number (which can then
-  be converted into a filename).  A "list entry number" is a sequence
-  where the oldest log has a number of 1, the second-from-oldest 2,
-  and so on.  Thus the highest list entry number is equal to the
-  number of logs.
+  将列表条目号转换回日志号(然后可以转换为文件名)。
+  "列表条目号"是一个序列,其中最旧的日志号为1,倒数第二旧的为2,
+  依此类推。因此最高的列表条目号等于日志数量。
 */
 uint16_t AP_Logger_Backend::log_num_from_list_entry(const uint16_t list_entry)
 {
@@ -638,8 +650,8 @@ uint16_t AP_Logger_Backend::log_num_from_list_entry(const uint16_t list_entry)
     return (uint16_t)log_num;
 }
 
-// find_oldest_log - find oldest log
-// returns 0 if no log was found
+// 查找最旧的日志
+// 如果没有找到日志则返回0
 uint16_t AP_Logger_Backend::find_oldest_log()
 {
     if (_cached_oldest_log != 0) {
@@ -656,18 +668,17 @@ uint16_t AP_Logger_Backend::find_oldest_log()
     return _cached_oldest_log;
 }
 
+// 车辆解除武装时的处理
 void AP_Logger_Backend::vehicle_was_disarmed()
 {
     if (_front._params.file_disarm_rot &&
         !_front._params.log_replay) {
-        // rotate our log.  Closing the current one and letting the
-        // logging restart naturally based on log_disarmed should do
-        // the trick:
+        // 轮转我们的日志。关闭当前日志并让日志记录基于log_disarmed自然重启应该可以解决问题:
         _rotate_pending = true;
     }
 }
 
-// this sensor is enabled if we should be logging at the moment
+// 如果我们此时应该记录日志,则此传感器被启用
 bool AP_Logger_Backend::logging_enabled() const
 {
     if (hal.util->get_soft_armed() ||
@@ -677,6 +688,7 @@ bool AP_Logger_Backend::logging_enabled() const
     return false;
 }
 
+// 写入AP_Logger统计信息文件
 void AP_Logger_Backend::Write_AP_Logger_Stats_File(const struct df_stats &_stats)
 {
     const struct log_DSF pkt {
@@ -692,6 +704,7 @@ void AP_Logger_Backend::Write_AP_Logger_Stats_File(const struct df_stats &_stats
     WriteBlock(&pkt, sizeof(pkt));
 }
 
+// 收集数据文件统计信息
 void AP_Logger_Backend::df_stats_gather(const uint16_t bytes_written, uint32_t space_remaining)
 {
     if (space_remaining < stats.buf_space_min) {
@@ -705,18 +718,20 @@ void AP_Logger_Backend::df_stats_gather(const uint16_t bytes_written, uint32_t s
     stats.blocks++;
 }
 
+// 清除数据文件统计信息
 void AP_Logger_Backend::df_stats_clear() {
     memset(&stats, '\0', sizeof(stats));
     stats.buf_space_min = -1;
 }
 
+// 记录数据文件统计信息
 void AP_Logger_Backend::df_stats_log() {
     Write_AP_Logger_Stats_File(stats);
     df_stats_clear();
 }
 
 
-// class to handle rate limiting of log messages
+// 处理日志消息速率限制的类
 AP_Logger_RateLimiter::AP_Logger_RateLimiter(const AP_Logger &_front, const AP_Float &_limit_hz, const AP_Float &_disarm_limit_hz)
     : front(_front),
       rate_limit_hz(_limit_hz),
@@ -725,7 +740,7 @@ AP_Logger_RateLimiter::AP_Logger_RateLimiter(const AP_Logger &_front, const AP_F
 }
 
 /*
-  return false if a streaming message should not be sent yet
+  如果流式消息还不应该发送则返回false
  */
 bool AP_Logger_RateLimiter::should_log_streaming(uint8_t msgid, float rate_hz)
 {
@@ -735,7 +750,7 @@ bool AP_Logger_RateLimiter::should_log_streaming(uint8_t msgid, float rate_hz)
     const uint16_t now = AP_HAL::millis16();
     uint16_t delta_ms = now - last_send_ms[msgid];
     if (is_positive(rate_hz) && delta_ms < 1000.0 / rate_hz) {
-        // too soon
+        // 太快了
         return false;
     }
     last_send_ms[msgid] = now;
@@ -743,8 +758,7 @@ bool AP_Logger_RateLimiter::should_log_streaming(uint8_t msgid, float rate_hz)
 }
 
 /*
-  return true if the message is not a streaming message or the gap
-  from the last message is more than the message rate
+  如果消息不是流式消息或者距离上一条消息的间隔大于消息速率,则返回true
  */
 bool AP_Logger_RateLimiter::should_log(uint8_t msgid, bool writev_streaming)
 {
@@ -755,12 +769,11 @@ bool AP_Logger_RateLimiter::should_log(uint8_t msgid, bool writev_streaming)
         rate_hz = disarm_rate_limit_hz;
     }
     if (!is_positive(rate_hz) && !front._log_pause) {
-        // no rate limiting if not paused and rate is zero(user changed the parameter)
+        // 如果未暂停且速率为零(用户更改了参数),则不限制速率
         return true;
     }
     if (last_send_ms[msgid] == 0 && !writev_streaming) {
-        // might be non streaming. check the not_streaming bitmask
-        // cache
+        // 可能不是流式消息。检查not_streaming位掩码缓存
         if (not_streaming.get(msgid)) {
             return true;
         }
@@ -773,8 +786,7 @@ bool AP_Logger_RateLimiter::should_log(uint8_t msgid, bool writev_streaming)
     }
 
 #if !defined(HAL_BUILD_AP_PERIPH)
-    // if we've already decided on sending this msgid in this tick then use the
-    // same decision again
+    // 如果我们在这个tick中已经决定发送这个msgid,则使用相同的决定
     const uint16_t sched_ticks = AP::scheduler().ticks();
     if (sched_ticks == last_sched_count[msgid]) {
         return last_return.get(msgid);
