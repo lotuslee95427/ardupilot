@@ -519,6 +519,7 @@ void ModeFlowHold::update_height_estimate(void)
                                            (double)ins_height,
                                            (double)last_ins_height,
                                            dt_ms);
+                                           //写入自定义消息
 #endif
 
     gcs().send_named_float("HEST", height_estimate);
