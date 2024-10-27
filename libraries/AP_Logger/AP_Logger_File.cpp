@@ -1,13 +1,12 @@
 /* 
-   AP_Logger logging - file oriented variant
+   AP_Logger日志记录 - 基于文件的变体
 
-   This uses posix file IO to create log files called logs/NN.bin in the
-   given directory
+   使用posix文件IO在指定目录下创建名为logs/NN.bin的日志文件
 
-   SD Card Rates on PixHawk:
-    - deletion rate seems to be ~50 files/second.
-    - stat seems to be ~150/second
-    - readdir loop of 511 entry directory ~62,000 microseconds
+   PixHawk上的SD卡性能:
+    - 删除速率约50个文件/秒
+    - stat操作约150次/秒 
+    - 读取511个条目的目录需要约62,000微秒
  */
 
 #include "AP_Logger_config.h"
@@ -33,50 +32,62 @@
 
 extern const AP_HAL::HAL& hal;
 
+// 日志页大小定义为1024字节
 #define LOGGER_PAGE_SIZE 1024UL
 
+// MB和B的转换系数
 #define MB_to_B 1000000
 #define B_to_MB 0.000001
 
-// time between tries to open log
+// 尝试打开日志的时间间隔(毫秒)
 #define LOGGER_FILE_REOPEN_MS 5000
 
 /*
-  constructor
+  构造函数
  */
 AP_Logger_File::AP_Logger_File(AP_Logger &front,
                                LoggerMessageWriter_DFLogStart *writer) :
     AP_Logger_Backend(front, writer),
     _log_directory(HAL_BOARD_LOG_DIRECTORY)
 {
+    // 清除统计数据
     df_stats_clear();
 }
 
 
+/*
+  确保日志目录存在
+*/
 void AP_Logger_File::ensure_log_directory_exists()
 {
     int ret;
     struct stat st;
 
     EXPECT_DELAY_MS(3000);
+    // 检查目录是否存在
     ret = AP::FS().stat(_log_directory, &st);
     if (ret == -1) {
+        // 目录不存在,创建目录
         ret = AP::FS().mkdir(_log_directory);
     }
     if (ret == -1 && errno != EEXIST) {
+        // 创建目录失败,打印错误信息
         printf("Failed to create log directory %s : %s\n", _log_directory, strerror(errno));
     }
 }
 
+/*
+  初始化函数
+*/
 void AP_Logger_File::Init()
 {
-    // determine and limit file backend buffersize
+    // 确定并限制文件后端缓冲区大小
     uint32_t bufsize = _front._params.file_bufsize;
     bufsize *= 1024;
 
     const uint32_t desired_bufsize = bufsize;
 
-    // If we can't allocate the full size, try to reduce it until we can allocate it
+    // 如果无法分配完整大小,尝试减小直到可以分配
     while (!_writebuf.set_size(bufsize) && bufsize >= _writebuf_chunk) {
         bufsize *= 0.9;
     }
@@ -84,6 +95,7 @@ void AP_Logger_File::Init()
         DEV_PRINTF("AP_Logger: reduced buffer %u/%u\n", (unsigned)bufsize, (unsigned)desired_bufsize);
     }
 
+    // 检查是否成功分配缓冲区
     if (!_writebuf.get_size()) {
         DEV_PRINTF("Out of memory for logging\n");
         return;
@@ -93,14 +105,16 @@ void AP_Logger_File::Init()
 
     _initialised = true;
 
+    // 检查是否有自定义日志目录
     const char* custom_dir = hal.util->get_custom_log_directory();
     if (custom_dir != nullptr){
         _log_directory = custom_dir;
     }
 
+    // 查找最后一个日志编号
     uint16_t last_log_num = find_last_log();
     if (last_log_is_marked_discard) {
-        // delete the last log leftover from LOG_DISARMED=3
+        // 删除标记为丢弃的最后一个日志(LOG_DISARMED=3)
         char *filename = _log_file_name(last_log_num);
         if (filename != nullptr) {
             AP::FS().unlink(filename);
@@ -108,21 +122,27 @@ void AP_Logger_File::Init()
         }
     }
 
+    // 准备最小空间
     Prep_MinSpace();
 }
 
+/*
+  检查文件是否存在
+*/
 bool AP_Logger_File::file_exists(const char *filename) const
 {
     struct stat st;
     EXPECT_DELAY_MS(3000);
     if (AP::FS().stat(filename, &st) == -1) {
-        // hopefully errno==ENOENT.  If some error occurs it is
-        // probably better to assume this file exists.
+        // 希望errno==ENOENT。如果发生其他错误,最好假设文件存在
         return false;
     }
     return true;
 }
 
+/*
+  检查指定编号的日志是否存在
+*/
 bool AP_Logger_File::log_exists(const uint16_t lognum) const
 {
     char *filename = _log_file_name(lognum);
@@ -134,33 +154,35 @@ bool AP_Logger_File::log_exists(const uint16_t lognum) const
     return ret;
 }
 
+/*
+  1Hz周期任务
+*/
 void AP_Logger_File::periodic_1Hz()
 {
     AP_Logger_Backend::periodic_1Hz();
 
+    // 擦除后重新开始日志记录
     if (_initialised &&
         _write_fd == -1 && _read_fd == -1 &&
         erase.log_num == 0 &&
         erase.was_logging) {
-        // restart logging after an erase if needed
         erase.was_logging = false;
-        // setup to open the log in the backend thread
         start_new_log_pending = true;
     }
     
+    // 在后端线程中打开日志
     if (_initialised &&
         !start_new_log_pending &&
         _write_fd == -1 && _read_fd == -1 &&
         logging_enabled() &&
         !recent_open_error()) {
-        // setup to open the log in the backend thread
         start_new_log_pending = true;
     }
 
+    // 检查IO线程是否存活
     if (!io_thread_alive()) {
         if (io_thread_warning_decimation_counter == 0 && _initialised) {
-            // we don't print this error unless we did initialise. When _initialised is set to true
-            // we register the IO timer callback
+            // 只有在初始化后才打印此错误。当_initialised设置为true时,我们注册IO定时器回调
             GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "AP_Logger: stuck thread (%s)", last_io_operation);
         }
         if (io_thread_warning_decimation_counter++ > 30) {
@@ -168,20 +190,26 @@ void AP_Logger_File::periodic_1Hz()
         }
     }
 
+    // 设置速率限制器
     if (rate_limiter == nullptr &&
         (_front._params.file_ratemax > 0 ||
          _front._params.disarm_ratemax > 0 ||
          _front._log_pause)) {
-        // setup rate limiting if log rate max > 0Hz or log pause of streaming entries is requested
         rate_limiter = NEW_NOTHROW AP_Logger_RateLimiter(_front, _front._params.file_ratemax, _front._params.disarm_ratemax);
     }
 }
 
+/*
+  全速率周期任务
+*/
 void AP_Logger_File::periodic_fullrate()
 {
     AP_Logger_Backend::push_log_blocks();
 }
 
+/*
+  获取可用缓冲区空间
+*/
 uint32_t AP_Logger_File::bufferspace_available()
 {
     const uint32_t space = _writebuf.space();
@@ -190,6 +218,9 @@ uint32_t AP_Logger_File::bufferspace_available()
     return (space > crit) ? space - crit : 0;
 }
 
+/*
+  检查是否最近发生打开错误
+*/
 bool AP_Logger_File::recent_open_error(void) const
 {
     if (_open_error_ms == 0) {
@@ -198,30 +229,35 @@ bool AP_Logger_File::recent_open_error(void) const
     return AP_HAL::millis() - _open_error_ms < LOGGER_FILE_REOPEN_MS;
 }
 
-// return true for CardInserted() if we successfully initialized
+/*
+  检查存储卡是否已插入
+*/
 bool AP_Logger_File::CardInserted(void) const
 {
     return _initialised && !recent_open_error();
 }
 
-// returns the amount of disk space available in _log_directory (in bytes)
-// returns -1 on error
+/*
+  获取日志目录中的可用磁盘空间(字节)
+  失败返回-1
+*/
 int64_t AP_Logger_File::disk_space_avail()
 {
     return AP::FS().disk_free(_log_directory);
 }
 
-// returns the total amount of disk space (in use + available) in
-// _log_directory (in bytes).
-// returns -1 on error
+/*
+  获取日志目录中的总磁盘空间(使用+可用)(字节)
+  失败返回-1
+*/
 int64_t AP_Logger_File::disk_space()
 {
     return AP::FS().disk_space(_log_directory);
 }
 
 /*
-  convert a dirent to a log number
- */
+  将dirent转换为日志编号
+*/
 bool AP_Logger_File::dirent_to_log_num(const dirent *de, uint16_t &log_num) const
 {
     uint8_t length = strlen(de->d_name);
@@ -229,7 +265,7 @@ bool AP_Logger_File::dirent_to_log_num(const dirent *de, uint16_t &log_num) cons
         return false;
     }
     if (strncmp(&de->d_name[length-4], ".BIN", 4) != 0) {
-        // doesn't end in .BIN
+        // 不以.BIN结尾
         return false;
     }
 
@@ -242,8 +278,10 @@ bool AP_Logger_File::dirent_to_log_num(const dirent *de, uint16_t &log_num) cons
 }
 
 
-// find_oldest_log - find oldest log in _log_directory
-// returns 0 if no log was found
+/*
+  查找最早的日志
+  如果没有找到日志返回0
+*/
 uint16_t AP_Logger_File::find_oldest_log()
 {
     if (_cached_oldest_log != 0) {
@@ -255,25 +293,24 @@ uint16_t AP_Logger_File::find_oldest_log()
         return 0;
     }
 
-    uint16_t current_oldest_log = 0; // 0 is invalid
+    uint16_t current_oldest_log = 0; // 0是无效的
 
-    // We could count up to find_last_log(), but if people start
-    // relying on the min_avail_space_percent feature we could end up
-    // doing a *lot* of asprintf()s and stat()s
+    // 我们可以计数到find_last_log(),但如果人们开始依赖min_avail_space_percent功能,
+    // 我们可能会做大量的asprintf()和stat()操作
     EXPECT_DELAY_MS(3000);
     auto *d = AP::FS().opendir(_log_directory);
     if (d == nullptr) {
-        // SD card may have died?  On linux someone may have rm-rf-d
+        // SD卡可能已死?在linux上可能有人rm -rf了目录
         return 0;
     }
 
-    // we only remove files which look like xxx.BIN
+    // 我们只删除看起来像xxx.BIN的文件
     EXPECT_DELAY_MS(3000);
     for (struct dirent *de=AP::FS().readdir(d); de; de=AP::FS().readdir(d)) {
         EXPECT_DELAY_MS(3000);
         uint16_t thisnum;
         if (!dirent_to_log_num(de, thisnum)) {
-            // not a log filename
+            // 不是日志文件名
             continue;
         }
         if (current_oldest_log == 0) {
@@ -300,10 +337,13 @@ uint16_t AP_Logger_File::find_oldest_log()
     return current_oldest_log;
 }
 
+/*
+  准备最小空间
+*/
 void AP_Logger_File::Prep_MinSpace()
 {
     if (hal.util->was_watchdog_reset()) {
-        // don't clear space if watchdog reset, it takes too long
+        // 看门狗复位时不清理空间,需要太长时间
         return;
     }
 
@@ -313,7 +353,7 @@ void AP_Logger_File::Prep_MinSpace()
 
     const uint16_t first_log_to_remove = find_oldest_log();
     if (first_log_to_remove == 0) {
-        // no files to remove
+        // 没有文件需要删除
         return;
     }
 
@@ -331,7 +371,7 @@ void AP_Logger_File::Prep_MinSpace()
             break;
         }
         if (count++ > _front.get_max_num_logs() + 10) {
-            // *way* too many deletions going on here.  Possible internal error.
+            // 这里删除太多了。可能是内部错误。
             INTERNAL_ERROR(AP_InternalError::error_t::logger_too_many_deletions);
             break;
         }
@@ -349,9 +389,7 @@ void AP_Logger_File::Prep_MinSpace()
                 DEV_PRINTF("Failed to remove %s: %s\n", filename_to_remove, strerror(errno));
                 free(filename_to_remove);
                 if (errno == ENOENT) {
-                    // corruption - should always have a continuous
-                    // sequence of files...  however, there may be still
-                    // files out there, so keep going.
+                    // 损坏 - 应该总是有连续的文件序列...但可能还有其他文件,所以继续。
                 } else {
                     break;
                 }
@@ -367,9 +405,9 @@ void AP_Logger_File::Prep_MinSpace()
 }
 
 /*
-  construct a log file name given a log number.
-  The number in the log filename will be zero-padded.
-  Note: Caller must free.
+  根据日志编号构造日志文件名。
+  日志文件名中的编号将用零填充。
+  注意:调用者必须释放内存。
  */
 char *AP_Logger_File::_log_file_name(const uint16_t log_num) const
 {
@@ -381,8 +419,8 @@ char *AP_Logger_File::_log_file_name(const uint16_t log_num) const
 }
 
 /*
-  return path name of the lastlog.txt marker file
-  Note: Caller must free.
+  返回lastlog.txt标记文件的路径名
+  注意:调用者必须释放内存。
  */
 char *AP_Logger_File::_lastlog_file_name(void) const
 {
@@ -394,11 +432,13 @@ char *AP_Logger_File::_lastlog_file_name(void) const
 }
 
 
-// remove all log files
+/*
+  删除所有日志文件
+*/
 void AP_Logger_File::EraseAll()
 {
     if (hal.util->get_soft_armed()) {
-        // do not want to do any filesystem operations while we are e.g. flying
+        // 在飞行等状态下不想执行任何文件系统操作
         return;
     }
     if (!_initialised) {
@@ -411,6 +451,9 @@ void AP_Logger_File::EraseAll()
     erase.log_num = 1;
 }
 
+/*
+  检查写入是否正常
+*/
 bool AP_Logger_File::WritesOK() const
 {
     if (_write_fd == -1) {
@@ -423,6 +466,9 @@ bool AP_Logger_File::WritesOK() const
 }
 
 
+/*
+  检查是否可以开始新日志
+*/
 bool AP_Logger_File::StartNewLogOK() const
 {
     if (recent_open_error()) {
@@ -436,7 +482,9 @@ bool AP_Logger_File::StartNewLogOK() const
     return AP_Logger_Backend::StartNewLogOK();
 }
 
-/* Write a block of data at current offset */
+/* 
+  在当前偏移量写入数据块
+*/
 bool AP_Logger_File::_WritePrioritisedBlock(const void *pBuffer, uint16_t size, bool is_critical)
 {
     WITH_SEMAPHORE(semaphore);
@@ -453,27 +501,25 @@ bool AP_Logger_File::_WritePrioritisedBlock(const void *pBuffer, uint16_t size, 
 
     if (_writing_startup_messages &&
         _startup_messagewriter->fmt_done()) {
-        // the state machine has called us, and it has finished
-        // writing format messages out.  It can always get back to us
-        // with more messages later, so let's leave room for other
-        // things:
+        // 状态机已调用我们,并且已完成写入格式消息。
+        // 它以后可以随时再次给我们发送消息,所以让我们为其他内容留出空间:
         const uint32_t now = AP_HAL::millis();
         const bool must_dribble = (now - last_messagewrite_message_sent) > 100;
         if (!must_dribble &&
             space < non_messagewriter_message_reserved_space(_writebuf.get_size())) {
-            // this message isn't dropped, it will be sent again...
+            // 这条消息不会丢失,它会再次发送...
             return false;
         }
         last_messagewrite_message_sent = now;
     } else {
-        // we reserve some amount of space for critical messages:
+        // 我们为关键消息保留一些空间:
         if (!is_critical && space < critical_message_reserved_space(_writebuf.get_size())) {
             _dropped++;
             return false;
         }
     }
 
-    // if no room for entire message - drop it:
+    // 如果没有整个消息的空间 - 丢弃它:
     if (space < size) {
         _dropped++;
         return false;
@@ -485,7 +531,7 @@ bool AP_Logger_File::_WritePrioritisedBlock(const void *pBuffer, uint16_t size, 
 }
 
 /*
-  find the highest log number
+  查找最高的日志编号
  */
 uint16_t AP_Logger_File::find_last_log()
 {
@@ -509,6 +555,9 @@ uint16_t AP_Logger_File::find_last_log()
     return ret;
 }
 
+/*
+  获取日志大小
+*/
 uint32_t AP_Logger_File::_get_log_size(const uint16_t log_num)
 {
     char *fname = _log_file_name(log_num);
@@ -517,7 +566,7 @@ uint32_t AP_Logger_File::_get_log_size(const uint16_t log_num)
     }
     if (_write_fd != -1 && write_fd_semaphore.take_nonblocking()) {
         if (_write_filename != nullptr && strcmp(_write_filename, fname) == 0) {
-            // it is the file we are currently writing
+            // 这是我们当前正在写入的文件
             free(fname);
             write_fd_semaphore.give();
             return _write_offset;
@@ -534,6 +583,9 @@ uint32_t AP_Logger_File::_get_log_size(const uint16_t log_num)
     return st.st_size;
 }
 
+/*
+  获取日志时间
+*/
 uint32_t AP_Logger_File::_get_log_time(const uint16_t log_num)
 {
     char *fname = _log_file_name(log_num);
@@ -542,7 +594,7 @@ uint32_t AP_Logger_File::_get_log_time(const uint16_t log_num)
     }
     if (_write_fd != -1 && write_fd_semaphore.take_nonblocking()) {
         if (_write_filename != nullptr && strcmp(_write_filename, fname) == 0) {
-            // it is the file we are currently writing
+            // 这是我们当前正在写入的文件
             free(fname);
             write_fd_semaphore.give();
 #if AP_RTC_ENABLED
@@ -568,13 +620,13 @@ uint32_t AP_Logger_File::_get_log_time(const uint16_t log_num)
 }
 
 /*
-  find the number of pages in a log
- */
+  获取日志边界
+*/
 void AP_Logger_File::get_log_boundaries(const uint16_t list_entry, uint32_t & start_page, uint32_t & end_page)
 {
     const uint16_t log_num = log_num_from_list_entry(list_entry);
     if (log_num == 0) {
-        // that failed - probably no logs
+        // 失败 - 可能没有日志
         start_page = 0;
         end_page = 0;
         return;
@@ -585,7 +637,7 @@ void AP_Logger_File::get_log_boundaries(const uint16_t list_entry, uint32_t & st
 }
 
 /*
-  retrieve data from a log file
+  从日志文件中检索数据
  */
 int16_t AP_Logger_File::get_log_data(const uint16_t list_entry, const uint16_t page, const uint32_t offset, const uint16_t len, uint8_t *data)
 {
@@ -595,7 +647,7 @@ int16_t AP_Logger_File::get_log_data(const uint16_t list_entry, const uint16_t p
 
     const uint16_t log_num = log_num_from_list_entry(list_entry);
     if (log_num == 0) {
-        // that failed - probably no logs
+        // 失败 - 可能没有日志
         return -1;
     }
 
@@ -642,6 +694,9 @@ int16_t AP_Logger_File::get_log_data(const uint16_t list_entry, const uint16_t p
     return ret;
 }
 
+/*
+  结束日志传输
+*/
 void AP_Logger_File::end_log_transfer()
 {
     if (_read_fd != -1) {
@@ -651,13 +706,13 @@ void AP_Logger_File::end_log_transfer()
 }
 
 /*
-  find size and date of a log
- */
+  获取日志大小和时间
+*/
 void AP_Logger_File::get_log_info(const uint16_t list_entry, uint32_t &size, uint32_t &time_utc)
 {
     uint16_t log_num = log_num_from_list_entry(list_entry);
     if (log_num == 0) {
-        // that failed - probably no logs
+        // 失败 - 可能没有日志
         size = 0;
         time_utc = 0;
         return;
@@ -669,8 +724,8 @@ void AP_Logger_File::get_log_info(const uint16_t list_entry, uint32_t &size, uin
 
 
 /*
-  get the number of logs - note that the log numbers must be consecutive
- */
+  获取日志数量 - 注意日志编号必须连续
+*/
 uint16_t AP_Logger_File::get_num_logs()
 {
     auto *d = AP::FS().opendir(_log_directory);
@@ -686,7 +741,7 @@ uint16_t AP_Logger_File::get_num_logs()
         EXPECT_DELAY_MS(100);
         uint16_t thisnum;
         if (!dirent_to_log_num(de, thisnum)) {
-            // not a log filename
+            // 不是日志文件名
             continue;
         }
 
@@ -696,7 +751,7 @@ uint16_t AP_Logger_File::get_num_logs()
     }
     AP::FS().closedir(d);
     if (smallest_above_last != 0) {
-        // we have wrapped, add in the logs with high numbers
+        // 我们已经回绕,加入高编号的日志
         ret += (_front.get_max_num_logs() - smallest_above_last) + 1;
     }
 
@@ -704,11 +759,11 @@ uint16_t AP_Logger_File::get_num_logs()
 }
 
 /*
-  stop logging
- */
+  停止日志记录
+*/
 void AP_Logger_File::stop_logging(void)
 {
-    // best-case effort to avoid annoying the IO thread
+    // 尽最大努力避免打扰IO线程
     const bool have_sem = write_fd_semaphore.take(hal.util->get_soft_armed()?1:20);
     if (_write_fd != -1) {
         int fd = _write_fd;
@@ -721,8 +776,8 @@ void AP_Logger_File::stop_logging(void)
 }
 
 /*
-  does start_new_log in the logger thread
- */
+  在日志记录器线程中执行start_new_log
+*/
 void AP_Logger_File::PrepForArming_start_logging()
 {
     if (logging_started()) {
@@ -733,8 +788,7 @@ void AP_Logger_File::PrepForArming_start_logging()
     const uint32_t open_limit_ms = 1000;
 
     /*
-      log open happens in the io_timer thread. We allow for a maximum
-      of 1s to complete the open
+      日志打开发生在io_timer线程中。我们允许最多1秒完成打开
      */
     start_new_log_pending = true;
     EXPECT_DELAY_MS(1000);
@@ -743,7 +797,7 @@ void AP_Logger_File::PrepForArming_start_logging()
             break;
         }
 #if !APM_BUILD_TYPE(APM_BUILD_Replay) && AP_AHRS_ENABLED
-        // keep the EKF ticking over
+        // 保持EKF运行
         AP::ahrs().update();
 #endif
         hal.scheduler->delay(1);
@@ -751,62 +805,70 @@ void AP_Logger_File::PrepForArming_start_logging()
 }
 
 /*
-  start writing to a new log file
- */
+  开始写入新的日志文件
+*/
 void AP_Logger_File::start_new_log(void)
 {
     if (recent_open_error()) {
-        // we have previously failed to open a file - don't try again
-        // to prevent us trying to open files while in flight
+        // 我们之前打开文件失败 - 不要再尝试
+        // 以防止我们在飞行时尝试打开文件
         return;
     }
 
     if (erase.log_num != 0) {
-        // don't start a new log while erasing, but record that we
-        // want to start logging when erase finished
+        // 擦除时不要开始新日志,但记录我们想在擦除完成后开始日志记录
         erase.was_logging = true;
         return;
     }
 
     const bool open_error_ms_was_zero = (_open_error_ms == 0);
 
-    // set _open_error here to avoid infinite recursion.  Simply
-    // writing a prioritised block may try to open a log - which means
-    // if anything in the start_new_log path does a GCS_SEND_TEXT()
-    // (for example), you will end up recursing if we don't take
-    // precautions.  We will reset _open_error if we actually manage
-    // to open the log...
+    // 在这里设置_open_error以避免无限递归。简单地
+    // 写入优先级块可能会尝试打开日志 - 这意味着
+    // 如果start_new_log路径中的任何内容执行GCS_SEND_TEXT()
+    // (例如),如果我们不采取预防措施,你将最终递归。
+    // 如果我们真的设法打开日志,我们将重置_open_error...
+    // 设置打开错误时间戳为当前时间
     _open_error_ms = AP_HAL::millis();
 
+    // 停止当前日志记录
     stop_logging();
 
+    // 重置新日志相关变量
     start_new_log_reset_variables();
 
+    // 如果读取文件描述符存在,关闭它
     if (_read_fd != -1) {
         AP::FS().close(_read_fd);
         _read_fd = -1;
     }
 
+    // 检查磁盘剩余空间是否足够
     if (disk_space_avail() < _free_space_min_avail && disk_space() > 0) {
         DEV_PRINTF("Out of space for logging\n");
         return;
     }
 
+    // 查找最后一个日志编号
     uint16_t log_num = find_last_log();
-    // re-use empty logs if possible
+    // 如果可能的话重用空日志
     if (_get_log_size(log_num) > 0 || log_num == 0) {
         log_num++;
     }
+    // 如果日志编号超过最大值,重置为1
     if (log_num > _front.get_max_num_logs()) {
         log_num = 1;
     }
+    // 获取写入文件信号量
     if (!write_fd_semaphore.take(1)) {
         return;
     }
+    // 释放旧的文件名内存
     if (_write_filename) {
         free(_write_filename);
         _write_filename = nullptr;        
     }
+    // 生成新的日志文件名
     _write_filename = _log_file_name(log_num);
     if (_write_filename == nullptr) {
         write_fd_semaphore.give();
@@ -814,20 +876,22 @@ void AP_Logger_File::start_new_log(void)
     }
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
-    // remember if we had utc time when we opened the file
+    // 记住打开文件时是否有UTC时间
 #if AP_RTC_ENABLED
     uint64_t utc_usec;
     _need_rtc_update = !AP::rtc().get_utc_usec(utc_usec);
 #endif
 #endif
 
-    // create the log directory if need be
+    // 确保日志目录存在
     ensure_log_directory_exists();
 
+    // 打开新的日志文件
     EXPECT_DELAY_MS(3000);
     _write_fd = AP::FS().open(_write_filename, O_WRONLY|O_CREAT|O_TRUNC);
     _cached_oldest_log = 0;
 
+    // 如果打开失败,处理错误
     if (_write_fd == -1) {
         write_fd_semaphore.give();
         int saved_errno = errno;
@@ -839,267 +903,16 @@ void AP_Logger_File::start_new_log(void)
         }
         return;
     }
+    // 初始化写入相关变量
     _last_write_ms = AP_HAL::millis();
     _open_error_ms = 0;
     _write_offset = 0;
     _writebuf.clear();
     write_fd_semaphore.give();
 
-    // now update lastlog.txt with the new log number
+    // 更新lastlog.txt文件,记录新的日志编号
     last_log_is_marked_discard = _front._params.log_disarmed == AP_Logger::LogDisarmed::LOG_WHILE_DISARMED_DISCARD;
     if (!write_lastlog_file(log_num)) {
         _open_error_ms = AP_HAL::millis();
     }
-}
-
-/*
-  write LASTLOG.TXT, possibly with a discard marker
- */
-bool AP_Logger_File::write_lastlog_file(uint16_t log_num)
-{
-    // now update lastlog.txt with the new log number
-    char *fname = _lastlog_file_name();
-
-    EXPECT_DELAY_MS(3000);
-    int fd = AP::FS().open(fname, O_WRONLY|O_CREAT);
-    free(fname);
-    if (fd == -1) {
-        return false;
-    }
-
-    char buf[30];
-    snprintf(buf, sizeof(buf), "%u%s\r\n", (unsigned)log_num, last_log_is_marked_discard?"D":"");
-    const ssize_t to_write = strlen(buf);
-    const ssize_t written = AP::FS().write(fd, buf, to_write);
-    AP::FS().close(fd);
-    return written == to_write;
-}
-
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL || CONFIG_HAL_BOARD == HAL_BOARD_LINUX
-void AP_Logger_File::flush(void)
-#if APM_BUILD_TYPE(APM_BUILD_Replay) || APM_BUILD_TYPE(APM_BUILD_UNKNOWN)
-{
-    uint32_t tnow = AP_HAL::millis();
-    while (_write_fd != -1 && _initialised && !recent_open_error() && _writebuf.available()) {
-        // convince the IO timer that it really is OK to write out
-        // less than _writebuf_chunk bytes:
-        if (tnow > 2001) { // avoid resetting _last_write_time to 0
-            _last_write_time = tnow - 2001;
-        }
-        io_timer();
-    }
-    if (write_fd_semaphore.take(1)) {
-        if (_write_fd != -1) {
-            ::fsync(_write_fd);
-        }
-        write_fd_semaphore.give();
-    } else {
-        INTERNAL_ERROR(AP_InternalError::error_t::logger_flushing_without_sem);
-    }
-}
-#else
-{
-    // flush is for replay and examples only
-}
-#endif // APM_BUILD_TYPE(APM_BUILD_Replay) || APM_BUILD_TYPE(APM_BUILD_UNKNOWN)
-#endif
-
-void AP_Logger_File::io_timer(void)
-{
-    uint32_t tnow = AP_HAL::millis();
-    _io_timer_heartbeat = tnow;
-
-    if (start_new_log_pending) {
-        start_new_log();
-        start_new_log_pending = false;
-    }
-
-    if (erase.log_num != 0) {
-        // continue erase
-        erase_next();
-        return;
-    }
-
-    if (_write_fd == -1 || !_initialised || recent_open_error()) {
-        return;
-    }
-
-    if (last_log_is_marked_discard && hal.util->get_soft_armed()) {
-        // time to make the log permanent
-        const auto log_num = find_last_log();
-        last_log_is_marked_discard = false;
-        write_lastlog_file(log_num);
-    }
-
-    uint32_t nbytes = _writebuf.available();
-    if (nbytes == 0) {
-        return;
-    }
-    if (nbytes < _writebuf_chunk && 
-        tnow - _last_write_time < 2000UL) {
-        // write in _writebuf_chunk-sized chunks, but always write at
-        // least once per 2 seconds if data is available
-        return;
-    }
-    if (tnow - _free_space_last_check_time > _free_space_check_interval) {
-        _free_space_last_check_time = tnow;
-        last_io_operation = "disk_space_avail";
-        if (disk_space_avail() < _free_space_min_avail && disk_space() > 0) {
-            DEV_PRINTF("Out of space for logging\n");
-            stop_logging();
-            _open_error_ms = AP_HAL::millis(); // prevent logging starting again for 5s
-            last_io_operation = "";
-            return;
-        }
-        last_io_operation = "";
-    }
-
-    _last_write_time = tnow;
-    if (nbytes > _writebuf_chunk) {
-        // be kind to the filesystem layer
-        nbytes = _writebuf_chunk;
-    }
-
-    uint32_t size;
-    const uint8_t *head = _writebuf.readptr(size);
-    nbytes = MIN(nbytes, size);
-
-    // try to align writes on a 512 byte boundary to avoid filesystem reads
-    if ((nbytes + _write_offset) % 512 != 0) {
-        uint32_t ofs = (nbytes + _write_offset) % 512;
-        if (ofs < nbytes) {
-            nbytes -= ofs;
-        }
-    }
-
-    last_io_operation = "write";
-    if (!write_fd_semaphore.take(1)) {
-        return;
-    }
-    if (_write_fd == -1) {
-        write_fd_semaphore.give();
-        return;
-    }
-    ssize_t nwritten = AP::FS().write(_write_fd, head, nbytes);
-    last_io_operation = "";
-    if (nwritten <= 0) {
-        if ((tnow - _last_write_ms)/1000U > unsigned(_front._params.file_timeout)) {
-            // if we can't write for LOG_FILE_TIMEOUT seconds we give up and close
-            // the file. This allows us to cope with temporary write
-            // failures caused by directory listing
-            last_io_operation = "close";
-            AP::FS().close(_write_fd);
-            last_io_operation = "";
-            _write_fd = -1;
-            printf("Failed to write to File: %s\n", strerror(errno));
-        }
-        _last_write_failed = true;
-    } else {
-        _last_write_failed = false;
-        _last_write_ms = tnow;
-        _write_offset += nwritten;
-        _writebuf.advance(nwritten);
-        /*
-          the best strategy for minimizing corruption on microSD cards
-          seems to be to write in 4k chunks and fsync the file on each
-          chunk, ensuring the directory entry is updated after each
-          write.
-         */
-#if CONFIG_HAL_BOARD != HAL_BOARD_SITL && CONFIG_HAL_BOARD_SUBTYPE != HAL_BOARD_SUBTYPE_LINUX_NONE
-        last_io_operation = "fsync";
-        AP::FS().fsync(_write_fd);
-        last_io_operation = "";
-#endif
-
-#if AP_RTC_ENABLED && CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
-        // ChibiOS does not update mtime on writes, so if we opened
-        // without knowing the time we should update it later
-        if (_need_rtc_update) {
-            uint64_t utc_usec;
-            if (AP::rtc().get_utc_usec(utc_usec)) {
-                AP::FS().set_mtime(_write_filename, utc_usec/(1000U*1000U));
-                _need_rtc_update = false;
-            }
-        }
-#endif
-    }
-
-    write_fd_semaphore.give();
-}
-
-bool AP_Logger_File::io_thread_alive() const
-{
-    if (!hal.scheduler->is_system_initialized()) {
-        // the system has long pauses during initialisation, assume still OK
-        return true;
-    }
-    // if the io thread hasn't had a heartbeat in a while then it is
-#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32
-    uint32_t timeout_ms = 10000;
-#else
-    uint32_t timeout_ms = 5000;
-#endif
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL && !defined(HAL_BUILD_AP_PERIPH)
-    // the IO thread is working with hardware - writing to a physical
-    // disk.  Unfortunately these hardware devices do not obey our
-    // SITL speedup options, so we allow for it here.
-    SITL::SIM *sitl = AP::sitl();
-    if (sitl != nullptr) {
-        timeout_ms *= sitl->speedup;
-    }
-#endif
-    return (AP_HAL::millis() - _io_timer_heartbeat) < timeout_ms;
-}
-
-bool AP_Logger_File::logging_failed() const
-{
-    if (!_initialised) {
-        return true;
-    }
-    if (recent_open_error()) {
-        return true;
-    }
-    if (!io_thread_alive()) {
-        // No heartbeat in a second.  IO thread is dead?! Very Not
-        // Good.
-        return true;
-    }
-    if (_last_write_failed) {
-        return true;
-    }
-
-    return false;
-}
-
-/*
-  erase another file in async erase operation
- */
-void AP_Logger_File::erase_next(void)
-{
-    char *fname = _log_file_name(erase.log_num);
-    if (fname == nullptr) {
-        erase.log_num = 0;
-        return;
-    }
-
-    AP::FS().unlink(fname);
-    free(fname);
-
-    erase.log_num++;
-    if (erase.log_num <= _front.get_max_num_logs()) {
-        return;
-    }
-    
-    fname = _lastlog_file_name();
-    if (fname != nullptr) {
-        AP::FS().unlink(fname);
-        free(fname);
-    }
-
-    _cached_oldest_log = 0;
-
-    erase.log_num = 0;
-}
-
-#endif // HAL_LOGGING_FILESYSTEM_ENABLED
 

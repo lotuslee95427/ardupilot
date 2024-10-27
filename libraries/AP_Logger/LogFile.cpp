@@ -21,9 +21,9 @@
 
 extern const AP_HAL::HAL& hal;
 
-
 /*
   write a structure format to the log - should be in frontend
+  将结构格式写入日志 - 应该在前端
  */
 void AP_Logger_Backend::Fill_Format(const struct LogStructure *s, struct log_Format &pkt)
 {
@@ -40,6 +40,7 @@ void AP_Logger_Backend::Fill_Format(const struct LogStructure *s, struct log_For
 
 /*
   Pack a LogStructure packet into a structure suitable to go to the logfile:
+  将LogStructure数据包打包成适合写入日志文件的结构
  */
 void AP_Logger_Backend::Fill_Format_Units(const struct LogStructure *s, struct log_Format_Units &pkt)
 {
@@ -55,6 +56,7 @@ void AP_Logger_Backend::Fill_Format_Units(const struct LogStructure *s, struct l
 
 /*
   write a structure format to the log
+  将结构格式写入日志
  */
 bool AP_Logger_Backend::Write_Format(const struct LogStructure *s)
 {
@@ -69,6 +71,7 @@ bool AP_Logger_Backend::Write_Format(const struct LogStructure *s)
 
 /*
   write a unit definition
+  写入单位定义
  */
 bool AP_Logger_Backend::Write_Unit(const struct UnitStructure *s)
 {
@@ -85,6 +88,7 @@ bool AP_Logger_Backend::Write_Unit(const struct UnitStructure *s)
 
 /*
   write a unit-multiplier definition
+  写入单位乘数定义
  */
 bool AP_Logger_Backend::Write_Multiplier(const struct MultiplierStructure *s)
 {
@@ -100,6 +104,7 @@ bool AP_Logger_Backend::Write_Multiplier(const struct MultiplierStructure *s)
 
 /*
   write the units for a format to the log
+  将格式的单位写入日志
  */
 bool AP_Logger_Backend::Write_Format_Units(const struct LogStructure *s)
 {
@@ -110,6 +115,7 @@ bool AP_Logger_Backend::Write_Format_Units(const struct LogStructure *s)
 
 /*
   write a parameter to the log
+  将参数写入日志
  */
 bool AP_Logger_Backend::Write_Parameter(const char *name, float value, float default_val)
 {
@@ -126,6 +132,7 @@ bool AP_Logger_Backend::Write_Parameter(const char *name, float value, float def
 
 /*
   write a parameter to the log
+  将参数写入日志
  */
 bool AP_Logger_Backend::Write_Parameter(const AP_Param *ap,
                                             const AP_Param::ParamToken &token,
@@ -139,6 +146,7 @@ bool AP_Logger_Backend::Write_Parameter(const AP_Param *ap,
 
 #if AP_RC_CHANNEL_ENABLED
 // Write an RCIN packet
+// 写入遥控输入数据包
 void AP_Logger::Write_RCIN(void)
 {
     uint16_t values[16] = {};
@@ -184,6 +192,7 @@ void AP_Logger::Write_RCIN(void)
 #endif  // AP_RC_CHANNEL_ENABLED
 
 // Write an SERVO packet
+// 写入舵机输出数据包
 void AP_Logger::Write_RCOUT(void)
 {
     const uint32_t enabled_mask = ~SRV_Channels::get_output_channel_mask(SRV_Channel::k_GPIO);
@@ -254,6 +263,7 @@ void AP_Logger::Write_RCOUT(void)
 
 #if AP_RSSI_ENABLED
 // Write an RSSI packet
+// 写入RSSI(信号强度)数据包
 void AP_Logger::Write_RSSI()
 {
     AP_RSSI *rssi = AP::rssi();
@@ -271,6 +281,7 @@ void AP_Logger::Write_RSSI()
 }
 #endif
 
+// 写入MAVLink命令数据包
 void AP_Logger::Write_Command(const mavlink_command_int_t &packet,
                               uint8_t source_system,
                               uint8_t source_component,
@@ -299,6 +310,7 @@ void AP_Logger::Write_Command(const mavlink_command_int_t &packet,
     return WriteBlock(&pkt, sizeof(pkt));
 }
 
+// 写入任务命令数据包
 bool AP_Logger_Backend::Write_Mission_Cmd(const AP_Mission &mission,
                                               const AP_Mission::Mission_Command &cmd)
 {
@@ -323,6 +335,7 @@ bool AP_Logger_Backend::Write_Mission_Cmd(const AP_Mission &mission,
 }
 
 #if AP_MISSION_ENABLED
+// 写入整个任务数据
 bool AP_Logger_Backend::Write_EntireMission()
 {
     // kick off asynchronous write:
@@ -331,6 +344,7 @@ bool AP_Logger_Backend::Write_EntireMission()
 #endif
 
 // Write a text message to the log
+// 写入文本消息到日志
 bool AP_Logger_Backend::Write_Message(const char *message)
 {
     struct log_Message pkt{
@@ -342,6 +356,7 @@ bool AP_Logger_Backend::Write_Message(const char *message)
     return WriteCriticalBlock(&pkt, sizeof(pkt));
 }
 
+// 写入电源状态数据包
 void AP_Logger::Write_Power(void)
 {
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
@@ -385,6 +400,7 @@ void AP_Logger::Write_Power(void)
 #endif
 }
 
+// 写入无线电状态数据包
 void AP_Logger::Write_Radio(const mavlink_radio_t &packet)
 {
     const struct log_Radio pkt{
@@ -401,6 +417,7 @@ void AP_Logger::Write_Radio(const mavlink_radio_t &packet)
     WriteBlock(&pkt, sizeof(pkt));
 }
 
+// 写入单个指南针实例数据
 void AP_Logger::Write_Compass_instance(const uint64_t time_us, const uint8_t mag_instance)
 {
     const Compass &compass = AP::compass();
@@ -428,6 +445,7 @@ void AP_Logger::Write_Compass_instance(const uint64_t time_us, const uint8_t mag
 }
 
 // Write a Compass packet
+// 写入指南针数据包
 void AP_Logger::Write_Compass()
 {
     const uint64_t time_us = AP_HAL::micros64();
@@ -438,6 +456,7 @@ void AP_Logger::Write_Compass()
 }
 
 // Write a mode packet.
+// 写入飞行模式数据包
 bool AP_Logger_Backend::Write_Mode(uint8_t mode, const ModeReason reason)
 {
     static_assert(sizeof(ModeReason) <= sizeof(uint8_t), "Logging expects the ModeReason to fit in 8 bits");
@@ -453,6 +472,7 @@ bool AP_Logger_Backend::Write_Mode(uint8_t mode, const ModeReason reason)
 
 /*
   write servo status from CAN servo
+  写入CAN总线舵机状态数据
  */
 void AP_Logger::Write_ServoStatus(uint64_t time_us, uint8_t id, float position, float force, float speed, uint8_t power_pct,
                                   float pos_cmd, float voltage, float current, float mot_temp, float pcb_temp, uint8_t error)
@@ -477,6 +497,7 @@ void AP_Logger::Write_ServoStatus(uint64_t time_us, uint8_t id, float position, 
 
 
 // Write a Yaw PID packet
+// 写入偏航PID控制器数据包
 void AP_Logger::Write_PID(uint8_t msg_type, const AP_PIDInfo &info)
 {
     enum class log_PID_Flags : uint8_t {
@@ -518,6 +539,7 @@ void AP_Logger::Write_PID(uint8_t msg_type, const AP_PIDInfo &info)
     WriteBlock(&pkt, sizeof(pkt));
 }
 
+// 写入智能返航(SRTL)数据包
 void AP_Logger::Write_SRTL(bool active, uint16_t num_points, uint16_t max_points, uint8_t action, const Vector3f& breadcrumb)
 {
     const struct log_SRTL pkt_srtl{
@@ -534,6 +556,7 @@ void AP_Logger::Write_SRTL(bool active, uint16_t num_points, uint16_t max_points
     WriteBlock(&pkt_srtl, sizeof(pkt_srtl));
 }
 
+// 写入绞车状态数据包
 void AP_Logger::Write_Winch(bool healthy, bool thread_end, bool moving, bool clutch, uint8_t mode, float desired_length, float length, float desired_rate, uint16_t tension, float voltage, int8_t temp)
 {
     struct log_Winch pkt{

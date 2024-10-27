@@ -1,5 +1,5 @@
 /* 
-   AP_Logger Remote(via MAVLink) logging
+   AP_Logger 通过MAVLink进行远程日志记录
 */
 
 #include "AP_Logger_config.h"
@@ -11,6 +11,7 @@
 #include "LogStructure.h"
 #include <AP_Logger/AP_Logger.h>
 
+// 是否启用远程日志调试
 #define REMOTE_LOG_DEBUGGING 0
 
 #if REMOTE_LOG_DEBUGGING
@@ -25,19 +26,21 @@
 
 extern const AP_HAL::HAL& hal;
 
+// 构造函数,初始化基类和每次发送的最大块数
 AP_Logger_MAVLink::AP_Logger_MAVLink(AP_Logger &front, LoggerMessageWriter_DFLogStart *writer) :
     AP_Logger_Backend(front, writer),
     _max_blocks_per_send_blocks(8)
 {
+    // 根据缓冲区大小计算块数量
     _blockcount = 1024*((uint8_t)_front._params.mav_bufsize) / sizeof(struct dm_block);
-    // ::fprintf(stderr, "DM: Using %u blocks\n", _blockcount);
 }
 
-// initialisation
+// 初始化函数
 void AP_Logger_MAVLink::Init()
 {
     _blocks = nullptr;
-    while (_blockcount >= 8) { // 8 is a *magic* number
+    // 尝试分配内存,如果失败则减半块数量重试
+    while (_blockcount >= 8) { // 8是一个魔法数字
         _blocks = (struct dm_block *) calloc(_blockcount, sizeof(struct dm_block));
         if (_blocks != nullptr) {
             break;
@@ -49,26 +52,30 @@ void AP_Logger_MAVLink::Init()
         return;
     }
 
+    // 释放所有块并初始化统计信息
     free_all_blocks();
     stats_init();
 
     _initialised = true;
 }
 
+// 检查日志记录是否失败
 bool AP_Logger_MAVLink::logging_failed() const
 {
     return !_sending_to_client;
 }
 
+// 获取可用缓冲区空间大小
 uint32_t AP_Logger_MAVLink::bufferspace_available() {
     return (_blockcount_free * 200 + remaining_space_in_current_block());
 }
 
+// 获取当前块中剩余空间
 uint8_t AP_Logger_MAVLink::remaining_space_in_current_block() const {
-    // note that _current_block *could* be NULL ATM.
     return (MAVLINK_MSG_REMOTE_LOG_DATA_BLOCK_FIELD_DATA_LEN - _latest_block_len);
 }
 
+// 将块添加到队列末尾
 void AP_Logger_MAVLink::enqueue_block(dm_block_queue_t &queue, struct dm_block *block)
 {
     if (queue.youngest != nullptr) {
@@ -79,6 +86,7 @@ void AP_Logger_MAVLink::enqueue_block(dm_block_queue_t &queue, struct dm_block *
     queue.youngest = block;
 }
 
+// 从队列中移除指定序号的块
 struct AP_Logger_MAVLink::dm_block *AP_Logger_MAVLink::dequeue_seqno(AP_Logger_MAVLink::dm_block_queue_t &queue, uint32_t seqno)
 {
     struct dm_block *prev = nullptr;
@@ -105,19 +113,20 @@ struct AP_Logger_MAVLink::dm_block *AP_Logger_MAVLink::dequeue_seqno(AP_Logger_M
     return nullptr;
 }
 
+// 从队列中释放指定序号的块
 bool AP_Logger_MAVLink::free_seqno_from_queue(uint32_t seqno, dm_block_queue_t &queue)
 {
     struct dm_block *block = dequeue_seqno(queue, seqno);
     if (block != nullptr) {
         block->next = _blocks_free;
         _blocks_free = block;
-        _blockcount_free++; // comment me out to expose a bug!
+        _blockcount_free++; // 注释掉这行会暴露一个bug!
         return true;
     }
     return false;
 }
     
-
+// 检查是否可以写入数据
 bool AP_Logger_MAVLink::WritesOK() const
 {
     if (!_sending_to_client) {
@@ -126,19 +135,21 @@ bool AP_Logger_MAVLink::WritesOK() const
     return true;
 }
 
-/* Write a block of data at current offset */
+/* 在当前偏移位置写入一个数据块 */
 
-// DM_write: 70734 events, 0 overruns, 167806us elapsed, 2us avg, min 1us max 34us 0.620us rms
+// DM_write: 70734事件, 0次溢出, 167806us耗时, 平均2us, 最小1us 最大34us 0.620us均方根
 bool AP_Logger_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t size, bool is_critical)
 {
+    // 尝试获取信号量
     if (!semaphore.take_nonblocking()) {
         _dropped++;
         return false;
     }
 
+    // 检查缓冲区空间是否足够
     if (bufferspace_available() < size) {
         if (_startup_messagewriter->finished()) {
-            // do not count the startup packets as being dropped...
+            // 不计入启动包的丢弃数
             _dropped++;
         }
         semaphore.give();
@@ -147,11 +158,12 @@ bool AP_Logger_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t siz
 
     uint16_t copied = 0;
 
+    // 循环复制数据到块中
     while (copied < size) {
         if (_current_block == nullptr) {
             _current_block = next_block();
             if (_current_block == nullptr) {
-                // should not happen - there's a sanity check above
+                // 不应该发生 - 上面已经做了完整性检查
                 INTERNAL_ERROR(AP_InternalError::error_t::logger_bad_current_block);
                 semaphore.give();
                 return false;
@@ -164,7 +176,7 @@ bool AP_Logger_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t siz
         copied += to_copy;
         _latest_block_len += to_copy;
         if (_latest_block_len == MAVLINK_MSG_REMOTE_LOG_DATA_BLOCK_FIELD_DATA_LEN) {
-            //block full, mark it to be sent:
+            // 块已满,标记为待发送
             enqueue_block(_blocks_pending, _current_block);
             _current_block = next_block();
         }
@@ -175,7 +187,7 @@ bool AP_Logger_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t siz
     return true;
 }
 
-//Get a free block
+// 获取一个空闲块
 struct AP_Logger_MAVLink::dm_block *AP_Logger_MAVLink::next_block()
 {
     AP_Logger_MAVLink::dm_block *ret = _blocks_free;
@@ -190,11 +202,13 @@ struct AP_Logger_MAVLink::dm_block *AP_Logger_MAVLink::next_block()
     return ret;
 }
 
+// 释放所有块
 void AP_Logger_MAVLink::free_all_blocks()
 {
     _blocks_free = nullptr;
     _current_block = nullptr;
 
+    // 重置所有队列
     _blocks_pending.sent_count = 0;
     _blocks_pending.oldest = _blocks_pending.youngest = nullptr;
     _blocks_retry.sent_count = 0;
@@ -202,14 +216,12 @@ void AP_Logger_MAVLink::free_all_blocks()
     _blocks_sent.sent_count = 0;
     _blocks_sent.oldest = _blocks_sent.youngest = nullptr;
 
-    // add blocks to the free stack:
+    // 将所有块添加到空闲栈
     for(uint8_t i=0; i < _blockcount; i++) {
         _blocks[i].next = _blocks_free;
         _blocks_free = &_blocks[i];
-        // this value doesn't really matter, but it stops valgrind
-        // complaining when acking blocks (we check seqno before
-        // state).  Also, when we receive ACKs we check seqno, and we
-        // want to ack the *real* block zero!
+        // 这个值并不重要,但它可以防止valgrind在确认块时报错
+        // 另外,当我们收到确认时会检查序号,我们希望确认真正的块0!
         _blocks[i].seqno = 9876543;
     }
     _blockcount_free = _blockcount;
@@ -217,6 +229,7 @@ void AP_Logger_MAVLink::free_all_blocks()
     _latest_block_len = 0;
 }
 
+// 停止日志记录
 void AP_Logger_MAVLink::stop_logging()
 {
     if (_sending_to_client) {
@@ -225,6 +238,7 @@ void AP_Logger_MAVLink::stop_logging()
     }
 }
 
+// 处理确认消息
 void AP_Logger_MAVLink::handle_ack(const GCS_MAVLINK &link,
                                    const mavlink_message_t &msg,
                                    uint32_t seqno)
@@ -232,20 +246,17 @@ void AP_Logger_MAVLink::handle_ack(const GCS_MAVLINK &link,
     if (!_initialised) {
         return;
     }
+    // 处理停止日志记录命令
     if(seqno == MAV_REMOTE_LOG_DATA_BLOCK_STOP) {
-        Debug("Received stop-logging packet");
+        Debug("收到停止日志记录数据包");
         stop_logging();
         return;
     }
+    // 处理开始日志记录命令
     if(seqno == MAV_REMOTE_LOG_DATA_BLOCK_START) {
         if (!_sending_to_client) {
-            Debug("Starting New Log");
+            Debug("开始新日志");
             free_all_blocks();
-            // _current_block = next_block();
-            // if (_current_block == nullptr) {
-            //     Debug("No free blocks?!!!\n");
-            //     return;
-            // }
             stats_init();
             _sending_to_client = true;
             _target_system_id = msg.sysid;
@@ -254,23 +265,22 @@ void AP_Logger_MAVLink::handle_ack(const GCS_MAVLINK &link,
             _next_seq_num = 0;
             start_new_log_reset_variables();
             _last_response_time = AP_HAL::millis();
-            Debug("Target: (%u/%u)", _target_system_id, _target_component_id);
+            Debug("目标: (%u/%u)", _target_system_id, _target_component_id);
         }
         return;
     }
 
-    // check SENT blocks (VERY likely to be first on the list):
+    // 检查已发送块(很可能在列表的第一个)
     if (free_seqno_from_queue(seqno, _blocks_sent)) {
-        // celebrate
         _last_response_time = AP_HAL::millis();
     } else if(free_seqno_from_queue(seqno, _blocks_retry)) {
-        // party
         _last_response_time = AP_HAL::millis();
     } else {
-        // probably acked already and put on the free list.
+        // 可能已经确认并放入空闲列表
     }
 }
 
+// 处理远程日志块状态消息
 void AP_Logger_MAVLink::remote_log_block_status_msg(const GCS_MAVLINK &link,
                                                     const mavlink_message_t& msg)
 {
@@ -286,13 +296,13 @@ void AP_Logger_MAVLink::remote_log_block_status_msg(const GCS_MAVLINK &link,
         case MAV_REMOTE_LOG_DATA_BLOCK_ACK:
             handle_ack(link, msg, packet.seqno);
             break;
-        // we apparently have to handle an END enum entry, just drop it so we catch future additions
         case MAV_REMOTE_LOG_DATA_BLOCK_STATUSES_ENUM_END:
             break;
     }
     semaphore.give();
 }
 
+// 处理重试请求
 void AP_Logger_MAVLink::handle_retry(uint32_t seqno)
 {
     if (!_initialised || !_sending_to_client) {
@@ -306,27 +316,31 @@ void AP_Logger_MAVLink::handle_retry(uint32_t seqno)
     }
 }
 
+// 初始化统计信息
 void AP_Logger_MAVLink::stats_init() {
     _dropped = 0;
     stats.resends = 0;
     stats_reset();
 }
+
+// 重置统计信息
 void AP_Logger_MAVLink::stats_reset() {
     stats.state_free = 0;
-    stats.state_free_min = -1; // unsigned wrap
+    stats.state_free_min = -1; // 无符号溢出
     stats.state_free_max = 0;
     stats.state_pending = 0;
-    stats.state_pending_min = -1; // unsigned wrap
+    stats.state_pending_min = -1; // 无符号溢出
     stats.state_pending_max = 0;
     stats.state_retry = 0;
-    stats.state_retry_min = -1; // unsigned wrap
+    stats.state_retry_min = -1; // 无符号溢出
     stats.state_retry_max = 0;
     stats.state_sent = 0;
-    stats.state_sent_min = -1; // unsigned wrap
+    stats.state_sent_min = -1; // 无符号溢出
     stats.state_sent_max = 0;
     stats.collection_count = 0;
 }
 
+// 写入MAVLink日志统计信息
 void AP_Logger_MAVLink::Write_logger_MAV(AP_Logger_MAVLink &logger_mav)
 {
     if (logger_mav.stats.collection_count == 0) {
@@ -352,6 +366,7 @@ void AP_Logger_MAVLink::Write_logger_MAV(AP_Logger_MAVLink &logger_mav)
     WriteBlock(&pkt,sizeof(pkt));
 }
 
+// 记录统计信息
 void AP_Logger_MAVLink::stats_log()
 {
     if (!_initialised) {
@@ -383,6 +398,7 @@ void AP_Logger_MAVLink::stats_log()
     stats_reset();
 }
 
+// 获取栈中块的数量
 uint8_t AP_Logger_MAVLink::stack_size(struct dm_block *stack)
 {
     uint8_t ret = 0;
@@ -391,11 +407,14 @@ uint8_t AP_Logger_MAVLink::stack_size(struct dm_block *stack)
     }
     return ret;
 }
+
+// 获取队列中块的数量
 uint8_t AP_Logger_MAVLink::queue_size(dm_block_queue_t queue)
 {
     return stack_size(queue.oldest);
 }
 
+// 收集统计信息
 void AP_Logger_MAVLink::stats_collect()
 {
     if (!_initialised) {
@@ -447,9 +466,8 @@ void AP_Logger_MAVLink::stats_collect()
     stats.collection_count++;
 }
 
-/* while we "successfully" send log blocks from a queue, move them to
- * the sent list. DO NOT call this for blocks already sent!
-*/
+/* 当我们"成功"从队列发送日志块时,将它们移到已发送列表中。
+   不要对已发送的块调用此函数! */
 bool AP_Logger_MAVLink::send_log_blocks_from_queue(dm_block_queue_t &queue)
 {
     uint8_t sent_count = 0;
@@ -462,7 +480,7 @@ bool AP_Logger_MAVLink::send_log_blocks_from_queue(dm_block_queue_t &queue)
         }
         queue.sent_count++;
         struct AP_Logger_MAVLink::dm_block *tmp = dequeue_seqno(queue,queue.oldest->seqno);
-        if (tmp != nullptr) { // should never be nullptr
+        if (tmp != nullptr) { // 不应该为nullptr
             enqueue_block(_blocks_sent, tmp);
         } else {
             INTERNAL_ERROR(AP_InternalError::error_t::logger_dequeue_failure);
@@ -471,6 +489,7 @@ bool AP_Logger_MAVLink::send_log_blocks_from_queue(dm_block_queue_t &queue)
     return true;
 }
 
+// 推送日志块
 void AP_Logger_MAVLink::push_log_blocks()
 {
     if (!_initialised || !_sending_to_client) {
@@ -495,6 +514,7 @@ void AP_Logger_MAVLink::push_log_blocks()
     semaphore.give();
 }
 
+// 重发数据
 void AP_Logger_MAVLink::do_resends(uint32_t now)
 {
     if (!_initialised || !_sending_to_client) {
@@ -505,16 +525,16 @@ void AP_Logger_MAVLink::do_resends(uint32_t now)
     if (_blockcount < count_to_send) {
         count_to_send = _blockcount;
     }
-    uint32_t oldest = now - 100; // 100 milliseconds before resend.  Hmm.
+    uint32_t oldest = now - 100; // 重发前等待100毫秒
     while (count_to_send-- > 0) {
         if (!semaphore.take_nonblocking()) {
             return;
         }
         for (struct dm_block *block=_blocks_sent.oldest; block != nullptr; block=block->next) {
-            // only want to send blocks every now-and-then:
+            // 只想每隔一段时间发送块:
             if (block->last_sent < oldest) {
                 if (! send_log_block(*block)) {
-                    // failed to send the block; try again later....
+                    // 发送块失败;稍后重试....
                     semaphore.give();
                     return;
                 }
@@ -525,35 +545,34 @@ void AP_Logger_MAVLink::do_resends(uint32_t now)
     }
 }
 
-// NOTE: any functions called from these periodic functions MUST
-// handle locking of the blocks structures by taking the semaphore
-// appropriately!
+// 注意:从这些周期性函数调用的任何函数都必须通过适当地获取信号量来处理块结构的锁定!
 void AP_Logger_MAVLink::periodic_10Hz(const uint32_t now)
 {
     do_resends(now);
     stats_collect();
 }
+
 void AP_Logger_MAVLink::periodic_1Hz()
 {
     if (rate_limiter == nullptr &&
         (_front._params.mav_ratemax > 0 ||
          _front._params.disarm_ratemax > 0 ||
          _front._log_pause)) {
-        // setup rate limiting if log rate max > 0Hz or log pause of streaming entries is requested
+        // 如果日志速率最大值>0Hz或请求暂停流式条目的日志,则设置速率限制
         rate_limiter = NEW_NOTHROW AP_Logger_RateLimiter(_front, _front._params.mav_ratemax, _front._params.disarm_ratemax);
     }
 
     if (_sending_to_client &&
         _last_response_time + 10000 < _last_send_time) {
-        // other end appears to have timed out!
-        Debug("Client timed out");
+        // 另一端似乎超时了!
+        Debug("客户端超时");
         _sending_to_client = false;
         return;
     }
     stats_log();
 }
 
-//TODO: handle full txspace properly
+//TODO: 正确处理完整的txspace
 bool AP_Logger_MAVLink::send_log_block(struct dm_block &block)
 {
     if (!_initialised) {
@@ -563,11 +582,10 @@ bool AP_Logger_MAVLink::send_log_block(struct dm_block &block)
         INTERNAL_ERROR(AP_InternalError::error_t::flow_of_control);
         return false;
     }
-    // don't completely fill buffers - and also ensure there's enough
-    // room to send at least one packet:
+    // 不要完全填满缓冲区 - 并确保有足够的空间至少发送一个数据包:
     const uint16_t min_payload_space = 500;
     static_assert(MAVLINK_MSG_ID_REMOTE_LOG_DATA_BLOCK_LEN <= min_payload_space,
-                  "minimum allocated space is less than payload length");
+                  "最小分配空间小于有效载荷长度");
     if (_link->txspace() < min_payload_space) {
         return false;
     }
@@ -576,13 +594,13 @@ bool AP_Logger_MAVLink::send_log_block(struct dm_block &block)
     void *istate = hal.scheduler->disable_interrupts_save();
 #endif
 
-// DM_packing: 267039 events, 0 overruns, 8440834us elapsed, 31us avg, min 31us max 32us 0.488us rms
+// DM_packing: 267039事件, 0次溢出, 8440834us耗时, 平均31us, 最小31us 最大32us 0.488us均方根
 
     mavlink_message_t msg;
     mavlink_status_t *chan_status = mavlink_get_channel_status(_link->get_chan());
     uint8_t saved_seq = chan_status->current_tx_seq;
     chan_status->current_tx_seq = mavlink_seq++;
-    // Debug("Sending block (%d)", block.seqno);
+    // Debug("发送块 (%d)", block.seqno);
     mavlink_msg_remote_log_data_block_pack(mavlink_system.sysid,
                                            MAV_COMP_ID_LOG,
                                            &msg,
@@ -598,9 +616,8 @@ bool AP_Logger_MAVLink::send_log_block(struct dm_block &block)
     block.last_sent = AP_HAL::millis();
     chan_status->current_tx_seq = saved_seq;
 
-    // _last_send_time is set even if we fail to send the packet; if
-    // the txspace is repeatedly chockas we should not add to the
-    // problem and stop attempting to log
+    // 即使我们未能发送数据包也要设置_last_send_time;
+    // 如果txspace重复堵塞,我们不应该增加问题并停止尝试记录
     _last_send_time = AP_HAL::millis();
 
     _mavlink_resend_uart(_link->get_chan(), &msg);
