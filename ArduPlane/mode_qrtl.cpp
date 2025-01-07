@@ -3,10 +3,10 @@
 
 #if HAL_QUADPLANE_ENABLED
 
+// 进入QRTL模式
 bool ModeQRTL::_enter()
 {
-    // treat QRTL as QLAND if we are in guided wait takeoff state, to cope
-    // with failsafes during GUIDED->AUTO takeoff sequence
+    // 如果在引导等待起飞状态，将QRTL视为QLAND，以应对GUIDED->AUTO起飞序列期间的故障保护
     if (plane.quadplane.guided_wait_takeoff_on_mode_enter) {
        plane.set_mode(plane.mode_qland, ModeReason::QLAND_INSTEAD_OF_RTL);
        return true;
@@ -14,18 +14,18 @@ bool ModeQRTL::_enter()
     submode = SubMode::RTL;
     plane.prev_WP_loc = plane.current_loc;
 
+    // 计算RTL高度
     int32_t RTL_alt_abs_cm = plane.home.alt + quadplane.qrtl_alt*100UL;
     if (quadplane.motors->get_desired_spool_state() == AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED) {
-        // VTOL motors are active, either in VTOL flight or assisted flight
+        // VTOL电机处于活动状态，可能在VTOL飞行或辅助飞行中
         Location destination = plane.calc_best_rally_or_home_location(plane.current_loc, RTL_alt_abs_cm);
         const float dist = plane.current_loc.get_distance(destination);
         const float radius = get_VTOL_return_radius();
 
-        // Climb at least to a cone around home of hight of QRTL alt and radius of radius
-        // Always climb up to at least Q_RTL_ALT_MIN, constrain Q_RTL_ALT_MIN between Q_LAND_FINAL_ALT and Q_RTL_ALT
+        // 至少爬升到家的周围圆锥体高度（QRTL高度）和半径
+        // 始终至少爬升到Q_RTL_ALT_MIN，将Q_RTL_ALT_MIN限制在Q_LAND_FINAL_ALT和Q_RTL_ALT之间
         const float min_climb = constrain_float(quadplane.qrtl_alt_min, quadplane.land_final_alt, quadplane.qrtl_alt);
         const float target_alt = MAX(quadplane.qrtl_alt * (dist / MAX(radius, dist)), min_climb);
-
 
 #if AP_TERRAIN_AVAILABLE
         const bool use_terrain = plane.terrain_enabled_in_mode(mode_number());
@@ -35,7 +35,7 @@ bool ModeQRTL::_enter()
 
         const float dist_to_climb = target_alt - plane.relative_ground_altitude(plane.g.rangefinder_landing, use_terrain);
         if (is_positive(dist_to_climb)) {
-            // climb before returning, only next waypoint altitude is used
+            // 返回前爬升，只使用下一个航点高度
             submode = SubMode::climb;
             plane.next_WP_loc = plane.current_loc;
 #if AP_TERRAIN_AVAILABLE
@@ -49,58 +49,58 @@ bool ModeQRTL::_enter()
             return true;
 
         } else if (dist < radius) {
-            // Above home "cone", return at curent altitude if lower than QRTL alt
+            // 在家的"圆锥体"上方，如果低于QRTL高度则以当前高度返回
             int32_t current_alt_abs_cm;
             if (plane.current_loc.get_alt_cm(Location::AltFrame::ABSOLUTE, current_alt_abs_cm)) {
                 RTL_alt_abs_cm = MIN(RTL_alt_abs_cm, current_alt_abs_cm);
             }
 
-            // we're close to destination and already running VTOL motors, don't transition and don't climb
+            // 靠近目的地且VTOL电机已在运行，不进行过渡也不爬升
             gcs().send_text(MAV_SEVERITY_INFO,"VTOL position1 d=%.1f r=%.1f", dist, radius);
             poscontrol.set_state(QuadPlane::QPOS_POSITION1);
         }
     }
 
-    // use do_RTL() to setup next_WP_loc
+    // 使用do_RTL()设置next_WP_loc
     plane.do_RTL(RTL_alt_abs_cm);
     quadplane.poscontrol_init_approach();
 
+    // 确定是否需要缓慢下降
     int32_t from_alt;
     int32_t to_alt;
     if (plane.current_loc.get_alt_cm(Location::AltFrame::ABSOLUTE,from_alt) && plane.next_WP_loc.get_alt_cm(Location::AltFrame::ABSOLUTE,to_alt)) {
         poscontrol.slow_descent = from_alt > to_alt;
         return true;
     }
-    // default back to old method
+    // 默认回到旧方法
     poscontrol.slow_descent = (plane.current_loc.alt > plane.next_WP_loc.alt);
     return true;
 }
 
+// 更新QRTL模式
 void ModeQRTL::update()
 {
     plane.mode_qstabilize.update();
 }
 
-/*
-  handle QRTL mode
- */
+// 处理QRTL模式
 void ModeQRTL::run()
 {
     const uint32_t now = AP_HAL::millis();
     if (quadplane.tailsitter.in_vtol_transition(now)) {
-        // Tailsitters in FW pull up phase of VTOL transition run FW controllers
+        // 尾坐式飞机在VTOL过渡的前向上升阶段运行前向控制器
         Mode::run();
         return;
     }
 
     switch (submode) {
         case SubMode::climb: {
-            // request zero velocity
+            // 请求零速度
             Vector2f vel, accel;
             pos_control->input_vel_accel_xy(vel, accel);
             quadplane.run_xy_controller();
 
-            // nav roll and pitch are controller by position controller
+            // 导航滚转和俯仰由位置控制器控制
             plane.nav_roll_cd = pos_control->get_roll_cd();
             plane.nav_pitch_cd = pos_control->get_pitch_cd();
 
@@ -109,24 +109,24 @@ void ModeQRTL::run()
             if (quadplane.transition->set_VTOL_roll_pitch_limit(plane.nav_roll_cd, plane.nav_pitch_cd)) {
                 pos_control->set_externally_limited_xy();
             }
-            // weathervane with no pilot input
+            // 无pilot输入时的风向标
             quadplane.disable_yaw_rate_time_constant();
             attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(plane.nav_roll_cd,
                                                                           plane.nav_pitch_cd,
                                                                           quadplane.get_weathervane_yaw_rate_cds());
 
-            // climb at full WP nav speed
+            // 以全WP导航速度爬升
             quadplane.set_climb_rate_cms(quadplane.wp_nav->get_default_speed_up());
             quadplane.run_z_controller();
 
-            // Climb done when stopping point reaches target altitude
+            // 当停止点达到目标高度时爬升完成
             Vector3p stopping_point;
             pos_control->get_stopping_point_z_cm(stopping_point.z);
             Location stopping_loc = Location(stopping_point.tofloat(), Location::AltFrame::ABOVE_ORIGIN);
 
             ftype alt_diff;
             if (!stopping_loc.get_alt_distance(plane.next_WP_loc, alt_diff) || is_positive(alt_diff)) {
-                // climb finished or cant get alt diff, head home
+                // 爬升完成或无法获取高度差，返回家
                 submode = SubMode::RTL;
                 plane.prev_WP_loc = plane.current_loc;
 
@@ -135,7 +135,7 @@ void ModeQRTL::run()
                 const float dist = plane.current_loc.get_distance(destination);
                 const float radius = get_VTOL_return_radius();
                 if (dist < radius) {
-                    // if close to home return at current target altitude
+                    // 如果靠近家，以当前目标高度返回
                     int32_t target_alt_abs_cm;
                     if (plane.next_WP_loc.get_alt_cm(Location::AltFrame::ABSOLUTE, target_alt_abs_cm)) {
                         RTL_alt_abs_cm = MIN(RTL_alt_abs_cm, target_alt_abs_cm);
@@ -149,7 +149,7 @@ void ModeQRTL::run()
                 if (plane.current_loc.get_alt_distance(plane.next_WP_loc, alt_diff)) {
                     poscontrol.slow_descent = is_positive(alt_diff);
                 } else {
-                    // default back to old method
+                    // 默认回到旧方法
                     poscontrol.slow_descent = (plane.current_loc.alt > plane.next_WP_loc.alt);
                 }
             }
@@ -159,15 +159,15 @@ void ModeQRTL::run()
         case SubMode::RTL: {
             quadplane.vtol_position_controller();
             if (poscontrol.get_state() > QuadPlane::QPOS_POSITION2) {
-                // change target altitude to home alt
+                // 将目标高度更改为家的高度
                 plane.next_WP_loc.alt = plane.home.alt;
             }
             if (poscontrol.get_state() >= QuadPlane::QPOS_POSITION2) {
-                // start landing logic
+                // 开始着陆逻辑
                 quadplane.verify_vtol_land();
             }
 
-            // when in approach allow stick mixing
+            // 在接近时允许摇杆混合
             if (quadplane.poscontrol.get_state() == QuadPlane::QPOS_AIRBRAKE ||
                 quadplane.poscontrol.get_state() == QuadPlane::QPOS_APPROACH) {
                 plane.stabilize_stick_mixing_fbw();
@@ -176,28 +176,22 @@ void ModeQRTL::run()
         }
     }
 
-    // Stabilize with fixed wing surfaces
+    // 使用固定翼表面进行稳定
     plane.stabilize_roll();
     plane.stabilize_pitch();
 }
 
-/*
-  update target altitude for QRTL profile
- */
+// 更新QRTL配置文件的目标高度
 void ModeQRTL::update_target_altitude()
 {
-    /*
-      update height target in approach
-     */
+    // 在接近时更新高度目标
     if ((submode != SubMode::RTL) || (plane.quadplane.poscontrol.get_state() != QuadPlane::QPOS_APPROACH)) {
         Mode::update_target_altitude();
         return;
     }
 
-    /*
-      initially approach at RTL_ALT_CM, then drop down to QRTL_ALT based on maximum sink rate from TECS,
-      giving time to lose speed before we transition
-     */
+    // 初始以RTL_ALT_CM接近，然后基于TECS的最大下降率下降到QRTL_ALT，
+    // 给予时间在过渡前减速
     const float radius = MAX(fabsf(float(plane.aparm.loiter_radius)), fabsf(float(plane.g.rtl_radius)));
     const float rtl_alt_delta = MAX(0, plane.g.RTL_altitude - plane.quadplane.qrtl_alt);
     const float sink_time = rtl_alt_delta / MAX(0.6*plane.TECS_controller.get_max_sinkrate(), 1);
@@ -213,13 +207,13 @@ void ModeQRTL::update_target_altitude()
     plane.set_target_altitude_location(loc);
 }
 
-// only nudge during approach
+// 仅在接近时允许油门微调
 bool ModeQRTL::allows_throttle_nudging() const
 {
     return (submode == SubMode::RTL) && (plane.quadplane.poscontrol.get_state() == QuadPlane::QPOS_APPROACH);
 }
 
-// Return the radius from destination at which pure VTOL flight should be used, no transition to FW
+// 返回应使用纯VTOL飞行的目的地半径，不进行过渡到FW
 float ModeQRTL::get_VTOL_return_radius() const
 {
     return MAX(fabsf(float(plane.aparm.loiter_radius)), fabsf(float(plane.g.rtl_radius))) * 1.5;

@@ -1,200 +1,201 @@
 #pragma once
 
 /*
- Gain and phase determination algorithm
+ 增益和相位确定算法
 */
 
 #include <AP_Math/AP_Math.h>
 
+// 频率响应分析类,用于自动调谐过程中确定系统的增益和相位特性
 class AC_AutoTune_FreqResp {
 public:
-    // Constructor
+    // 构造函数
     AC_AutoTune_FreqResp()
 {
 }
 
-    // Enumeration of input type
+    // 输入类型枚举
     enum InputType {
-        DWELL = 0,                 
-        SWEEP = 1, 
+        DWELL = 0,                 // 驻留测试
+        SWEEP = 1,                 // 扫频测试
     };
 
-    // Enumeration of type
+    // 响应类型枚举
     enum ResponseType {
-        RATE = 0,                 
-        ANGLE = 1, 
+        RATE = 0,                  // 角速度响应
+        ANGLE = 1,                 // 角度响应
     };
 
-    // Initialize the Frequency Response Object. 
-    // Must be called before running dwell or frequency sweep tests
+    // 初始化频率响应对象
+    // 在运行驻留或频率扫描测试之前必须调用此函数
     void init(InputType input_type, ResponseType response_type, uint8_t cycles);
 
-    // Determines the gain and phase based on angle response for a dwell or sweep
+    // 基于角度响应确定增益和相位
+    // 用于驻留测试或扫频测试
     void update(float command, float tgt_resp, float meas_resp, float tgt_freq);
 
-    // Enable external query if cycle is complete and freq response data are available
+    // 允许外部查询周期是否完成以及频率响应数据是否可用
     bool is_cycle_complete() { return cycle_complete;}
 
-    // Reset cycle_complete flag
+    // 重置周期完成标志
     void reset_cycle_complete() { cycle_complete = false; }
 
-    // Frequency response data accessors
-    float get_freq() { return curr_test_freq; }
-    float get_gain() { return curr_test_gain; }
-    float get_phase() { return curr_test_phase; }
-    float get_accel_max() { return max_accel; }
+    // 频率响应数据访问器
+    float get_freq() { return curr_test_freq; }      // 获取当前测试频率
+    float get_gain() { return curr_test_gain; }      // 获取当前增益
+    float get_phase() { return curr_test_phase; }    // 获取当前相位
+    float get_accel_max() { return max_accel; }      // 获取最大加速度
 
 private:
-    // time of the start of a new target value search.  keeps noise from prematurely starting the search of a new target value.
+    // 新目标值搜索的开始时间。防止噪声过早启动新目标值的搜索
     uint32_t new_tgt_time_ms;
 
-    // flag for searching for a new target peak
+    // 搜索新目标峰值的标志
     bool new_target = false;
 
-    // maximum target value
+    // 目标最大值
     float max_target;
 
-    // time of maximum target value in current cycle
+    // 当前周期中目标最大值的时间
     uint32_t max_tgt_time;
 
-    // counter for target value maximums
+    // 目标最大值计数器
     uint16_t max_target_cnt;
 
-    // holds previously determined maximum target value while current cycle is running
+    // 当前周期运行时保存先前确定的目标最大值
     float temp_max_target;
 
-    // holds previously determined time of maximum target value while current cycle is running
+    // 当前周期运行时保存先前确定的目标最大值时间
     uint32_t temp_max_tgt_time;
 
-    // minimum target value
+    // 目标最小值
     float min_target;
 
-    // counter for target value minimums
+    // 目标最小值计数器
     uint16_t min_target_cnt;
 
-    // holds previously determined minimum target value while current cycle is running
+    // 当前周期运行时保存先前确定的目标最小值
     float temp_min_target;
 
-    // maximum target value from previous cycle
+    // 上一周期的目标最大值
     float prev_target;
 
-    // maximum target response from previous cycle
+    // 上一周期的目标最大响应
     float prev_tgt_resp;
 
-    // holds target amplitude for gain calculation
+    // 保存用于增益计算的目标幅值
     float temp_tgt_ampl;
 
-    // time of the start of a new measured value search.  keeps noise from prematurely starting the search of a new measured value.
+    // 新测量值搜索的开始时间。防止噪声过早启动新测量值的搜索
     uint32_t new_meas_time_ms;
 
-    // flag for searching for a new measured peak
+    // 搜索新测量峰值的标志
     bool new_meas = false;
 
-    // maximum measured value
+    // 测量最大值
     float max_meas;
 
-    // time of maximum measured value in current cycle
+    // 当前周期中测量最大值的时间
     uint32_t max_meas_time;
 
-    // counter for measured value maximums
+    // 测量最大值计数器
     uint16_t max_meas_cnt;
 
-    // holds previously determined maximum measured value while current cycle is running
+    // 当前周期运行时保存先前确定的测量最大值
     float temp_max_meas;
 
-    // holds previously determined time of maximum measured value while current cycle is running
+    // 当前周期运行时保存先前确定的测量最大值时间
     uint32_t temp_max_meas_time;
 
-    // minimum measured value
+    // 测量最小值
     float min_meas;
 
-    // counter for measured value minimums
+    // 测量最小值计数器
     uint16_t min_meas_cnt;
 
-    // holds previously determined minimum measured value while current cycle is running
+    // 当前周期运行时保存先前确定的测量最小值
     float temp_min_meas;
 
-    // maximum measured value from previous cycle
+    // 上一周期的测量最大值
     float prev_meas;
 
-    // maximum measured response from previous cycle
+    // 上一周期的测量最大响应
     float prev_meas_resp;
 
-    // holds measured amplitude for gain calculation
+    // 保存用于增益计算的测量幅值
     float temp_meas_ampl;
 
-    // calculated target rate from angle data
+    // 从角度数据计算的目标角速度
     float target_rate;
 
-    // calculated measured rate from angle data
+    // 从角度数据计算的测量角速度
     float measured_rate;
 
-    // holds start time of input to track length of time that input in running
+    // 保存输入开始时间以跟踪输入运行的时间长度
     uint32_t input_start_time_ms;
 
-    // flag indicating when one oscillation cycle is complete
+    // 指示一个振荡周期是否完成的标志
     bool cycle_complete = false;
 
-    // number of dwell cycles to complete for dwell excitation
+    // 驻留激励需要完成的驻留周期数
     uint8_t dwell_cycles;
 
-    // current test frequency, gain, and phase
-    float curr_test_freq; 
+    // 当前测试频率、增益和相位
+    float curr_test_freq;
     float curr_test_gain;
     float curr_test_phase;
 
-    // maximum measured rate throughout excitation used for max accel calculation
+    // 激励过程中测得的最大角速度,用于最大加速度计算
     float max_meas_rate;
 
-    // maximum command associated with maximum rate used for max accel calculation
+    // 与最大角速度相关的最大命令值,用于最大加速度计算
     float max_command;
 
-    // maximum acceleration in cdss determined during test
+    // 测试期间确定的最大加速度(单位:cdss)
     float max_accel;
 
-    // Input type for frequency response object
+    // 频率响应对象的输入类型
     InputType excitation;
 
-    // Response type for frequency response object
+    // 频率响应对象的响应类型
     ResponseType response;
 
-    // sweep_peak_finding_data tracks the peak data
+    // 扫频峰值查找数据结构,用于跟踪峰值数据
     struct sweep_peak_finding_data {
-        uint16_t count_m1;
-        float amplitude_m1;
-        float max_time_m1;
+        uint16_t count_m1;         // 计数器
+        float amplitude_m1;        // 幅值
+        float max_time_m1;         // 最大值时间
     };
 
-    // Measured data for sweep peak
+    // 扫频测量峰值数据
     sweep_peak_finding_data sweep_meas;
 
-    // Target data for sweep peak
+    // 扫频目标峰值数据
     sweep_peak_finding_data sweep_tgt;
 
-    //store gain data in ring buffer
+    // 在环形缓冲区中存储增益数据的结构
     struct peak_info {
-        uint16_t curr_count;
-        float amplitude;
-        uint32_t time_ms; 
-
+        uint16_t curr_count;       // 当前计数
+        float amplitude;           // 幅值
+        uint32_t time_ms;         // 时间戳
     };
 
-    // Buffer object for measured peak data
+    // 测量峰值数据的缓冲区对象
     ObjectBuffer<peak_info> meas_peak_info_buffer{12};
 
-    // Buffer object for target peak data
+    // 目标峰值数据的缓冲区对象
     ObjectBuffer<peak_info> tgt_peak_info_buffer{12};
 
-    // Push data into measured peak data buffer object
+    // 将数据推入测量峰值数据缓冲区
     void push_to_meas_buffer(uint16_t count, float amplitude, uint32_t time_ms);
 
-    // Pull data from measured peak data buffer object
+    // 从测量峰值数据缓冲区拉取数据
     void pull_from_meas_buffer(uint16_t &count, float &amplitude, uint32_t &time_ms);
 
-    // Push data into target peak data buffer object
+    // 将数据推入目标峰值数据缓冲区
     void push_to_tgt_buffer(uint16_t count, float amplitude, uint32_t time_ms);
 
-    // Pull data from target peak data buffer object
+    // 从目标峰值数据缓冲区拉取数据
     void pull_from_tgt_buffer(uint16_t &count, float &amplitude, uint32_t &time_ms);
 
 };

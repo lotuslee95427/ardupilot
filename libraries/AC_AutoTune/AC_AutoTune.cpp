@@ -10,24 +10,34 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
-#define AUTOTUNE_PILOT_OVERRIDE_TIMEOUT_MS  500         // restart tuning if pilot has left sticks in middle for 2 seconds
+// 飞手覆盖超时时间(毫秒),如果飞手将摇杆保持在中间位置2秒则重新开始调参
+#define AUTOTUNE_PILOT_OVERRIDE_TIMEOUT_MS  500         
 #if APM_BUILD_TYPE(APM_BUILD_ArduPlane)
- # define AUTOTUNE_LEVEL_ANGLE_CD           500         // angle which qualifies as level (Plane uses more relaxed 5deg)
- # define AUTOTUNE_LEVEL_RATE_RP_CD         1000        // rate which qualifies as level for roll and pitch (Plane uses more relaxed 10deg/sec)
+ // 判定为水平的角度(固定翼使用更宽松的5度)
+ # define AUTOTUNE_LEVEL_ANGLE_CD           500         
+ // 判定为水平的横滚和俯仰速率(固定翼使用更宽松的10度/秒)
+ # define AUTOTUNE_LEVEL_RATE_RP_CD         1000        
 #else
- # define AUTOTUNE_LEVEL_ANGLE_CD           250         // angle which qualifies as level
- # define AUTOTUNE_LEVEL_RATE_RP_CD         500         // rate which qualifies as level for roll and pitch
+ // 判定为水平的角度
+ # define AUTOTUNE_LEVEL_ANGLE_CD           250         
+ // 判定为水平的横滚和俯仰速率
+ # define AUTOTUNE_LEVEL_RATE_RP_CD         500         
 #endif
-#define AUTOTUNE_LEVEL_RATE_Y_CD            750         // rate which qualifies as level for yaw
-#define AUTOTUNE_REQUIRED_LEVEL_TIME_MS     250         // time we require the aircraft to be level before starting next test
-#define AUTOTUNE_LEVEL_TIMEOUT_MS           2000        // time out for level
-#define AUTOTUNE_LEVEL_WARNING_INTERVAL_MS  5000        // level failure warning messages sent at this interval to users
+// 判定为水平的偏航速率
+#define AUTOTUNE_LEVEL_RATE_Y_CD            750         
+// 开始下一次测试前需要保持水平的时间(毫秒)
+#define AUTOTUNE_REQUIRED_LEVEL_TIME_MS     250         
+// 水平超时时间(毫秒)
+#define AUTOTUNE_LEVEL_TIMEOUT_MS           2000        
+// 水平失败警告消息发送间隔(毫秒)
+#define AUTOTUNE_LEVEL_WARNING_INTERVAL_MS  5000        
 
+// 构造函数
 AC_AutoTune::AC_AutoTune()
 {
 }
 
-// autotune_init - should be called when autotune mode is selected
+// 自动调参初始化 - 选择自动调参模式时应调用
 bool AC_AutoTune::init_internals(bool _use_poshold,
                                  AC_AttitudeControl *_attitude_control,
                                  AC_PosControl *_pos_control,
@@ -42,45 +52,45 @@ bool AC_AutoTune::init_internals(bool _use_poshold,
     motors = AP_Motors::get_singleton();
     const uint32_t now = AP_HAL::millis();
 
-    // exit immediately if motor are not armed
+    // 如果电机未解锁则立即退出
     if ((motors == nullptr) || !motors->armed()) {
         return false;
     }
 
-    // initialise position controller
+    // 初始化位置控制器
     init_position_controller();
 
     switch (mode) {
     case FAILED:
-        // fall through to restart the tuning
+        // 继续重新开始调参
         FALLTHROUGH;
 
     case UNINITIALISED:
-        // autotune has never been run
-        // so store current gains as original gains
+        // 自动调参从未运行过
+        // 将当前增益存储为原始增益
         backup_gains_and_initialise();
-        // advance mode to tuning
+        // 将模式切换到调参
         mode = TUNING;
-        // send message to ground station that we've started tuning
+        // 向地面站发送开始调参消息
         update_gcs(AUTOTUNE_MESSAGE_STARTED);
         break;
 
     case TUNING:
-        // reset test variables for each vehicle
+        // 重置每个车辆的测试变量
         reset_vehicle_test_variables();
 
-        // we are restarting tuning so restart where we left off
+        // 我们正在重新开始调参,所以从上次停止的地方继续
         step = WAITING_FOR_LEVEL;
         step_start_time_ms = now;
         level_start_time_ms = now;
-        // reset gains to tuning-start gains (i.e. low I term)
+        // 重置增益为调参开始时的增益(即较低的I项)
         load_gains(GAIN_INTRA_TEST);
         LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_RESTART);
         update_gcs(AUTOTUNE_MESSAGE_STARTED);
         break;
 
     case SUCCESS:
-        // we have completed a tune and the pilot wishes to test the new gains
+        // 我们已完成调参,飞手希望测试新的增益
         load_gains(GAIN_TUNED);
         update_gcs(AUTOTUNE_MESSAGE_TESTING);
         LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_PILOT_TESTING);
@@ -92,44 +102,44 @@ bool AC_AutoTune::init_internals(bool _use_poshold,
     return true;
 }
 
-// stop - should be called when the ch7/ch8 switch is switched OFF
+// 停止 - 当ch7/ch8开关关闭时应调用
 void AC_AutoTune::stop()
 {
-    // set gains to their original values
+    // 将增益设置为原始值
     load_gains(GAIN_ORIGINAL);
 
-    // re-enable angle-to-rate request limits
+    // 重新启用角度到速率请求限制
     attitude_control->use_sqrt_controller(true);
 
     update_gcs(AUTOTUNE_MESSAGE_STOPPED);
 
     LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_OFF);
 
-    // Note: we leave the mode as it was so that we know how the autotune ended
-    // we expect the caller will change the flight mode back to the flight mode indicated by the flight mode switch
+    // 注意:我们保持模式不变,以便知道自动调参如何结束
+    // 我们期望调用者将飞行模式切换回飞行模式开关指示的飞行模式
 }
 
-// Autotune aux function trigger
+// 自动调参辅助功能触发器
 void AC_AutoTune::do_aux_function(const RC_Channel::AuxSwitchPos ch_flag)
 {
     if (mode != TuneMode::SUCCESS) {
         if (ch_flag == RC_Channel::AuxSwitchPos::HIGH) {
-            gcs().send_text(MAV_SEVERITY_NOTICE,"AutoTune: must be complete to test gains");
+            gcs().send_text(MAV_SEVERITY_NOTICE,"AutoTune: 必须完成才能测试增益");
         }
         return;
     }
 
     switch(ch_flag) {
         case RC_Channel::AuxSwitchPos::LOW:
-            // load original gains
+            // 加载原始增益
             load_gains(GainType::GAIN_ORIGINAL);
             update_gcs(AUTOTUNE_MESSAGE_TESTING_END);
             break;
         case RC_Channel::AuxSwitchPos::MIDDLE:
-            // Middle position is unused for now
+            // 中间位置暂时未使用
             break;
         case RC_Channel::AuxSwitchPos::HIGH:
-            // Load tuned gains
+            // 加载调参增益
             load_gains(GainType::GAIN_TUNED);
             update_gcs(AUTOTUNE_MESSAGE_TESTING);
             break;
@@ -138,13 +148,13 @@ void AC_AutoTune::do_aux_function(const RC_Channel::AuxSwitchPos ch_flag)
     have_pilot_testing_command = true;
 }
 
-// Possibly save gains, called on disarm
+// 可能保存增益,解除武装时调用
 void AC_AutoTune::disarmed(const bool in_autotune_mode)
 {
-    // True if pilot is testing tuned gains
+    // 如果飞手正在测试调参增益则为true
     const bool testing_tuned = have_pilot_testing_command && (loaded_gains == GainType::GAIN_TUNED);
 
-    // True if in autotune mode and no pilot testing commands have been received
+    // 如果在自动调参模式且未收到飞手测试命令则为true
     const bool tune_complete_no_testing = !have_pilot_testing_command && in_autotune_mode;
 
     if (tune_complete_no_testing || testing_tuned) {
@@ -154,93 +164,95 @@ void AC_AutoTune::disarmed(const bool in_autotune_mode)
     }
 }
 
-// initialise position controller
+// 初始化位置控制器
 bool AC_AutoTune::init_position_controller(void)
 {
-    // initialize vertical maximum speeds and acceleration
+    // 初始化垂直最大速度和加速度
     init_z_limits();
 
-    // initialise the vertical position controller
+    // 初始化垂直位置控制器
     pos_control->init_z_controller();
 
     return true;
 }
 
+// 发送步骤字符串
 void AC_AutoTune::send_step_string()
 {
     if (pilot_override) {
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: Paused: Pilot Override Active");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: 已暂停: 飞手覆盖激活");
         return;
     }
     switch (step) {
     case WAITING_FOR_LEVEL:
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: Leveling");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: 正在调平");
         return;
     case UPDATE_GAINS:
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: Updating Gains");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: 正在更新增益");
         return;
     case ABORT:
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: Aborting Test");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: 正在中止测试");
         return;
     case TESTING:
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: Testing");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: 正在测试");
         return;
     }
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: unknown step");
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: 未知步骤");
 }
 
+// 返回类型字符串
 const char *AC_AutoTune::type_string() const
 {
     switch (tune_type) {
     case RD_UP:
-        return "Rate D Up";
+        return "速率D增加";
     case RD_DOWN:
-        return "Rate D Down";
+        return "速率D减小";
     case RP_UP:
-        return "Rate P Up";
+        return "速率P增加";
     case RFF_UP:
-        return "Rate FF Up";
+        return "速率FF增加";
     case SP_UP:
-        return "Angle P Up";
+        return "角度P增加";
     case SP_DOWN:
-        return "Angle P Down";
+        return "角度P减小";
     case MAX_GAINS:
-        return "Find Max Gains";
+        return "寻找最大增益";
     case TUNE_CHECK:
-        return "Check Tune Frequency Response";
+        return "检查调参频率响应";
     case TUNE_COMPLETE:
-        return "Tune Complete";
+        return "调参完成";
     }
     return "";
-    // this should never happen
+    // 这种情况不应该发生
     INTERNAL_ERROR(AP_InternalError::error_t::flow_of_control);
 }
 
-// return current axis string
+// 返回当前轴向字符串
 const char *AC_AutoTune::axis_string() const
 {
     switch (axis) {
     case AxisType::ROLL:
-        return "Roll";
+        return "横滚";
     case AxisType::PITCH:
-        return "Pitch";
+        return "俯仰";
     case AxisType::YAW:
-        return "Yaw(E)";
+        return "偏航(E)";
     case AxisType::YAW_D:
-        return "Yaw(D)";
+        return "偏航(D)";
     }
     return "";
 }
 
-// run - runs the autotune flight mode
-// should be called at 100hz or more
+// 运行 - 运行自动调参飞行模式
+// 应以100Hz或更高频率调用
 void AC_AutoTune::run()
 {
-    // initialize vertical speeds and acceleration
+    // 初始化垂直速度和加速度
     init_z_limits();
 
-    // if not auto armed or motor interlock not enabled set throttle to zero and exit immediately
-    // this should not actually be possible because of the init() checks
+    // 如果未自动解锁或电机联锁未启用则将油门设为零并立即退出
+    // 由于init()检查,这实际上不应该发生
     if (!motors->armed() || !motors->get_interlock()) {
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         attitude_control->set_throttle_out(0.0f, true, 0.0f);
@@ -251,7 +263,7 @@ void AC_AutoTune::run()
     float target_roll_cd, target_pitch_cd, target_yaw_rate_cds;
     get_pilot_desired_rp_yrate_cd(target_roll_cd, target_pitch_cd, target_yaw_rate_cds);
 
-    // get pilot desired climb rate
+    // 获取飞手期望的爬升速率
     const float target_climb_rate_cms = get_pilot_desired_climb_rate_cms();
 
     const bool zero_rp_input = is_zero(target_roll_cd) && is_zero(target_pitch_cd);
@@ -262,23 +274,23 @@ void AC_AutoTune::run()
         if (!zero_rp_input || !is_zero(target_yaw_rate_cds) || !is_zero(target_climb_rate_cms)) {
             if (!pilot_override) {
                 pilot_override = true;
-                // set gains to their original values
+                // 将增益设置为原始值
                 load_gains(GAIN_ORIGINAL);
                 attitude_control->use_sqrt_controller(true);
             }
-            // reset pilot override time
+            // 重置飞手覆盖时间
             override_time = now;
             if (!zero_rp_input) {
-                // only reset position on roll or pitch input
+                // 仅在横滚或俯仰输入时重置位置
                 have_position = false;
             }
         } else if (pilot_override) {
-            // check if we should resume tuning after pilot's override
+            // 检查飞手覆盖后是否应恢复调参
             if (now - override_time > AUTOTUNE_PILOT_OVERRIDE_TIMEOUT_MS) {
-                pilot_override = false;             // turn off pilot override
-                // set gains to their intra-test values (which are very close to the original gains)
-                // load_gains(GAIN_INTRA_TEST); //I think we should be keeping the originals here to let the I term settle quickly
-                step = WAITING_FOR_LEVEL; // set tuning step back from beginning
+                pilot_override = false;             // 关闭飞手覆盖
+                // 将增益设置为测试间值(与原始增益非常接近)
+                // load_gains(GAIN_INTRA_TEST); //我认为我们应该在这里保持原始值以让I项快速稳定
+                step = WAITING_FOR_LEVEL; // 将调参步骤设回开始
                 step_start_time_ms = now;
                 level_start_time_ms = now;
                 desired_yaw_cd = ahrs_view->yaw_sensor;
@@ -287,47 +299,47 @@ void AC_AutoTune::run()
     }
     if (pilot_override) {
         if (now - last_pilot_override_warning > 1000) {
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: pilot overrides active");
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AutoTune: 飞手覆盖激活");
             last_pilot_override_warning = now;
         }
     }
     if (zero_rp_input) {
-        // pilot input on throttle and yaw will still use position hold if enabled
+        // 飞手在油门和偏航上的输入如果启用了位置保持仍将使用位置保持
         get_poshold_attitude(target_roll_cd, target_pitch_cd, desired_yaw_cd);
     }
 
-    // set motors to full range
+    // 将电机设置为全范围
     motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-    // if pilot override call attitude controller
+    // 如果飞手覆盖则调用姿态控制器
     if (pilot_override || mode != TUNING) {
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(target_roll_cd, target_pitch_cd, target_yaw_rate_cds);
     } else {
-        // somehow get attitude requests from autotuning
+        // 从自动调参获取姿态请求
         control_attitude();
-        // tell the user what's going on
+        // 告诉用户正在发生什么
         do_gcs_announcements();
     }
 
-    // call position controller
+    // 调用位置控制器
     pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate_cms);
     pos_control->update_z_controller();
 
 }
 
-// return true if vehicle is close to level
+// 如果飞机接近水平则返回true
 bool AC_AutoTune::currently_level()
 {
-    // abort AutoTune if we pass 2 * AUTOTUNE_LEVEL_TIMEOUT_MS
+    // 如果超过2 * AUTOTUNE_LEVEL_TIMEOUT_MS则中止自动调参
     const uint32_t now_ms = AP_HAL::millis();
     if (now_ms - level_start_time_ms > 3 * AUTOTUNE_LEVEL_TIMEOUT_MS) {
-        GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "AutoTune: Failed to level, please tune manually");
+        GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "AutoTune: 调平失败,请手动调参");
         mode = FAILED;
         LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_FAILED);
     }
 
-    // slew threshold to ensure sufficient settling time for aircraft unable to obtain small thresholds
-    // relax threshold if we pass AUTOTUNE_LEVEL_TIMEOUT_MS
+    // 斜率阈值以确保无法获得小阈值的飞机有足够的稳定时间
+    // 如果超过AUTOTUNE_LEVEL_TIMEOUT_MS则放宽阈值
     const float threshold_mul = constrain_float((float)(now_ms - level_start_time_ms) / (float)AUTOTUNE_LEVEL_TIMEOUT_MS, 0.0, 2.0);
 
     if (fabsf(ahrs_view->roll_sensor - roll_cd) > threshold_mul * AUTOTUNE_LEVEL_ANGLE_CD) {
@@ -352,49 +364,49 @@ bool AC_AutoTune::currently_level()
     return true;
 }
 
-// main state machine to level vehicle, perform a test and update gains
-// directly updates attitude controller with targets
+// 主状态机用于调平飞机、执行测试和更新增益
+// 直接用目标更新姿态控制器
 void AC_AutoTune::control_attitude()
 {
-    rotation_rate = 0.0f;        // rotation rate in radians/second
+    rotation_rate = 0.0f;        // 旋转速率(弧度/秒)
     lean_angle = 0.0f;
     const float direction_sign = positive_direction ? 1.0f : -1.0f;
     const uint32_t now = AP_HAL::millis();
 
-    // check tuning step
+    // 检查调参步骤
     switch (step) {
 
     case WAITING_FOR_LEVEL: {
 
-        // Note: we should be using intra-test gains (which are very close to the original gains but have lower I)
-        // re-enable rate limits
+        // 注意:我们应该使用测试间增益(与原始增益非常接近但I项较低)
+        // 重新启用速率限制
         attitude_control->use_sqrt_controller(true);
 
         get_poshold_attitude(roll_cd, pitch_cd, desired_yaw_cd);
 
-        // hold level attitude
+        // 保持水平姿态
         attitude_control->input_euler_angle_roll_pitch_yaw(roll_cd, pitch_cd, desired_yaw_cd, true);
 
-        // hold the copter level for 0.5 seconds before we begin a twitch
-        // reset counter if we are no longer level
+        // 在开始抖动前保持飞机水平0.5秒
+        // 如果不再水平则重置计数器
         if (!currently_level()) {
             step_start_time_ms = now;
         }
 
-        // if we have been level for a sufficient amount of time (0.5 seconds) move onto tuning step
+        // 如果我们已经保持水平足够长时间(0.5秒)则进入调参步骤
         if (now - step_start_time_ms > AUTOTUNE_REQUIRED_LEVEL_TIME_MS) {
-            // initiate variables for next step
+            // 初始化下一步的变量
             step = TESTING;
             step_start_time_ms = now;
             step_time_limit_ms = get_testing_step_timeout_ms();
-            // set gains to their to-be-tested values
+            // 将增益设置为待测试值
             load_gains(GAIN_TEST);
         } else {
-            // when waiting for level we use the intra-test gains
+            // 等待水平时使用测试间增益
             load_gains(GAIN_INTRA_TEST);
         }
 
-        // Initialize test-specific variables
+        // 初始化特定于测试的变量
         switch (axis) {
         case AxisType::ROLL:
             start_rate = ToDeg(ahrs_view->get_gyro().x) * 100.0f;
@@ -411,20 +423,20 @@ void AC_AutoTune::control_attitude()
             break;
         }
 
-        // tests must be initialized last as some rely on variables above
+        // 测试必须最后初始化,因为有些依赖于上面的变量
         test_init();
 
         break;
     }
 
     case TESTING: {
-        // Run the twitching step
+        // 运行抖动步骤
         load_gains(GAIN_TEST);
 
-        // run the test
+        // 运行测试
         test_run(axis, direction_sign);
 
-        // Check for failure causing reverse response
+        // 检查导致反向响应的故障
         if (lean_angle <= -angle_lim_neg_rpy_cd()) {
             step = WAITING_FOR_LEVEL;
             positive_direction = twitch_reverse_direction();
@@ -432,7 +444,7 @@ void AC_AutoTune::control_attitude()
             level_start_time_ms = now;
         }
 
-        // protect from roll over
+        // 防止翻转
         if (attitude_control->lean_angle_deg() * 100 > angle_lim_max_rp_cd()) {
             step = WAITING_FOR_LEVEL;
             positive_direction = twitch_reverse_direction();
@@ -441,7 +453,7 @@ void AC_AutoTune::control_attitude()
         }
 
 #if HAL_LOGGING_ENABLED
-        // log this iterations lean angle and rotation rate
+        // 记录本次迭代的倾斜角度和旋转速率
         Log_AutoTuneDetails();
         attitude_control->Write_Rate(*pos_control);
         log_pids();
@@ -455,36 +467,36 @@ void AC_AutoTune::control_attitude()
 
     case UPDATE_GAINS:
 
-        // re-enable rate limits
+        // 重新启用速率限制
         attitude_control->use_sqrt_controller(true);
 
 #if HAL_LOGGING_ENABLED
-        // log the latest gains
+        // 记录最新增益
         Log_AutoTune();
 #endif
 
-        // Announce tune type test results
-        // must be done before updating method because this method changes parameters for next test
+        // 宣布调参类型测试结果
+        // 必须在更新方法之前完成,因为此方法会更改下一次测试的参数
         do_post_test_gcs_announcements();
 
         switch (tune_type) {
-        // Check results after mini-step to increase rate D gain
+        // 检查小步骤后增加速率D增益的结果
         case RD_UP:
             updating_rate_d_up_all(axis);
             break;
-        // Check results after mini-step to decrease rate D gain
+        // 检查小步骤后减小速率D增益的结果
         case RD_DOWN:
             updating_rate_d_down_all(axis);
             break;
-        // Check results after mini-step to increase rate P gain
+        // 检查小步骤后增加速率P增益的结果
         case RP_UP:
             updating_rate_p_up_all(axis);
             break;
-        // Check results after mini-step to increase stabilize P gain
+        // 检查小步骤后增加稳定P增益的结果
         case SP_DOWN:
             updating_angle_p_down_all(axis);
             break;
-        // Check results after mini-step to increase stabilize P gain
+        // 检查小步骤后增加稳定P增益的结果
         case SP_UP:
             updating_angle_p_up_all(axis);
             break;
@@ -501,29 +513,29 @@ void AC_AutoTune::control_attitude()
             break;
         }
 
-        // we've complete this step, finalize pids and move to next step
+        // 我们已完成此步骤,最终确定pid并移至下一步
         if (counter >= AUTOTUNE_SUCCESS_COUNT) {
 
-            // reset counter
+            // 重置计数器
             counter = 0;
 
-            // reset scaling factor
+            // 重置缩放因子
             step_scaler = 1.0f;
 
 
-            // set gains for post tune before moving to the next tuning type
+            // 在移至下一个调参类型之前设置调参后的增益
             set_gains_post_tune(axis);
 
-            // increment the tune type to the next one in tune sequence
+            // 将调参类型递增到调参序列中的下一个
             next_tune_type(tune_type, false);
 
             if (tune_type == TUNE_COMPLETE) {
-                // we've reached the end of a D-up-down PI-up-down tune type cycle
+                // 我们已到达D-up-down PI-up-down调参类型循环的末尾
                 next_tune_type(tune_type, true);
 
                 report_final_gains(axis);
 
-                // advance to the next axis
+                // 进入下一个轴向
                 bool complete = false;
                 switch (axis) {
                 case AxisType::ROLL:
@@ -562,15 +574,15 @@ void AC_AutoTune::control_attitude()
                     break;
                 }
 
-                // if we've just completed all axes we have successfully completed the autotune
-                // change to TESTING mode to allow user to fly with new gains
+                // 如果我们刚完成所有轴向,我们已成功完成自动调参
+                // 切换到TESTING模式以允许用户使用新增益飞行
                 if (complete) {
                     mode = SUCCESS;
                     update_gcs(AUTOTUNE_MESSAGE_SUCCESS);
                     LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_SUCCESS);
                     AP_Notify::events.autotune_complete = true;
 
-                    // Return to original gains for landing
+                    // 返回原始增益以进行着陆
                     load_gains(GainType::GAIN_ORIGINAL);
                 } else {
                     AP_Notify::events.autotune_next_axis = true;
@@ -582,14 +594,14 @@ void AC_AutoTune::control_attitude()
 
     case ABORT:
         if (axis == AxisType::YAW || axis == AxisType::YAW_D) {
-            // todo: check to make sure we need this
+            // todo: 检查我们是否需要这个
             attitude_control->input_euler_angle_roll_pitch_yaw(0.0f, 0.0f, ahrs_view->yaw_sensor, false);
         }
 
-        // set gains to their intra-test values (which are very close to the original gains)
+        // 将增益设置为测试间值(与原始增益非常接近)
         load_gains(GAIN_INTRA_TEST);
 
-        // reset testing step
+        // 重置测试步骤
         step = WAITING_FOR_LEVEL;
         positive_direction = twitch_reverse_direction();
         step_start_time_ms = now;
@@ -599,13 +611,12 @@ void AC_AutoTune::control_attitude()
     }
 }
 
-// backup_gains_and_initialise - store current gains as originals
-//  called before tuning starts to backup original gains
+// 备份增益并初始化 - 在调参开始前存储当前增益作为原始增益
 void AC_AutoTune::backup_gains_and_initialise()
 {
     const uint32_t now = AP_HAL::millis();
     
-    // initialise state because this is our first time
+    // 初始化状态因为这是我们的第一次
     if (roll_enabled()) {
         axis = AxisType::ROLL;
     } else if (pitch_enabled()) {
@@ -615,13 +626,13 @@ void AC_AutoTune::backup_gains_and_initialise()
     } else if (yaw_d_enabled()) {
         axis = AxisType::YAW_D;
     }
-    // no axes are complete
+    // 没有完成的轴向
     axes_completed = 0;
 
-    // reset update gain variables for each vehicle
+    // 重置每个车辆的更新增益变量
     reset_update_gain_variables();
 
-    // start at the beginning of tune sequence
+    // 从调参序列开始
     next_tune_type(tune_type, true);
 
     step = WAITING_FOR_LEVEL;
@@ -634,12 +645,12 @@ void AC_AutoTune::backup_gains_and_initialise()
 }
 
 /*
-  load a specified set of gains
+  加载指定的增益集
  */
 void AC_AutoTune::load_gains(enum GainType gain_type)
 {
     if (loaded_gains == gain_type) {
-        // Loaded gains are already of correct type
+        // 已加载的增益已经是正确类型
         return;
     }
     loaded_gains = gain_type;
@@ -660,21 +671,21 @@ void AC_AutoTune::load_gains(enum GainType gain_type)
     }
 }
 
-// update_gcs - send message to ground station
+// 更新gcs - 向地面站发送消息
 void AC_AutoTune::update_gcs(uint8_t message_id) const
 {
     switch (message_id) {
     case AUTOTUNE_MESSAGE_STARTED:
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO,"AutoTune: Started");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,"AutoTune: 已启动");
         break;
     case AUTOTUNE_MESSAGE_STOPPED:
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO,"AutoTune: Stopped");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,"AutoTune: 已停止");
         break;
     case AUTOTUNE_MESSAGE_SUCCESS:
-        GCS_SEND_TEXT(MAV_SEVERITY_NOTICE,"AutoTune: Success");
+        GCS_SEND_TEXT(MAV_SEVERITY_NOTICE,"AutoTune: 成功");
         break;
     case AUTOTUNE_MESSAGE_FAILED:
-        GCS_SEND_TEXT(MAV_SEVERITY_NOTICE,"AutoTune: Failed");
+        GCS_SEND_TEXT(MAV_SEVERITY_NOTICE,"AutoTune: 失败");
         break;
     case AUTOTUNE_MESSAGE_TESTING:
     case AUTOTUNE_MESSAGE_SAVED_GAINS:
@@ -691,22 +702,28 @@ void AC_AutoTune::update_gcs(uint8_t message_id) const
     }
 }
 
-// axis helper functions
+// 轴向辅助函数 - 检查是否启用了各个轴向的自动调参
+
+// 检查是否启用了横滚轴自动调参
 bool AC_AutoTune::roll_enabled() const
 {
     return get_axis_bitmask() & AUTOTUNE_AXIS_BITMASK_ROLL;
 }
 
+// 检查是否启用了俯仰轴自动调参
 bool AC_AutoTune::pitch_enabled() const
 {
     return get_axis_bitmask() & AUTOTUNE_AXIS_BITMASK_PITCH;
 }
 
+// 检查是否启用了偏航轴自动调参
 bool AC_AutoTune::yaw_enabled() const
 {
     return get_axis_bitmask() & AUTOTUNE_AXIS_BITMASK_YAW;
 }
 
+// 检查是否启用了偏航D参数自动调参
+// 对于直升机,始终返回false
 bool AC_AutoTune::yaw_d_enabled() const
 {
 #if APM_BUILD_TYPE(APM_BUILD_Heli)
@@ -717,89 +734,95 @@ bool AC_AutoTune::yaw_d_enabled() const
 }
 
 /*
-  check if we have a good position estimate
+  检查是否有良好的位置估计
+  返回true表示有可靠的位置估计,false表示位置估计不可靠
  */
 bool AC_AutoTune::position_ok(void)
 {
+    // 如果没有惯性导航系统,不允许导航
     if (!AP::ahrs().have_inertial_nav()) {
-        // do not allow navigation with dcm position
         return false;
     }
 
-    // with EKF use filter status and ekf check
+    // 使用EKF滤波器状态进行检查
     nav_filter_status filt_status = inertial_nav->get_filter_status();
 
-    // require a good absolute position and EKF must not be in const_pos_mode
+    // 要求有良好的绝对位置,且EKF不能处于const_pos_mode
     return (filt_status.flags.horiz_pos_abs && !filt_status.flags.const_pos_mode);
 }
 
-// get attitude for slow position hold in autotune mode
+// 获取自动调参模式下的位置保持姿态
+// roll_cd_out: 输出的横滚角(厘度)
+// pitch_cd_out: 输出的俯仰角(厘度)
+// yaw_cd_out: 输出的偏航角(厘度)
 void AC_AutoTune::get_poshold_attitude(float &roll_cd_out, float &pitch_cd_out, float &yaw_cd_out)
 {
+    // 初始化输出角度为0
     roll_cd_out = pitch_cd_out = 0;
 
+    // 如果未启用位置保持,直接返回
     if (!use_poshold) {
-        // we are not trying to hold position
         return;
     }
 
-    // do we know where we are? If not then don't do poshold
+    // 如果位置估计不可靠,不进行位置保持
     if (!position_ok()) {
         return;
     }
 
+    // 如果还没有记录起始位置,记录当前位置
     if (!have_position) {
         have_position = true;
         start_position = inertial_nav->get_position_neu_cm();
     }
 
-    // don't go past 10 degrees, as autotune result would deteriorate too much
+    // 限制最大倾斜角为10度,以免影响自动调参效果
     const float angle_max_cd = 1000;
 
-    // hit the 10 degree limit at 20 meters position error
+    // 在20米位置误差时达到10度倾斜限制
     const float dist_limit_cm = 2000;
 
-    // we only start adjusting yaw if we are more than 5m from the
-    // target position. That corresponds to a lean angle of 2.5 degrees
+    // 只有当位置误差超过5米(对应2.5度倾斜角)时才开始调整偏航
     const float yaw_dist_limit_cm = 500;
 
+    // 计算当前位置与起始位置的偏差向量(不考虑高度)
     Vector3f pdiff = inertial_nav->get_position_neu_cm() - start_position;
     pdiff.z = 0;
     float dist_cm = pdiff.length();
+    
+    // 如果位置偏差小于10厘米,不做任何调整
     if (dist_cm < 10) {
-        // don't do anything within 10cm
         return;
     }
 
     /*
-      very simple linear controller
+      简单的线性控制器:
+      根据位置偏差计算所需倾斜角度
      */
     float scaling = constrain_float(angle_max_cd * dist_cm / dist_limit_cm, 0, angle_max_cd);
     Vector2f angle_ne(pdiff.x, pdiff.y);
     angle_ne *= scaling / dist_cm;
 
-    // rotate into body frame
+    // 将角度从地理坐标系转换到机体坐标系
     pitch_cd_out = angle_ne.x * ahrs_view->cos_yaw() + angle_ne.y * ahrs_view->sin_yaw();
     roll_cd_out  = angle_ne.x * ahrs_view->sin_yaw() - angle_ne.y * ahrs_view->cos_yaw();
 
+    // 如果位置偏差小于yaw_dist_limit_cm,不调整偏航
     if (dist_cm < yaw_dist_limit_cm) {
-        // no yaw adjustment
         return;
     }
 
     /*
-      also point so that twitching occurs perpendicular to the wind,
-      if we have drifted more than yaw_dist_limit_cm from the desired
-      position. This ensures that autotune doesn't have to deal with
-      more than 2.5 degrees of attitude on the axis it is tuning
+      如果飞机偏离期望位置超过yaw_dist_limit_cm,
+      调整机头使抖动方向垂直于风向。
+      这确保自动调参在调整某一轴时,其他轴的姿态偏差不超过2.5度
      */
     float target_yaw_cd = degrees(atan2f(pdiff.y, pdiff.x)) * 100;
     if (axis == AxisType::PITCH) {
-        // for roll and yaw tuning we point along the wind, for pitch
-        // we point across the wind
+        // 调参俯仰轴时机头垂直于风向,调参横滚和偏航轴时机头对准风向
         target_yaw_cd += 9000;
     }
-    // go to the nearest 180 degree mark, with 5 degree slop to prevent oscillation
+    // 选择最近的180度标记,留5度余量防止振荡
     if (fabsf(yaw_cd_out - target_yaw_cd) > 9500) {
         target_yaw_cd += 18000;
     }
@@ -807,16 +830,20 @@ void AC_AutoTune::get_poshold_attitude(float &roll_cd_out, float &pitch_cd_out, 
     yaw_cd_out = target_yaw_cd;
 }
 
-// get the next tune type
+// 获取下一个调参类型
+// curr_tune_type: 当前调参类型
+// reset: 是否重置调参序列
 void AC_AutoTune::next_tune_type(TuneType &curr_tune_type, bool reset)
 {
     if (reset) {
+        // 重置时设置调参序列并从头开始
         set_tune_sequence();
         tune_seq_curr = 0;
     } else if (curr_tune_type == TUNE_COMPLETE) {
-        // leave tune_type as TUNE_COMPLETE to initiate next axis or exit autotune
+        // 如果当前调参完成,保持TUNE_COMPLETE状态以开始下一轴或退出自动调参
         return;
     } else {
+        // 进入序列中的下一个调参类型
         tune_seq_curr++;
     }
 

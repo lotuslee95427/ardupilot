@@ -1,105 +1,118 @@
-# hw definition file for processing by chibios_pins.py
-# Airbot F4, Flip32 F4
-# with F405 mcu, mpu6000 imu
+# 这是Airbot F4/Flip32 F4飞控板的硬件定义文件
+# 该文件由chibios_pins.py脚本处理,用于配置硬件引脚和外设
+# 主控芯片为STM32F405,搭载MPU6000陀螺仪
 
+# 定义MCU类型为STM32F4系列,具体型号为STM32F405
 MCU STM32F4xx STM32F405xx
 
+# 启用F405架构支持
 HAL_CHIBIOS_ARCH_F405 1
 
-# board ID for firmware load
+# 开发板ID为128,用于固件校验和加载
 APJ_BOARD_ID 128
 
-# crystal frequency
+# 外部晶振频率为8MHz
 OSCILLATOR_HZ 8000000
 
+# 使用定时器5作为系统定时器
 STM32_ST_USE_TIMER 5
 
-# flash size
-FLASH_SIZE_KB 1024
-FLASH_RESERVE_START_KB 64
+# Flash相关配置
+FLASH_SIZE_KB 1024              # Flash总容量为1024KB
+FLASH_RESERVE_START_KB 64       # 预留64KB起始空间给bootloader
 
-# order of I2C buses
+# 配置I2C总线顺序,仅使用I2C2
 I2C_ORDER I2C2
 
-# order of UARTs
+# 配置串口顺序:USB OTG1、USART1、空、USART6
 SERIAL_ORDER OTG1 USART1 EMPTY USART6
 
-#adc
-PC1 BAT_CURR_SENS ADC1 SCALE(1)
-PC2 BAT_VOLT_SENS ADC1 SCALE(1)
-PA0 RSSI_IN ADC1
+# ADC模拟输入配置
+PC1 BAT_CURR_SENS ADC1 SCALE(1)  # 电池电流检测
+PC2 BAT_VOLT_SENS ADC1 SCALE(1)  # 电池电压检测
+PA0 RSSI_IN ADC1                 # 信号强度检测
 
-#pwm output
-PB0 TIM1_CH2N TIM1 PWM(1) GPIO(50)
-PB1 TIM1_CH3N TIM1 PWM(2) GPIO(51)
-PA3 TIM2_CH4 TIM2 PWM(3) GPIO(52)
-PA2 TIM2_CH3 TIM2 PWM(4) GPIO(53)
-PA1 TIM2_CH2 TIM2 PWM(5) GPIO(54)
-PA8 TIM1_CH1 TIM1 PWM(6) GPIO(55)
+# PWM输出通道配置
+PB0 TIM1_CH2N TIM1 PWM(1) GPIO(50)  # PWM通道1
+PB1 TIM1_CH3N TIM1 PWM(2) GPIO(51)  # PWM通道2
+PA3 TIM2_CH4 TIM2 PWM(3) GPIO(52)   # PWM通道3
+PA2 TIM2_CH3 TIM2 PWM(4) GPIO(53)   # PWM通道4
+PA1 TIM2_CH2 TIM2 PWM(5) GPIO(54)   # PWM通道5
+PA8 TIM1_CH1 TIM1 PWM(6) GPIO(55)   # PWM通道6
 
-PA4 MPU6000_CS CS
-PA5 SPI1_SCK SPI1
-PA6 SPI1_MISO SPI1
-PA7 SPI1_MOSI SPI1
+# SPI1总线配置(用于MPU6000陀螺仪)
+PA4 MPU6000_CS CS        # MPU6000片选
+PA5 SPI1_SCK SPI1        # SPI1时钟线
+PA6 SPI1_MISO SPI1       # SPI1 MISO数据线
+PA7 SPI1_MOSI SPI1       # SPI1 MOSI数据线
 
-PB10 I2C2_SCL I2C2
-PB11 I2C2_SDA I2C2
+# I2C2总线配置
+PB10 I2C2_SCL I2C2       # I2C2时钟线
+PB11 I2C2_SDA I2C2       # I2C2数据线
 
-PA10 USART1_RX USART1
-PA9 USART1_TX USART1
+# USART1串口配置
+PA10 USART1_RX USART1    # USART1接收引脚
+PA9 USART1_TX USART1     # USART1发送引脚
 
-PC6 USART6_TX USART6
-PC7 USART6_RX USART6
+# USART6串口配置
+PC6 USART6_TX USART6     # USART6发送引脚
+PC7 USART6_RX USART6     # USART6接收引脚
 
-PA13 JTMS-SWDIO SWD
-PA14 JTCK-SWCLK SWD
+# SWD调试接口配置
+PA13 JTMS-SWDIO SWD      # SWDIO数据线
+PA14 JTCK-SWCLK SWD      # SWCLK时钟线
 
-PB3 FLASH_CS CS
-PC12 SPI3_MOSI SPI3
-PC11 SPI3_MISO SPI3
-PC10 SPI3_SCK SPI3
+# SPI3总线配置(用于外置Flash存储)
+PB3 FLASH_CS CS          # Flash片选
+PC12 SPI3_MOSI SPI3      # SPI3 MOSI数据线
+PC11 SPI3_MISO SPI3      # SPI3 MISO数据线
+PC10 SPI3_SCK SPI3       # SPI3时钟线
 
-PB5 LED OUTPUT HIGH GPIO(57)
-PB4 TIM3_CH1 TIM3 GPIO(56) ALARM
+# LED和蜂鸣器配置
+PB5 LED OUTPUT HIGH GPIO(57)         # 状态指示LED
+PB4 TIM3_CH1 TIM3 GPIO(56) ALARM    # 蜂鸣器输出
 
-PA11 OTG_FS_DM OTG1
-PA12 OTG_FS_DP OTG1
-PC5 VBUS INPUT OPENDRAIN
+# USB OTG配置
+PA11 OTG_FS_DM OTG1      # USB D-引脚
+PA12 OTG_FS_DP OTG1      # USB D+引脚
+PC5 VBUS INPUT OPENDRAIN # USB电源检测
 
-# "PPM" solder pad/resistor should be soldered and "S-BUS" resistor/solder pad removed
-# Overwise UART1 or RCIN will not work
+# 遥控器输入配置
+# 注意:"PPM"焊盘需要焊接,"S-BUS"焊盘需要移除,否则UART1或RCIN将无法工作
 PB14 TIM12_CH1 TIM12 RCININT PULLDOWN LOW
 
-# SPI Device table 
-SPIDEV mpu6000    SPI1 DEVID1 MPU6000_CS MODE3 1*MHZ 8*MHZ
-SPIDEV dataflash  SPI3 DEVID1 FLASH_CS MODE3 32*MHZ 32*MHZ
+# SPI设备表配置
+SPIDEV mpu6000    SPI1 DEVID1 MPU6000_CS MODE3 1*MHZ 8*MHZ    # MPU6000陀螺仪
+SPIDEV dataflash  SPI3 DEVID1 FLASH_CS MODE3 32*MHZ 32*MHZ    # 外置Flash存储器
 
-# enable logging to dataflash
+# 启用Flash日志记录功能
 define HAL_LOGGING_DATAFLASH_ENABLED 1
 
-# one IMU
+# IMU配置(仅一个MPU6000,安装方向偏航180度)
 IMU Invensense SPI:mpu6000_cs ROTATION_YAW_180
 
-# one baro
+# 气压计配置(MS5611/MS5607,I2C地址0x77)
 BARO MS56XX I2C:0:0x77
 
-# no builtin compasses
-define ALLOW_ARM_NO_COMPASS
-define HAL_PROBE_EXTERNAL_I2C_COMPASSES
-define HAL_I2C_INTERNAL_MASK 0
-define HAL_COMPASS_AUTO_ROT_DEFAULT 2
+# 指南针相关配置
+define ALLOW_ARM_NO_COMPASS              # 允许无指南针解锁
+define HAL_PROBE_EXTERNAL_I2C_COMPASSES  # 启用外置I2C指南针探测
+define HAL_I2C_INTERNAL_MASK 0           # 禁用内置指南针
+define HAL_COMPASS_AUTO_ROT_DEFAULT 2    # 设置默认自动旋转
 
-STORAGE_FLASH_PAGE 1
-define HAL_STORAGE_SIZE 15360
+# Flash存储配置
+STORAGE_FLASH_PAGE 1                     # 使用Flash第1页存储参数
+define HAL_STORAGE_SIZE 15360            # 存储区大小为15KB
 
-# define default battery setup
-define HAL_BATT_VOLT_PIN 12
-define HAL_BATT_CURR_PIN 11
-define HAL_BATT_VOLT_SCALE 11
-define HAL_BATT_CURR_SCALE 18.2
+# 电池监测配置
+define HAL_BATT_VOLT_PIN 12             # 电压检测引脚
+define HAL_BATT_CURR_PIN 11             # 电流检测引脚
+define HAL_BATT_VOLT_SCALE 11           # 电压比例
+define HAL_BATT_CURR_SCALE 18.2         # 电流比例
 
-define AP_NOTIFY_GPIO_LED_1_ENABLED 1
-define AP_NOTIFY_GPIO_LED_1_PIN 57
+# LED配置
+define AP_NOTIFY_GPIO_LED_1_ENABLED 1    # 启用LED 1
+define AP_NOTIFY_GPIO_LED_1_PIN 57       # LED 1使用GPIO 57
 
-# 64kB FLASH_RESERVE_START_KB means we're lacking a lot of space:
+# 由于bootloader占用64KB空间,需要最小化功能以节省空间
 include ../include/minimize_features.inc

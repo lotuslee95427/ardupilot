@@ -229,22 +229,29 @@ void ModeThrow::run()
 // @Field: HgtOk: 如果飞行器在要求高度的50cm范围内，则为True
 // @Field: PosOk: 如果飞行器在要求水平位置的50cm范围内，则为True
 
+        // 使用WriteStreaming()方法记录抛投模式的状态数据
+        // 参数说明:
+        // "THRO" - 日志消息的标识符
+        // "TimeUS,Stage,Vel..." - 记录的字段名称列表
+        // "s-nnoo----" - 单位类型:s=秒,n=米/秒,o=米/秒^2,-=无单位
+        // "F-0000----" - 乘数:F=微秒,0=无乘数,-=无乘数
+        // "QBffffbbbb" - 数据类型:Q=uint64_t,B=uint8_t,f=float,b=bool
         AP::logger().WriteStreaming(
-            "THRO",
-            "TimeUS,Stage,Vel,VelZ,Acc,AccEfZ,Throw,AttOk,HgtOk,PosOk",
-            "s-nnoo----",
-            "F-0000----",
-            "QBffffbbbb",
-            AP_HAL::micros64(),
-            (uint8_t)stage,
-            (double)velocity,
-            (double)velocity_z,
-            (double)accel,
-            (double)ef_accel_z,
-            throw_detect,
-            attitude_ok,
-            height_ok,
-            pos_ok);
+            "THRO",                                          // 消息标识符
+            "TimeUS,Stage,Vel,VelZ,Acc,AccEfZ,Throw,AttOk,HgtOk,PosOk", // 字段名称
+            "s-nnoo----",                                    // 单位类型
+            "F-0000----",                                    // 乘数
+            "QBffffbbbb",                                    // 数据类型
+            AP_HAL::micros64(),                             // 当前系统时间(微秒)
+            (uint8_t)stage,                                 // 当前抛投阶段
+            (double)velocity,                               // 总速度(m/s)
+            (double)velocity_z,                             // 垂直速度(m/s)
+            (double)accel,                                  // 总加速度(m/s^2)
+            (double)ef_accel_z,                            // 地球坐标系下的垂直加速度(m/s^2)
+            throw_detect,                                   // 是否检测到抛投
+            attitude_ok,                                    // 姿态是否正常
+            height_ok,                                      // 高度是否在范围内
+            pos_ok);                                        // 位置是否在范围内
     }
 #endif  // HAL_LOGGING_ENABLED
 }

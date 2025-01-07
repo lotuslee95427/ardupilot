@@ -105,14 +105,20 @@ const AP_Param::GroupInfo AC_HELI_PID::var_info[] = {
 // This is an integrator which tends to decay to zero naturally
 // if the error is zero.
 
+// 更新积分项的泄漏值
+// @param leak_rate: 积分项的泄漏率
 void AC_HELI_PID::update_leaky_i(float leak_rate)
 {
+    // 只有当积分增益不为零时才进行计算
     if (!is_zero(_ki)){
 
-        // integrator does not leak down below Leak Min
+        // 积分项不会泄漏到低于最小泄漏值
+        // 当积分值大于最小泄漏值时,按比例减小积分值
         if (_integrator > _leak_min){
             _integrator -= (float)(_integrator - _leak_min) * leak_rate;
-        } else if (_integrator < -_leak_min) {
+        } 
+        // 当积分值小于负的最小泄漏值时,按比例增大积分值
+        else if (_integrator < -_leak_min) {
             _integrator -= (float)(_integrator + _leak_min) * leak_rate;
         }
 

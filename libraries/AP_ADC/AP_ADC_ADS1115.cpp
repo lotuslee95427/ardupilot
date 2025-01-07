@@ -150,14 +150,22 @@ bool AP_ADC_ADS1115::_start_conversion(uint8_t channel)
     return _dev->transfer((uint8_t *)&config, sizeof(config), nullptr, 0);
 }
 
+
+// 从ADS1115 ADC读取数据
+// 参数:
+//   report: 指向存储ADC报告的数组
+//   length: 要读取的报告数量
+// 返回值:
+//   实际读取的报告数量
 size_t AP_ADC_ADS1115::read(adc_report_s *report, size_t length) const
 {
+    // 复制采样数据到报告数组
     for (size_t i = 0; i < length; i++) {
-        report[i].data = _samples[i].data;
-        report[i].id = _samples[i].id;
+        report[i].data = _samples[i].data;  // 复制ADC数据
+        report[i].id = _samples[i].id;      // 复制通道ID
     }
 
-    return length;
+    return length;  // 返回读取的报告数量
 }
 
 float AP_ADC_ADS1115::_convert_register_data_to_mv(int16_t word) const

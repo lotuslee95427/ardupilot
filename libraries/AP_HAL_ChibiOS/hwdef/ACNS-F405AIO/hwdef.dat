@@ -1,196 +1,206 @@
-# hw definition file for processing by chibios_pins.py
-# F405AIO, developed by Robin Luo
+# 这是F405AIO飞控板的硬件定义文件
+# 该文件由chibios_pins.py脚本处理,用于配置硬件引脚
+# 开发者: Robin Luo
 
 #################################################
-###             MCU CONFIGURATION             ###
+###             MCU配置部分                     ###
 #################################################
 
-# MCU class and specific type
+# MCU类型和具体型号
+# 使用STM32F4系列的STM32F405处理器
 MCU STM32F4xx STM32F405xx
 
-# board ID for firmware load
+# 开发板ID,用于固件校验
 APJ_BOARD_ID 1116
 
-# crystal frequency
+# 晶振频率配置
 OSCILLATOR_HZ 16000000
 
+# 配置系统定时器
 define STM32_ST_USE_TIMER 5
 define CH_CFG_ST_RESOLUTION 32
 
-# reserve 16k for bootloader, 16k for OSD and 32k for flash storage
+# Flash存储配置
+# 预留64KB空间:16KB用于bootloader,16KB用于OSD,32KB用于Flash存储
 FLASH_RESERVE_START_KB 64
 FLASH_SIZE_KB 1024
 
+# 参数存储大小配置为15360字节
 #define HAL_STORAGE_SIZE 16384
 define HAL_STORAGE_SIZE 15360
 STORAGE_FLASH_PAGE 1
 
-# enable FLASH/RAMTROM parameter storage
+# 启用Flash/RAM参数存储和数据记录(当前未启用)
 #define HAL_WITH_DATAFLASH 1
-# enable logging to dataflash
 #define HAL_LOGGING_DATAFLASH_ENABLED 1
 
-# order of UARTs
-#           | sr0| sr1  | sr2  | GPS |
+# 串口顺序配置
+# 按优先级排序:USB OTG1,USART1,USART3,UART4,USART6,USART2
 SERIAL_ORDER OTG1 USART1 USART3 UART4 USART6 USART2
 
 #################################################
-###             PIN DEFINITIONS               ###
+###             引脚定义部分                    ###
 ################################################# 
 
+# UART4引脚定义(GPS接口)
 PA0 UART4_TX UART4
 PA1 UART4_RX UART4 
 
+# USART1引脚定义(数传接口)
 PA9 USART1_TX USART1
 PA10 USART1_RX USART1
 
+# USB引脚定义
 PA11 OTG_FS_DM OTG1
 PA12 OTG_FS_DP OTG1
 
+# USART6引脚定义(GPS2接口)
 PC6  USART6_TX USART6  
 PC7  USART6_RX USART6  
 
+# USART3引脚定义(调试接口)
 PB10 USART3_TX USART3 
 PB11 USART3_RX USART3 
 
-# default to timer for RC input
+# RC输入配置
+# 默认使用定时器模式
 PA3 TIM9_CH2 TIM9 RCININT PULLDOWN LOW
 
-# alternative using USART2
+# 可选USART2模式(SBUS接收机)
 PA2 USART2_TX USART2 NODMA
 PA3 USART2_RX USART2 NODMA ALT(1)
 
 
-# IMU SPI
+# IMU SPI总线配置(SPI1)
 PA5 SPI1_SCK SPI1
 PA6 SPI1_MISO SPI1
 PA7 SPI1_MOSI SPI1
-PA4 GYRO1_CS CS
-PC3 GYRO2_CS CS
-PC4 GYRO1_DRDY INPUT
-PB2 GYRO2_DRDY INPUT
+PA4 GYRO1_CS CS         # IMU1片选
+PC3 GYRO2_CS CS         # IMU2片选
+PC4 GYRO1_DRDY INPUT    # IMU1数据就绪
+PB2 GYRO2_DRDY INPUT    # IMU2数据就绪
 
-# SD CARD SPI
+# SD卡和Flash存储SPI总线配置(SPI3)
 PC10 SPI3_SCK SPI3
 PC11 SPI3_MISO SPI3
 PC12 SPI3_MOSI SPI3
-PD2 SDCARD_CS CS
-PA14 FLASH_CS CS
+PD2 SDCARD_CS CS        # SD卡片选
+PA14 FLASH_CS CS        # Flash存储片选
 
-# MAG SPI
+# 磁力计SPI总线配置(SPI2)
 PB13 SPI2_SCK SPI2
 PB14 SPI2_MISO SPI2
 PB15 SPI2_MOSI SPI2
-PB12 MAG_CS CS
-PC5 MAG_DRDY INPUT
-PA8 ESPI_CS CS
+PB12 MAG_CS CS          # 磁力计片选
+PC5 MAG_DRDY INPUT      # 磁力计数据就绪
+PA8 ESPI_CS CS          # 外部SPI设备片选
 
-# I2C1
+# I2C总线配置(用于气压计等)
 PB6 I2C1_SCL I2C1 
 PB7 I2C1_SDA I2C1 
 
+# 启用I2C功能
 #define HAL_USE_I2C TRUE
 #define STM32_I2C_USE_I2C1 TRUE
-# I2C Buses
 I2C_ORDER I2C1 
 #define HAL_I2C_CLEAR_ON_TIMEOUT 0
 
-# CAN
+# CAN总线配置
 PB8 CAN1_RX CAN1
 PB9 CAN1_TX CAN1
-# CAN Buses
 #CAN_ORDER 1 
 
-# reduce memory usage
+# 减少内存使用
 define UAVCAN_NODE_POOL_SIZE 1024
 
-PC0 RSSI_ADC_PIN ADC1 SCALE(1)
-PC1 BATT_CURRENT_SENS ADC1 SCALE(1)
-PC2 BATT_VOLTAGE_SENS ADC1 SCALE(1)
+# 模拟输入引脚配置
+PC0 RSSI_ADC_PIN ADC1 SCALE(1)        # RSSI信号强度
+PC1 BATT_CURRENT_SENS ADC1 SCALE(1)   # 电池电流
+PC2 BATT_VOLTAGE_SENS ADC1 SCALE(1)   # 电池电压
 
-PC14 LED_BLUE OUTPUT LOW GPIO(0)
-PA13 LED_GREEN OUTPUT LOW GPIO(1) 
-PC15 LED_RED OUTPUT LOW GPIO(2) 
+# LED配置
+PC14 LED_BLUE OUTPUT LOW GPIO(0)   # 蓝色LED
+PA13 LED_GREEN OUTPUT LOW GPIO(1)  # 绿色LED 
+PC15 LED_RED OUTPUT LOW GPIO(2)    # 红色LED
 
+# LED相关定义
 define AP_NOTIFY_GPIO_LED_3_ENABLED 1
 define HAL_GPIO_A_LED_PIN 0
 define HAL_GPIO_B_LED_PIN 1
 define HAL_GPIO_C_LED_PIN 2
 
 
-#pwm output
-PB0  TIM3_CH3  TIM3 PWM(1) GPIO(50)
-PB5  TIM3_CH2  TIM3 PWM(2) GPIO(51)
-PB4  TIM3_CH1  TIM3 PWM(3) GPIO(52)
-PB1  TIM3_CH4  TIM3 PWM(4) GPIO(53)
-PB3  TIM2_CH2  TIM2 PWM(5) GPIO(54)
-PA15 TIM2_CH1  TIM2 PWM(6) GPIO(55)
-PC8  TIM8_CH3  TIM8 PWM(7) GPIO(56)
-PC9  TIM8_CH4  TIM8 PWM(8) GPIO(57)
+# PWM输出配置
+PB0  TIM3_CH3  TIM3 PWM(1) GPIO(50)   # PWM1
+PB5  TIM3_CH2  TIM3 PWM(2) GPIO(51)   # PWM2
+PB4  TIM3_CH1  TIM3 PWM(3) GPIO(52)   # PWM3
+PB1  TIM3_CH4  TIM3 PWM(4) GPIO(53)   # PWM4
+PB3  TIM2_CH2  TIM2 PWM(5) GPIO(54)   # PWM5
+PA15 TIM2_CH1  TIM2 PWM(6) GPIO(55)   # PWM6
+PC8  TIM8_CH3  TIM8 PWM(7) GPIO(56)   # PWM7
+PC9  TIM8_CH4  TIM8 PWM(8) GPIO(57)   # PWM8
 #PA8  TIM1_CH1  TIM1 PWM(9) GPIO(58)
 #PA2  TIM2_CH3  TIM2 PWM(10) GPIO(59) 
 
+# USB电源检测
 PC13 VBUS INPUT OPENDRAIN
 
-# default to all pins low to avoid ESD issues
+# 默认将所有引脚设为低电平输出,防止ESD问题
 DEFAULTGPIO OUTPUT LOW PULLDOWN
 
 #################################################
-###                 DEVICES                   ###
+###             设备配置部分                    ###
 #################################################
 
-# BMI160 on SPI1
+# BMI160 IMU配置(SPI1)
 SPIDEV bmi160 SPI1 DEVID1 GYRO1_CS MODE3  1*MHZ  4*MHZ
-# ICM42688 on SPI1
+# ICM42688 IMU配置(SPI1)
 SPIDEV icm42688 SPI1 DEVID2 GYRO2_CS MODE3  1*MHZ  4*MHZ
-# QMI8658 on SPI1
+# QMI8658 IMU配置(SPI1,当前未启用)
 #SPIDEV LSM6DSL SPI1 DEVID2 GYRO2_CS MODE3  1*MHZ  4*MHZ
 
-# MAG on SPI2
+# LIS3MDL磁力计配置(SPI2)
 SPIDEV lis3mdl SPI2 DEVID3 MAG_CS MODE3 500*KHZ 500*KHZ
 #SPIDEV lis3mdl SPI2 DEVID6 MAG_CS MODE3 500*KHZ 500*KHZ
 
-# SD Card on SPI3
+# SD卡配置(SPI3)
 SPIDEV sdcard SPI3 DEVID4 SDCARD_CS MODE3 400*KHZ 25*MHZ
 
-# Flash Card on SPI3
+# Flash存储器配置(SPI3)
 SPIDEV dataflash SPI3 DEVID5 FLASH_CS MODE3 500*KHZ 25*MHZ
 
-# two IMU
+# IMU配置
 IMU BMI160 SPI:bmi160 ROTATION_ROLL_180_YAW_270
 IMU Invensensev3 SPI:icm42688 ROTATION_NONE
 #IMU LSM6DSL SPI:lsm6dsl ROTATION_ROLL_180
 
-# one baro, multiple possible choices for different board variants
+# 气压计配置
 BARO BMP280 I2C:0:0x76
 
-# one mag
+# 磁力计配置
 COMPASS LIS3MDL SPI:lis3mdl false ROTATION_ROLL_180_YAW_90
 
-
+# 启用FATFS文件系统
 define HAL_OS_FATFS_IO 1
 
-# define default battery setup
+# 电池监测配置
 define HAL_BATT_MONITOR_DEFAULT 4
 define HAL_BATT_VOLT_PIN 12
 define HAL_BATT_CURR_PIN 11
 define HAL_BATT_VOLT_SCALE 9.2
 define HAL_BATT_CURR_SCALE 50.0
 
-#analog rssi pin (also could be used as analog airspeed input)
-# PC0 - ADC1_CH10
+# RSSI模拟输入配置
 define BOARD_RSSI_ANA_PIN 10
 
-# probe the i2c bus for all possible
-# external compass types
+# 磁力计相关配置
 define ALLOW_ARM_NO_COMPASS
 define HAL_PROBE_EXTERNAL_I2C_COMPASSES
 define HAL_I2C_INTERNAL_MASK 0
 define HAL_COMPASS_AUTO_ROT_DEFAULT 2
 
+# OSD配置(当前未启用)
 #define OSD_ENABLED 0
 
-
-# --------------------- save flash ----------------------
+# 包含最小化功能配置文件,以节省Flash空间
 include ../include/minimize_features.inc
-

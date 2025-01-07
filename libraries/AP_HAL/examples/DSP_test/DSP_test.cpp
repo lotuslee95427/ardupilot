@@ -1,3 +1,4 @@
+// 包含所需的头文件
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_Empty/AP_HAL_Empty.h>
@@ -10,16 +11,18 @@
 #if HAL_WITH_DSP
 const AP_HAL::HAL &hal = AP_HAL::get_HAL();
 
-static const uint16_t WINDOW_SIZE = 128;
-static const uint16_t FRAME_SIZE = 1024;
-static const float max_hz = 350;
-static const float attenuation_power_db = 15;
-static const float frequency1 = 120;
-static const float frequency2 = 50;
-static const float frequency3 = 350;
-static float attenuation_cutoff;
-static FloatBuffer fft_window {WINDOW_SIZE};
+// 定义FFT相关常量
+static const uint16_t WINDOW_SIZE = 128;  // FFT窗口大小
+static const uint16_t FRAME_SIZE = 1024;  // 数据帧大小
+static const float max_hz = 350;          // 最大频率
+static const float attenuation_power_db = 15;  // 衰减功率(dB)
+static const float frequency1 = 120;      // 测试频率1
+static const float frequency2 = 50;       // 测试频率2 
+static const float frequency3 = 350;      // 测试频率3
+static float attenuation_cutoff;          // 衰减截止值
+static FloatBuffer fft_window {WINDOW_SIZE};  // FFT窗口缓冲区
 
+// 计算最后一个频率bin
 static const uint16_t last_bin = MIN(ceilf(max_hz / ((float)SAMPLE_RATE/ WINDOW_SIZE)), WINDOW_SIZE/2);
 
 static AP_HAL::DSP::FFTWindowState* fft;
@@ -29,6 +32,7 @@ void loop();
 void update();
 void do_fft(const float* data);
 
+// 创建所需的对象
 static AP_SerialManager serial_manager;
 static AP_BoardConfig board_config;
 static AP_InertialSensor ins;
@@ -39,6 +43,7 @@ class DummyVehicle {
 public:
 };
 
+// DSP测试类,继承自AP_HAL::DSP
 class DSPTest : public AP_HAL::DSP {
 public:
     virtual FFTWindowState* fft_init(uint16_t w, uint16_t sample_rate, uint8_t sliding_window_size) override { return nullptr; }
@@ -54,7 +59,7 @@ public:
 } dsptest;
 
 //static DummyVehicle vehicle;
-// create fake gcs object
+// 创建GCS对象
 GCS_Dummy _gcs;
 
 const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
@@ -71,6 +76,7 @@ void setup()
     fft = hal.dsp->fft_init(WINDOW_SIZE, SAMPLE_RATE);
     attenuation_cutoff = powf(10.0f, -attenuation_power_db / 10.0f);
 
+    // 生成测试数据
     for(uint16_t i = 0; i < WINDOW_SIZE; i++) {
         float sample = sinf(2.0f * M_PI * frequency1 * i / SAMPLE_RATE) * ToRad(20) * 2000;
         sample += sinf(2.0f * M_PI * frequency2 * i / SAMPLE_RATE) * ToRad(10) * 2000;
@@ -105,6 +111,7 @@ void do_fft(const float* data)
 
     const float max_energy = fft->_freq_bins[fft->_peak_data[AP_HAL::DSP::CENTER]._bin];
 
+    // 打印频谱图
     for (uint16_t i = 0; i < 32; i++) {
         const uint16_t height = uint16_t(roundf(80.0f * fft->_freq_bins[i] / max_energy));
         hal.console->printf("[%3.f]", i * fft->_bin_resolution);
@@ -114,6 +121,7 @@ void do_fft(const float* data)
         hal.console->printf("\n");
     }
 
+    // 打印检测到的频率信息
     hal.console->printf("FFT: detected frequencies %.1f/%d/[%.1f-%.1f] %.1f/%d/[%.1f-%.1f] %.1f/%d/[%.1f-%.1f]\n",
         fft->_peak_data[AP_HAL::DSP::CENTER]._freq_hz,
         fft->_peak_data[AP_HAL::DSP::CENTER]._bin,
@@ -131,6 +139,7 @@ void do_fft(const float* data)
 
 void update()
 {
+    // 对每个数据帧进行FFT分析
     for (uint16_t i = 0; i < FRAME_SIZE / WINDOW_SIZE; i++) {
         do_fft(&gyro_frames[frame_num].x[i * WINDOW_SIZE]);
     }
@@ -148,6 +157,7 @@ void loop()
 
     hal.console->printf("--------------------\n");
 
+    // 记录运行时间
     reference_time = AP_HAL::micros();
     update();
     run_time = AP_HAL::micros() - reference_time;
@@ -155,7 +165,7 @@ void loop()
         hal.console->printf("ran for %d\n", unsigned(run_time));
     }
 
-    // delay before next display
+    // 延时1秒后继续下一次显示
     hal.scheduler->delay(1e3); // 1 second
 }
 

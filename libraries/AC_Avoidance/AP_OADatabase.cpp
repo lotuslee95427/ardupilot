@@ -11,12 +11,14 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+// 包含配置头文件
 #include "AC_Avoidance_config.h"
 
 #if AP_OADATABASE_ENABLED
 
 #include "AP_OADatabase.h"
 
+// 包含所需的头文件
 #include <AP_AHRS/AP_AHRS.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Math/AP_Math.h>
@@ -24,22 +26,27 @@
 
 extern const AP_HAL::HAL& hal;
 
+// 设置默认的超时时间(秒)
 #ifndef AP_OADATABASE_TIMEOUT_SECONDS_DEFAULT
     #define AP_OADATABASE_TIMEOUT_SECONDS_DEFAULT   10
 #endif
 
+// 设置默认的数据库大小
 #ifndef AP_OADATABASE_SIZE_DEFAULT
     #define AP_OADATABASE_SIZE_DEFAULT          100
 #endif
 
+// 设置默认的队列大小
 #ifndef AP_OADATABASE_QUEUE_SIZE_DEFAULT
     #define AP_OADATABASE_QUEUE_SIZE_DEFAULT 80
 #endif
 
+// 设置距离家的距离阈值(米)
 #ifndef AP_OADATABASE_DISTANCE_FROM_HOME
     #define AP_OADATABASE_DISTANCE_FROM_HOME 3
 #endif
 
+// 参数定义
 const AP_Param::GroupInfo AP_OADatabase::var_info[] = {
 
     // @Param: SIZE
@@ -110,22 +117,26 @@ const AP_Param::GroupInfo AP_OADatabase::var_info[] = {
     AP_GROUPEND
 };
 
+// 构造函数
 AP_OADatabase::AP_OADatabase()
 {
+    // 确保单例模式
     if (_singleton != nullptr) {
         AP_HAL::panic("AP_OADatabase must be singleton");
     }
     _singleton = this;
 
+    // 设置参数默认值
     AP_Param::setup_object_defaults(this, var_info);
 }
 
+// 初始化函数
 void AP_OADatabase::init()
 {
     init_database();
     init_queue();
 
-    // initialise scalar using beam width of at least 1deg
+    // 使用至少1度的光束宽度初始化标量
     dist_to_radius_scalar = tanf(radians(MAX(_beam_width, 1.0f)));
 
     if (!healthy()) {
@@ -136,6 +147,7 @@ void AP_OADatabase::init()
     }
 }
 
+// 更新函数
 void AP_OADatabase::update()
 {
     if (!healthy()) {
@@ -146,32 +158,32 @@ void AP_OADatabase::update()
     database_items_remove_all_expired();
 }
 
-// push a location into the database
+// 将位置信息推入数据库队列
 void AP_OADatabase::queue_push(const Vector3f &pos, uint32_t timestamp_ms, float distance)
 {
     if (!healthy()) {
         return;
     }
 
-    // check if this obstacle needs to be rejected from DB because of low altitude near home
+    // 检查此障碍物是否因为在家附近高度过低而需要被拒绝
 #if APM_BUILD_COPTER_OR_HELI
     if (!is_zero(_min_alt)) { 
         Vector3f current_pos;
         if (!AP::ahrs().get_relative_position_NED_home(current_pos)) {
-            // we do not know where the vehicle is
+            // 无法获取载具位置
             return;
         }
         if (current_pos.xy().length() < AP_OADATABASE_DISTANCE_FROM_HOME) {
-            // vehicle is within a small radius of home 
+            // 载具在家附近的小范围内
             if (-current_pos.z < _min_alt) {
-                // vehicle is below the minimum alt
+                // 载具低于最小高度
                 return;
             }
         }
     }
 #endif
     
-    // ignore objects that are far away
+    // 忽略太远的物体
     if ((_dist_max > 0.0f) && (distance > _dist_max)) {
         return;
     }
@@ -183,6 +195,7 @@ void AP_OADatabase::queue_push(const Vector3f &pos, uint32_t timestamp_ms, float
     }
 }
 
+// 初始化队列
 void AP_OADatabase::init_queue()
 {
     _queue.size = _queue_size_param;
@@ -192,12 +205,13 @@ void AP_OADatabase::init_queue()
 
     _queue.items = NEW_NOTHROW ObjectBuffer<OA_DbItem>(_queue.size);
     if (_queue.items != nullptr && _queue.items->get_size() == 0) {
-        // allocation failed
+        // 分配失败
         delete _queue.items;
         _queue.items = nullptr;
     }
 }
 
+// 初始化数据库
 void AP_OADatabase::init_database()
 {
     _database.size = _database_size_param;
@@ -208,8 +222,7 @@ void AP_OADatabase::init_database()
     _database.items = NEW_NOTHROW OA_DbItem[_database.size];
 }
 
-// get bitmask of gcs channels item should be sent to based on its importance
-// returns 0xFF (send to all channels) if should be sent, 0 if it should not be sent
+// 根据重要性获取应发送到GCS的通道位掩码
 uint8_t AP_OADatabase::get_send_to_gcs_flags(const OA_DbItemImportance importance)
 {
     switch (importance) {
@@ -234,18 +247,14 @@ uint8_t AP_OADatabase::get_send_to_gcs_flags(const OA_DbItemImportance importanc
     return 0x0;
 }
 
-// returns true when there's more work in the queue to do
+// 处理队列中的数据
 bool AP_OADatabase::process_queue()
 {
     if (!healthy()) {
         return false;
     }
 
-    // processing queue by moving those entries into the database
-    // Using a for with fixed size is better than while(!empty) because the
-    // while could get us stuck here longer than expected if we're getting
-    // a lot of values pushing into it while we're trying to empty it. With
-    // the for we know we will exit at an expected time
+    // 处理队列,将条目移入数据库
     const uint16_t queue_available = MIN(_queue.items->available(), 100U);
     if (queue_available == 0) {
         return false;
@@ -265,7 +274,7 @@ bool AP_OADatabase::process_queue()
 
         item.send_to_gcs = get_send_to_gcs_flags(item.importance);
 
-        // compare item to all items in database. If found a similar item, update the existing, else add it as a new one
+        // 将项目与数据库中的所有项目进行比较。如果找到类似项目,更新现有项目,否则添加为新项目
         bool found = false;
         for (uint16_t i=0; i<_database.count; i++) {
             if (is_close_to_item_in_database(i, item)) {
@@ -282,6 +291,7 @@ bool AP_OADatabase::process_queue()
     return (_queue.items->available() > 0);
 }
 
+// 向数据库添加项目
 void AP_OADatabase::database_item_add(const OA_DbItem &item)
 {
     if (_database.count >= _database.size) {
@@ -292,14 +302,15 @@ void AP_OADatabase::database_item_add(const OA_DbItem &item)
     _database.count++;
 }
 
+// 从数据库中移除项目
 void AP_OADatabase::database_item_remove(const uint16_t index)
 {
     if (index >= _database.count || _database.count == 0) {
-        // index out of range
+        // 索引超出范围
         return;
     }
 
-    // radius of 0 tells the GCS we don't care about it any more (aka it expired)
+    // 半径为0表示我们不再关心它(即已过期)
     _database.items[index].radius = 0;
     _database.items[index].send_to_gcs = get_send_to_gcs_flags(_database.items[index].importance);
 
@@ -309,16 +320,17 @@ void AP_OADatabase::database_item_remove(const uint16_t index)
     }
 
     if (index != _database.count) {
-        // copy last object in array over expired object
+        // 将数组中的最后一个对象复制到过期对象上
         _database.items[index] = _database.items[_database.count];
         _database.items[index].send_to_gcs = get_send_to_gcs_flags(_database.items[index].importance);
     }
 }
 
+// 刷新数据库中的项目
 void AP_OADatabase::database_item_refresh(const uint16_t index, const uint32_t timestamp_ms, const float radius)
 {
     if (index >= _database.count) {
-        // index out of range
+        // 索引超出范围
         return;
     }
 
@@ -327,21 +339,21 @@ void AP_OADatabase::database_item_refresh(const uint16_t index, const uint32_t t
             (timestamp_ms - _database.items[index].timestamp_ms >= 500);
 
     if (is_different) {
-        // update timestamp and radius on close object so it stays around longer
-        // and trigger resending to GCS
+        // 更新接近物体的时间戳和半径,使其停留更长时间
+        // 并触发重新发送到GCS
         _database.items[index].timestamp_ms = timestamp_ms;
         _database.items[index].radius = radius;
         _database.items[index].send_to_gcs = get_send_to_gcs_flags(_database.items[index].importance);
     }
 }
 
+// 移除所有过期的数据库项目
 void AP_OADatabase::database_items_remove_all_expired()
 {
-    // calculate age of all items in the _database
+    // 计算数据库中所有项目的年龄
 
     if (_database_expiry_seconds <= 0) {
-        // zero means never expire. This is not normal behavior but perhaps you could send a static
-        // environment once that you don't want to have to constantly update
+        // 零意味着永不过期。这不是正常行为,但也许你想发送一次静态环境,而不需要不断更新
         return;
     }
 
@@ -357,11 +369,11 @@ void AP_OADatabase::database_items_remove_all_expired()
     }
 }
 
-// returns true if a similar object already exists in database. When true, the object timer is also reset
+// 检查数据库中是否已存在类似对象。如果存在,对象计时器也会重置
 bool AP_OADatabase::is_close_to_item_in_database(const uint16_t index, const OA_DbItem &item) const
 {
     if (index >= _database.count) {
-        // index out of range
+        // 索引超出范围
         return false;
     }
 
@@ -370,10 +382,10 @@ bool AP_OADatabase::is_close_to_item_in_database(const uint16_t index, const OA_
 }
 
 #if HAL_GCS_ENABLED
-// send ADSB_VEHICLE mavlink messages
+// 发送ADSB_VEHICLE mavlink消息
 void AP_OADatabase::send_adsb_vehicle(mavlink_channel_t chan, uint16_t interval_ms)
 {
-    // ensure database's send_to_gcs field is large enough
+    // 确保数据库的send_to_gcs字段足够大
     static_assert(MAVLINK_COMM_NUM_BUFFERS <= sizeof(OA_DbItem::send_to_gcs) * 8,
                   "AP_OADatabase's OA_DBItem.send_to_gcs bitmask must be large enough to hold MAVLINK_COMM_NUM_BUFFERS");
 
@@ -384,7 +396,7 @@ void AP_OADatabase::send_adsb_vehicle(mavlink_channel_t chan, uint16_t interval_
     const uint8_t chan_as_bitmask = 1 << chan;
     const char callsign[9] = "OA_DB";
 
-    // calculate how many messages we should send
+    // 计算应该发送多少消息
     const uint32_t now_ms = AP_HAL::millis();
     uint16_t num_to_send = 1;
     uint16_t num_sent = 0;
@@ -394,16 +406,16 @@ void AP_OADatabase::send_adsb_vehicle(mavlink_channel_t chan, uint16_t interval_
     }
     _last_send_to_gcs_ms[chan] = now_ms;
 
-    // send unsent objects until output buffer is full or have sent enough
+    // 发送未发送的对象,直到输出缓冲区已满或已发送足够数量
     for (uint16_t i=0; i < _database.count; i++) {
         if (!HAVE_PAYLOAD_SPACE(chan, ADSB_VEHICLE) || (num_sent >= num_to_send)) {
-            // all done for now
+            // 暂时完成
             return;
         }
 
         const uint16_t idx = _next_index_to_send[chan];
 
-        // prepare to send next object
+        // 准备发送下一个对象
         _next_index_to_send[chan]++;
         if (_next_index_to_send[chan] >= _database.count) {
             _next_index_to_send[chan] = 0;
@@ -413,7 +425,7 @@ void AP_OADatabase::send_adsb_vehicle(mavlink_channel_t chan, uint16_t interval_
             continue;
         }
 
-        // convert object's position as an offset from EKF origin to Location
+        // 将对象位置从EKF原点的偏移转换为Location
         const Location item_loc(Vector3f(_database.items[idx].pos.x * 100.0f, _database.items[idx].pos.y * 100.0f, _database.items[idx].pos.z * 100.0f), Location::AltFrame::ABOVE_ORIGIN);
 
         mavlink_msg_adsb_vehicle_send(chan,
@@ -431,20 +443,20 @@ void AP_OADatabase::send_adsb_vehicle(mavlink_channel_t chan, uint16_t interval_
             0,                          // flags
             (uint16_t)(_database.items[idx].radius * 100.f));   // squawk
 
-        // unmark item for sending to gcs
+        // 取消标记要发送到gcs的项目
         _database.items[idx].send_to_gcs &= ~chan_as_bitmask;
 
-        // update highest index sent to GCS
+        // 更新发送到GCS的最高索引
         _highest_index_sent[chan] = MAX(idx, _highest_index_sent[chan]);
 
-        // update count sent
+        // 更新发送计数
         num_sent++;
     }
 
-    // clear expired items in case the database size shrank
+    // 清除过期项目,以防数据库大小缩小
     while (_highest_index_sent[chan] > _database.count) {
         if (!HAVE_PAYLOAD_SPACE(chan, ADSB_VEHICLE) || (num_sent >= num_to_send)) {
-            // all done for now
+            // 暂时完成
             return;
         }
 
@@ -470,13 +482,13 @@ void AP_OADatabase::send_adsb_vehicle(mavlink_channel_t chan, uint16_t interval_
             0,          // flags
             0);         // squawk
 
-        // update count sent
+        // 更新发送计数
         num_sent++;
     }
 }
 #endif  // HAL_GCS_ENABLED
 
-// singleton instance
+// 单例实例
 AP_OADatabase *AP_OADatabase::_singleton;
 
 namespace AP {

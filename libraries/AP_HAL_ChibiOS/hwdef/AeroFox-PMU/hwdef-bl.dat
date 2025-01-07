@@ -1,2 +1,6 @@
-include ../AeroFox-PMU/hwdef-bl.inc
+# 这是AeroFox-PMU电源管理单元的bootloader硬件定义文件
+# 该文件由chibios_pins.py脚本处理,用于配置硬件引脚和外设
 
+# 包含AeroFox-PMU的通用bootloader配置文件
+# 该文件包含了基本的硬件配置,如MCU型号、时钟、Flash等
+include ../AeroFox-PMU/hwdef-bl.inc

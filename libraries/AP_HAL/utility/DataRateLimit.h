@@ -17,10 +17,12 @@
 #include <AP_Common/AP_Common.h>
 
 // Returns the max number of bytes that can be sent since the last call given byte/s rate limit
+// 根据给定的字节/秒速率限制返回自上次调用以来可以发送的最大字节数
 class DataRateLimit {
 public:
+    // 计算在给定速率限制下可发送的最大字节数
     uint32_t max_bytes(const float bytes_per_sec);
 private:
-    uint32_t last_us;
-    float remainder;
+    uint32_t last_us;      // 上次调用的时间戳(微秒)
+    float remainder;       // 剩余的小数部分字节数
 };

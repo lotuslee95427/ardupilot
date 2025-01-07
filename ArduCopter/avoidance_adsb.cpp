@@ -2,9 +2,12 @@
 #include <AP_Notify/AP_Notify.h>
 
 #if HAL_ADSB_ENABLED
+// ADS-B避障功能更新函数
 void Copter::avoidance_adsb_update(void)
 {
+    // 更新ADS-B状态信息
     adsb.update();
+    // 更新ADS-B避障逻辑
     avoidance_adsb.update();
 }
 

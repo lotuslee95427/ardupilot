@@ -14,15 +14,19 @@
  *
  * Code by Andrew Tridgell and Siddharth Bharat Purohit
  */
+
+// 包含必要的头文件
 #include <AP_HAL/AP_HAL.h>
 #include "ch.h"
 #include "hal.h"
 #include <AP_Math/AP_Math.h>
 
+// 如果启用ADC且未禁用ADC驱动
 #if HAL_USE_ADC == TRUE && !defined(HAL_DISABLE_ADC_DRIVER)
 
 #include "AnalogIn.h"
 
+// 如果启用了IO MCU
 #if HAL_WITH_IO_MCU
 #include <AP_IOMCU/AP_IOMCU.h>
 extern AP_IOMCU iomcu;
@@ -30,29 +34,31 @@ extern AP_IOMCU iomcu;
 
 #include "hwdef/common/stm32_util.h"
 
-// MAVLink is included as we send a mavlink message as part of debug,
-// and also use the MAV_POWER flags below in update_power_flags
+// 包含MAVLink头文件用于调试和电源标志
 #include <GCS_MAVLink/GCS_MAVLink.h>
 
+// 如果未定义STM32_ADC_DUAL_MODE,则默认为FALSE
 #ifndef STM32_ADC_DUAL_MODE
 #define STM32_ADC_DUAL_MODE                 FALSE
 #endif
 
+// 调试开关
 #define ANLOGIN_DEBUGGING 0
 
-// base voltage scaling for 12 bit 3.3V ADC
+// 12位3.3V ADC的基准电压缩放
 #define VOLTAGE_SCALING (3.3f / ((1 << 12) - 1))
 
-// voltage divider is usually 1/(10/(20+10))
+// 电压分压器通常为1/(10/(20+10))
 #ifndef HAL_IOMCU_VSERVO_SCALAR
   #define HAL_IOMCU_VSERVO_SCALAR 3
 #endif
 
-// voltage divider is usually not present
+// 电压分压器通常不存在
 #ifndef HAL_IOMCU_VRSSI_SCALAR
   #define HAL_IOMCU_VRSSI_SCALAR 1
 #endif
 
+// 调试宏定义
 #if ANLOGIN_DEBUGGING
  # define Debug(fmt, args ...)  do {printf("%s:%d: " fmt "\n", __FUNCTION__, __LINE__, ## args); } while(0)
 #else
@@ -63,23 +69,22 @@ extern const AP_HAL::HAL& hal;
 
 using namespace ChibiOS;
 
-// special pins
+// 特殊引脚定义
 #define ANALOG_SERVO_VRSSI_PIN 103
 
-/*
-  scaling table between ADC count and actual input voltage, to account
-  for voltage dividers on the board.
- */
+// ADC引脚配置数组,用于存储引脚信息
 const AnalogIn::pin_info AnalogIn::pin_config[] = { HAL_ANALOG_PINS };
 
+// 如果定义了第二组ADC引脚
 #ifdef HAL_ANALOG2_PINS
     const AnalogIn::pin_info AnalogIn::pin_config_2[] = { HAL_ANALOG2_PINS };
     #define ADC2_GRP1_NUM_CHANNELS ARRAY_SIZE(AnalogIn::pin_config_2)
 #endif
 
+// 如果定义了第三组ADC引脚或启用了MCU监控
 #if defined(HAL_ANALOG3_PINS) || HAL_WITH_MCU_MONITORING
 #if HAL_WITH_MCU_MONITORING
-    // internal ADC channels (from H7 reference manual)
+    // 内部ADC通道定义(来自H7参考手册)
     #define ADC3_VSENSE_CHAN 18
     #define ADC3_VREFINT_CHAN 19
     #define ADC3_VBAT4_CHAN 17
@@ -94,27 +99,29 @@ const AnalogIn::pin_info AnalogIn::pin_config[] = { HAL_ANALOG_PINS };
     #define ADC3_GRP1_NUM_CHANNELS ARRAY_SIZE(AnalogIn::pin_config_3)
 #endif
 
+// 定义第一组ADC通道数量
 #define ADC_GRP1_NUM_CHANNELS   ARRAY_SIZE(AnalogIn::pin_config)
 
+// 根据不同的芯片型号设置ADC缩放系数
 #if defined(ADC_CFGR_RES_16BITS)
-// on H7 we use 16 bit ADC transfers, giving us more resolution. We
-// need to scale by 1/16 to match the 12 bit scale factors in hwdef.dat
+// H7系列使用16位ADC传输,需要除以16来匹配hwdef.dat中的12位缩放因子
 #define ADC_BOARD_SCALING (1.0/16)
 #else
 #define ADC_BOARD_SCALING 1
 #endif
 
-// samples filled in by ADC DMA engine
+// ADC DMA引擎填充的样本数组
 adcsample_t *AnalogIn::samples[];
 uint32_t *AnalogIn::sample_sum[];
 uint32_t AnalogIn::sample_count[];
 
+// 模拟源构造函数
 AnalogSource::AnalogSource(int16_t pin) :
     _pin(pin)
 {
 }
 
-
+// 读取平均值
 float AnalogSource::read_average()
 {
     WITH_SEMAPHORE(_semaphore);
@@ -131,17 +138,17 @@ float AnalogSource::read_average()
     return _value;
 }
 
+// 读取最新值
 float AnalogSource::read_latest()
 {
     return _latest_value;
 }
 
-/*
-  return scaling from ADC count to Volts
- */
+// 获取ADC计数到电压的缩放系数
 float AnalogSource::_pin_scaler(void)
 {
     float scaling = VOLTAGE_SCALING;
+    // 遍历所有ADC配置查找匹配的引脚
     for (uint8_t i=0; i<ADC_GRP1_NUM_CHANNELS; i++) {
         if (AnalogIn::pin_config[i].analog_pin == _pin && (_pin != ANALOG_INPUT_NONE)) {
             scaling = AnalogIn::pin_config[i].scaling;
@@ -167,32 +174,26 @@ float AnalogSource::_pin_scaler(void)
     return scaling;
 }
 
-/*
-  return voltage in Volts
- */
+// 返回平均电压值(单位:伏特)
 float AnalogSource::voltage_average()
 {
     return _pin_scaler() * read_average();
 }
 
-/*
-  return voltage in Volts, assuming a ratiometric sensor powered by
-  the 5V rail
- */
+// 返回比例电压值(单位:伏特),假设传感器由5V供电
 float AnalogSource::voltage_average_ratiometric()
 {
     voltage_average();
     return _pin_scaler() * _value_ratiometric;
 }
 
-/*
-  return voltage in Volts
- */
+// 返回最新电压值(单位:伏特)
 float AnalogSource::voltage_latest()
 {
     return _pin_scaler() * read_latest();
 }
 
+// 设置引脚
 bool AnalogSource::set_pin(uint8_t pin)
 {
     if (pin == ANALOG_INPUT_NONE) {
@@ -202,9 +203,11 @@ bool AnalogSource::set_pin(uint8_t pin)
         return true;
     }
     bool found_pin = false;
+    // 检查是否为RSSI引脚
     if (pin == ANALOG_SERVO_VRSSI_PIN) {
         found_pin = true;
     } else {
+        // 在所有ADC配置中查找匹配的引脚
         for (uint8_t i=0; i<ADC_GRP1_NUM_CHANNELS; i++) {
             if (AnalogIn::pin_config[i].analog_pin == pin) {
                 found_pin = true;
@@ -232,6 +235,7 @@ bool AnalogSource::set_pin(uint8_t pin)
         return false;
     }
 
+    // 重置所有值
     WITH_SEMAPHORE(_semaphore);
     _pin = pin;
     _sum_value = 0;
@@ -243,20 +247,18 @@ bool AnalogSource::set_pin(uint8_t pin)
     return true;
 }
 
-/*
-  apply a reading in ADC counts
- */
+// 添加一个ADC读数
 void AnalogSource::_add_value(float v, float vcc5V)
 {
     WITH_SEMAPHORE(_semaphore);
 
     _latest_value = v;
     _sum_value += v;
+    // 根据5V供电电压进行补偿
     if (vcc5V < 3.0f) {
         _sum_ratiometric += v;
     } else {
-        // this compensates for changes in the 5V rail relative to the
-        // 3.3V reference used by the ADC.
+        // 补偿5V供电相对于3.3V参考电压的变化
         _sum_ratiometric += v * 5.0f / vcc5V;
     }
     _sum_count++;
@@ -267,10 +269,7 @@ void AnalogSource::_add_value(float v, float vcc5V)
     }
 }
 
-
-/*
-  return the channel number
- */
+// 获取通道号
 uint8_t AnalogIn::get_pin_channel(uint8_t adc_index, uint8_t pin_index)
 {
     switch(adc_index) {
@@ -292,6 +291,7 @@ uint8_t AnalogIn::get_pin_channel(uint8_t adc_index, uint8_t pin_index)
     return 255;
 }
 
+// 获取模拟引脚号
 uint8_t AnalogIn::get_analog_pin(uint8_t adc_index, uint8_t pin_index)
 {
     switch(adc_index) {
@@ -309,9 +309,8 @@ uint8_t AnalogIn::get_analog_pin(uint8_t adc_index, uint8_t pin_index)
     osalDbgAssert(false, "invalid adc_index");
     return 255;
 }
-/*
-  return scaling
- */
+
+// 获取引脚缩放系数
 float AnalogIn::get_pin_scaling(uint8_t adc_index, uint8_t pin_index)
 {
     switch(adc_index) {
@@ -330,9 +329,7 @@ float AnalogIn::get_pin_scaling(uint8_t adc_index, uint8_t pin_index)
     return 0;
 }
 
-/*
-  callback from ADC driver when sample buffer is filled
- */
+// ADC驱动回调函数,当样本缓冲区填满时调用
 #if HAL_WITH_MCU_MONITORING
 static uint16_t min_vrefint, max_vrefint;
 #endif
@@ -352,13 +349,14 @@ void AnalogIn::adccallback(ADCDriver *adcp)
     {
         stm32_cacheBufferInvalidate(buffer, sizeof(uint16_t)*ADC_DMA_BUF_DEPTH*num_grp_channels);
     }
+    // 累加样本值
     for (uint8_t i = 0; i < ADC_DMA_BUF_DEPTH; i++) {
         for (uint8_t j = 0; j < num_grp_channels; j++) {
             sample_sum[index][j] += *buffer;
 
 #if HAL_WITH_MCU_MONITORING
             if (j == (num_grp_channels-1) && index == 2) {
-                // record min/max for MCU Vcc
+                // 记录MCU Vcc的最大最小值
                 if (min_vrefint == 0 ||
                     min_vrefint > *buffer) {
                     min_vrefint = *buffer;
@@ -372,7 +370,7 @@ void AnalogIn::adccallback(ADCDriver *adcp)
             buffer++;
 #if STM32_ADC_DUAL_MODE
             if (index == 0) {
-                // also sum the second ADC for dual mode
+                // 在双模式下也累加第二个ADC的值
                 sample_sum[1][j] += *buffer;
                 buffer++;
             } 
@@ -381,13 +379,14 @@ void AnalogIn::adccallback(ADCDriver *adcp)
     }
 #if STM32_ADC_DUAL_MODE
     if (index == 0) {
-        // also set the sample count for the second ADC for dual mode
+        // 在双模式下也设置第二个ADC的样本计数
         sample_count[1] += ADC_DMA_BUF_DEPTH;
     }
 #endif
     sample_count[index] += ADC_DMA_BUF_DEPTH;
 }
 
+// 获取ADC索引
 uint8_t AnalogIn::get_adc_index(ADCDriver* adcp)
 {
     if (adcp == &ADCD1) {
@@ -407,6 +406,7 @@ uint8_t AnalogIn::get_adc_index(ADCDriver* adcp)
     return 255;
 }
 
+// 获取ADC通道组数量
 uint8_t AnalogIn::get_num_grp_channels(uint8_t index)
 {
     switch (index) {
@@ -425,9 +425,7 @@ uint8_t AnalogIn::get_num_grp_channels(uint8_t index)
     return 0;
 }
 
-/*
-  setup adc peripheral to capture samples with DMA into a buffer
- */
+// 初始化ADC外设
 void AnalogIn::init()
 {
 #if STM32_ADC_DUAL_MODE
@@ -444,6 +442,7 @@ void AnalogIn::init()
 #endif
 }
 
+// 设置ADC
 void AnalogIn::setup_adc(uint8_t index)
 {
     uint8_t num_grp_channels = get_num_grp_channels(index);
@@ -451,13 +450,13 @@ void AnalogIn::setup_adc(uint8_t index)
         return;
     }
 
+    // 获取ADC驱动指针
     ADCDriver *adcp;
     switch (index) {
     case 0:
         adcp = &ADCD1;
         break;
-// if we are in dual mode then ADC2 is setup along with ADC1
-// so we don't need to setup ADC2 separately
+// 如果在双模式下,ADC2与ADC1一起设置,不需要单独设置ADC2
 #if defined(HAL_ANALOG2_PINS) && !STM32_ADC_DUAL_MODE
     case 1:
         adcp = &ADCD2;
@@ -473,52 +472,53 @@ void AnalogIn::setup_adc(uint8_t index)
     };
 
 #if STM32_ADC_DUAL_MODE
-    // In ADC Dual mode we use ADC_SAMPLE_SIZE as 32 bits for ADCs doing shared sampling, then we need to
-    // split the samples into two buffers at read time for other ADCs ChibiOS HAL uses 16 bit sample size
-    // so ADC_SAMPLE_SIZE is actually 16 bits for ADCs even though its set to 32 bits
+    // 在ADC双模式下,我们使用32位ADC_SAMPLE_SIZE用于共享采样的ADC,
+    // 然后在读取时需要将样本分成两个缓冲区
+    // 对于其他ADC,ChibiOS HAL使用16位样本大小
     if (index == 0) {
-        // we need to setup the second ADC as well
+        // 需要同时设置第二个ADC
         num_grp_channels = num_grp_channels * 2;
         samples[0] = (adcsample_t *)hal.util->malloc_type(sizeof(uint16_t)*ADC_DMA_BUF_DEPTH*num_grp_channels, AP_HAL::Util::MEM_DMA_SAFE);
         if (samples[0] == nullptr) {
-            // panic if we can't allocate memory
+            // 如果无法分配内存则panic
             goto failed_alloc;
         }
         sample_sum[0] = (uint32_t *)malloc(sizeof(uint32_t)*num_grp_channels);
         if (sample_sum[0] == nullptr) {
-            // panic if we can't allocate memory
+            // 如果无法分配内存则panic
             goto failed_alloc;
         }
         sample_sum[1] = (uint32_t *)malloc(sizeof(uint32_t)*num_grp_channels);  
         if (sample_sum[1] == nullptr) {
-            // panic if we can't allocate memory
+            // 如果无法分配内存则panic
             goto failed_alloc;
         }      
     } else {
         samples[index] = (adcsample_t *)hal.util->malloc_type(sizeof(uint16_t)*ADC_DMA_BUF_DEPTH*num_grp_channels, AP_HAL::Util::MEM_DMA_SAFE);
         if (samples[index] == nullptr) {
-            // panic if we can't allocate memory
+            // 如果无法分配内存则panic
             goto failed_alloc;
         }
         sample_sum[index] = (uint32_t *)malloc(sizeof(uint32_t)*num_grp_channels);
         if (sample_sum[index] == nullptr) {
-            // panic if we can't allocate memory
+            // 如果无法分配内存则panic
             goto failed_alloc;
         }
     }
 #else
     samples[index] = (adcsample_t *)hal.util->malloc_type(sizeof(adcsample_t)*ADC_DMA_BUF_DEPTH*num_grp_channels, AP_HAL::Util::MEM_DMA_SAFE);
     if (samples[index] == nullptr) {
-        // panic if we can't allocate memory
+        // 如果无法分配内存则panic
             goto failed_alloc;
     }
     sample_sum[index] = (uint32_t *)malloc(sizeof(uint32_t)*num_grp_channels);
     if (sample_sum[index] == nullptr) {
-        // panic if we can't allocate memory
+        // 如果无法分配内存则panic
             goto failed_alloc;
     }
 #endif
 
+    // 启动ADC
     adcStart(adcp, NULL);
 #if HAL_WITH_MCU_MONITORING
     if (index == 2) {
@@ -527,18 +527,19 @@ void AnalogIn::setup_adc(uint8_t index)
         adcSTM32EnableVBAT(&ADCD3);
     }
 #endif
+    // 设置ADC配置
     memset(&adcgrpcfg[index], 0, sizeof(adcgrpcfg[index]));
     adcgrpcfg[index].circular = true;
     adcgrpcfg[index].num_channels = num_grp_channels;
     adcgrpcfg[index].end_cb = adccallback;
 #if defined(ADC_CFGR_RES_16BITS)
-    // use 16 bit resolution
+    // 使用16位分辨率
     adcgrpcfg[index].cfgr = ADC_CFGR_CONT | ADC_CFGR_RES_16BITS;
 #elif defined(ADC_CFGR_RES_12BITS)
-    // use 12 bit resolution
+    // 使用12位分辨率
     adcgrpcfg[index].cfgr = ADC_CFGR_CONT | ADC_CFGR_RES_12BITS;
 #else
-    // use 12 bit resolution with ADCv1 or ADCv2
+    // 使用ADCv1或ADCv2的12位分辨率
     adcgrpcfg[index].sqr1 = ADC_SQR1_NUM_CH(num_grp_channels);
     adcgrpcfg[index].cr2 = ADC_CR2_SWSTART;
 #endif
@@ -549,9 +550,9 @@ void AnalogIn::setup_adc(uint8_t index)
         num_grp_channels /= 2;
     }
 #endif
+    // 设置每个通道的采样周期
     for (uint8_t i=0; i<num_grp_channels; i++) {
         uint8_t chan = get_pin_channel(index, i);
-        // setup cycles per sample for the channel
 #if defined(STM32H7)
         adcgrpcfg[index].pcsel |= (1<<chan);
         adcgrpcfg[index].smpr[chan/10] |= ADC_SMPR_SMP_384P5 << (3*(chan%10));
@@ -568,7 +569,7 @@ void AnalogIn::setup_adc(uint8_t index)
 #else
         adcgrpcfg[index].smpr[chan/10] |= ADC_SMPR_SMP_601P5 << (3*(chan%10));
 #endif
-        // setup channel sequence
+        // 设置通道序列
         if (i < 4) {
             adcgrpcfg[index].sqr[0] |= chan << (6*(i+1));
         } else if (i < 9) {
@@ -582,7 +583,7 @@ void AnalogIn::setup_adc(uint8_t index)
         } else {
             adcgrpcfg[index].smpr1 |= ADC_SAMPLE_480 << (3*(chan-10));
         }
-        // setup channel sequence
+        // 设置通道序列
         if (i < 6) {
             adcgrpcfg[index].sqr3 |= chan << (5*i);
         } else if (i < 12) {
@@ -593,13 +594,13 @@ void AnalogIn::setup_adc(uint8_t index)
 #endif
     }
 #if STM32_ADC_DUAL_MODE
-    // assert that ADC1 and ADC2 have the same number of channels
+    // 断言ADC1和ADC2具有相同数量的通道
     static_assert(ARRAY_SIZE(AnalogIn::pin_config) == ARRAY_SIZE(AnalogIn::pin_config_2), "ADC1 and ADC2 must have same num of channels");
 
     if (index == 0) {
         for (uint8_t i=0; i<num_grp_channels; i++) {
             uint8_t chan = get_pin_channel(1, i);
-            // setup cycles per sample for the channel
+            // 设置通道的采样周期
             adcgrpcfg[0].pcsel |= (1<<chan);
             adcgrpcfg[0].ssmpr[chan/10] |= ADC_SMPR_SMP_384P5 << (3*(chan%10));
             if (i < 4) {
@@ -613,15 +614,14 @@ void AnalogIn::setup_adc(uint8_t index)
     }
 #endif
 
+    // 启动ADC转换
     adcStartConversion(adcp, &adcgrpcfg[index], samples[index], ADC_DMA_BUF_DEPTH);
     return;
 failed_alloc:
     AP_HAL::panic("Failed to allocate ADC DMA buffer");
 }
 
-/*
-  calculate average sample since last read for all channels
- */
+// 计算所有通道自上次读取以来的平均样本
 void AnalogIn::read_adc(uint8_t index, uint32_t *val)
 {
     chSysLock();
@@ -630,14 +630,16 @@ void AnalogIn::read_adc(uint8_t index, uint32_t *val)
         chSysUnlock();
         return;
     }
+    // 计算平均值
     for (uint8_t i = 0; i < num_grp_channels; i++) {
         val[i] = sample_sum[index][i] / sample_count[index];
     }
+    // 清零累加值
     memset(sample_sum[index], 0, sizeof(uint32_t) * num_grp_channels);
     sample_count[index] = 0;
 #if HAL_WITH_MCU_MONITORING
     if (index == 2) {
-        // copy the min/max values of vrefint if we are reading ADC3
+        // 如果读取ADC3,复制vrefint的最小/最大值
         if (_mcu_vrefint_min == 0 ||
             _mcu_vrefint_min > min_vrefint) {
             _mcu_vrefint_min = min_vrefint;
@@ -646,10 +648,10 @@ void AnalogIn::read_adc(uint8_t index, uint32_t *val)
             _mcu_vrefint_max < max_vrefint) {
             _mcu_vrefint_max = max_vrefint;
         }
-        // also reset the min/max values
+        // 重置最小/最大值
         min_vrefint = 0;
         max_vrefint = 0;
-        // accumulate temperature and Vcc readings
+        // 累加温度和Vcc读数
         _mcu_monitor_temperature_accum += val[num_grp_channels - 2];
         _mcu_monitor_voltage_accum += val[num_grp_channels - 1];
         _mcu_monitor_sample_count++;
@@ -661,42 +663,55 @@ void AnalogIn::read_adc(uint8_t index, uint32_t *val)
 /*
   read the data from an ADC index
  */
+// 从指定的ADC索引读取数据
 void AnalogIn::timer_tick_adc(uint8_t index)
 {
+    // 获取该ADC组的通道数
     const uint8_t num_grp_channels = get_num_grp_channels(index);
+    // 创建缓冲区存储ADC读数
     uint32_t buf_adc[num_grp_channels];
 
     /* read all channels available on index ADC*/
+    // 读取该ADC所有可用通道的数据
     read_adc(index, buf_adc);
 
     // match the incoming channels to the currently active pins
+    // 将输入通道与当前活动的引脚匹配
     for (uint8_t i=0; i < num_grp_channels; i++) {
 #ifdef ANALOG_VCC_5V_PIN
+        // 如果是5V电源电压监测引脚
         if (get_analog_pin(index, i) == ANALOG_VCC_5V_PIN) {
             // record the Vcc value for later use in
             // voltage_average_ratiometric()
+            // 记录Vcc值,用于后续的比率计算
             _board_voltage = buf_adc[i] * get_pin_scaling(index, i) * ADC_BOARD_SCALING;
         }
 #endif
 #ifdef FMU_SERVORAIL_ADC_PIN
+        // 如果是舵机电源轨电压监测引脚
         if (get_analog_pin(index, i) == FMU_SERVORAIL_ADC_PIN) {
             _servorail_voltage = buf_adc[i] * get_pin_scaling(index, i) * ADC_BOARD_SCALING;
         }
 #endif
     }
 
+    // 遍历所有通道,处理ADC读数
     for (uint8_t i=0; i<num_grp_channels; i++) {
+        // 调试输出每个通道的ADC值
         Debug("adc%u chan %u value=%f\n",
               (unsigned)index+1,
               (unsigned)get_pin_channel(index, i),
               (float)buf_adc[i] * ADC_BOARD_SCALING * VOLTAGE_SCALING);
+        // 遍历所有模拟输入通道
         for (uint8_t j=0; j < ANALOG_MAX_CHANNELS; j++) {
             ChibiOS::AnalogSource *c = _channels[j];
             if (c != nullptr) {
+                // 如果是匹配的引脚,添加ADC读数
                 if ((get_analog_pin(index, i) == c->_pin) && (c->_pin != ANALOG_INPUT_NONE)) {
                     // add a value
                     c->_add_value(buf_adc[i] * ADC_BOARD_SCALING, _board_voltage);
                 } else if (c->_pin == ANALOG_SERVO_VRSSI_PIN) {
+                    // 如果是RSSI引脚,添加RSSI电压值
                     c->_add_value(_rssi_voltage / VOLTAGE_SCALING, 0);
                 }
             }
@@ -707,9 +722,11 @@ void AnalogIn::timer_tick_adc(uint8_t index)
 /*
   called at 1kHz
  */
+// 1kHz定时器回调函数
 void AnalogIn::_timer_tick(void)
 {
     // read adc at 100Hz
+    // 以100Hz的频率读取ADC
     uint32_t now = AP_HAL::micros();
     uint32_t delta_t = now - _last_run;
     if (delta_t < 10000) {
@@ -718,16 +735,19 @@ void AnalogIn::_timer_tick(void)
     _last_run = now;
 
     // update power status flags
+    // 更新电源状态标志
     update_power_flags();
 
 #if HAL_WITH_IO_MCU
     // handle special inputs from IOMCU
+    // 处理来自IOMCU的特殊输入
     _rssi_voltage = iomcu.get_vrssi_adc_count() * (VOLTAGE_SCALING *  HAL_IOMCU_VRSSI_SCALAR);
 #endif
 
     /*
       update each of our ADCs
      */
+    // 更新每个ADC
     timer_tick_adc(0);
 #if defined(HAL_ANALOG2_PINS)
     timer_tick_adc(1);
@@ -737,37 +757,46 @@ void AnalogIn::_timer_tick(void)
 #endif
 
 #if HAL_WITH_IO_MCU
+    // 从IOMCU获取舵机电源轨电压
     _servorail_voltage = iomcu.get_vservo_adc_count() * (VOLTAGE_SCALING * HAL_IOMCU_VSERVO_SCALAR);
 #endif
 
 #if HAL_WITH_MCU_MONITORING
     // 20Hz temperature and ref voltage
+    // 以20Hz的频率更新温度和参考电压
     static uint32_t last_mcu_temp_us;
     if (now - last_mcu_temp_us > 50000 &&
         hal.scheduler->is_system_initialized()) {
         last_mcu_temp_us = now;
 
         // factory calibration values
+        // 获取工厂校准值
         const float TS_CAL1 = *(const volatile uint16_t *)0x1FF1E820;
         const float TS_CAL2 = *(const volatile uint16_t *)0x1FF1E840;
         const float VREFINT_CAL = *(const volatile uint16_t *)0x1FF1E860;
 
+        // 计算MCU温度
         _mcu_temperature = ((110 - 30) / (TS_CAL2 - TS_CAL1)) * (float(_mcu_monitor_temperature_accum/_mcu_monitor_sample_count) - TS_CAL1) + 30;
+        // 计算MCU电压
         _mcu_voltage = 3.3 * VREFINT_CAL / float((_mcu_monitor_voltage_accum/_mcu_monitor_sample_count)+0.001);
+        // 清零累加器
         _mcu_monitor_voltage_accum = 0;
         _mcu_monitor_temperature_accum = 0;
         _mcu_monitor_sample_count = 0;
 
         // note min/max swap due to inversion
+        // 计算MCU电压的最小/最大值(注意由于反转关系需要交换)
         _mcu_voltage_min = 3.3 * VREFINT_CAL / float(_mcu_vrefint_max+0.001);
         _mcu_voltage_max = 3.3 * VREFINT_CAL / float(_mcu_vrefint_min+0.001);
     }
 #endif
 }
 
+// 创建新的模拟输入通道
 AP_HAL::AnalogSource* AnalogIn::channel(int16_t pin)
 {
     WITH_SEMAPHORE(_semaphore);
+    // 查找空闲通道并创建新的AnalogSource
     for (uint8_t j=0; j<ANALOG_MAX_CHANNELS; j++) {
         if (_channels[j] == nullptr) {
             _channels[j] = NEW_NOTHROW AnalogSource(pin);
@@ -782,6 +811,7 @@ AP_HAL::AnalogSource* AnalogIn::channel(int16_t pin)
 /*
   update power status flags
  */
+// 更新电源状态标志
 void AnalogIn::update_power_flags(void)
 {
     uint16_t flags = 0;
@@ -791,6 +821,7 @@ void AnalogIn::update_power_flags(void)
       active high, some active low. Use nVALID for active low, VALID
       for active high
     */
+    // 主电源有效引脚检测
 #if defined(HAL_GPIO_PIN_VDD_BRICK_VALID)
     if (palReadLine(HAL_GPIO_PIN_VDD_BRICK_VALID) == 1) {
         flags |= MAV_POWER_STATUS_BRICK_VALID;
@@ -809,6 +840,7 @@ void AnalogIn::update_power_flags(void)
       (as this was first added for older boards that used servo rail
       for backup power)
     */
+    // 备用电源有效引脚检测
 #if defined(HAL_GPIO_PIN_VDD_BRICK2_VALID)
     if (palReadLine(HAL_GPIO_PIN_VDD_BRICK_VALID) == 1) {
         flags |= MAV_POWER_STATUS_SERVO_VALID;
@@ -824,6 +856,7 @@ void AnalogIn::update_power_flags(void)
       VBUS. Some boards have both a valid pin and VBUS. The VBUS pin
       is an analog pin that could be used to read USB voltage.
      */
+    // USB电源检测
 #if defined(HAL_GPIO_PIN_VBUS_VALID)
     if (palReadLine(HAL_GPIO_PIN_VBUS_VALID) == 1) {
         flags |= MAV_POWER_STATUS_USB_CONNECTED;
@@ -841,6 +874,7 @@ void AnalogIn::update_power_flags(void)
     /*
       overcurrent on "high power" peripheral rail.
      */
+    // 高功率外设电源过流检测
 #if defined(HAL_GPIO_PIN_VDD_5V_HIPOWER_OC)
     if (palReadLine(HAL_GPIO_PIN_VDD_5V_HIPOWER_OC) == 1) {
         flags |= MAV_POWER_STATUS_PERIPH_HIPOWER_OVERCURRENT;
@@ -854,6 +888,7 @@ void AnalogIn::update_power_flags(void)
     /*
       overcurrent on main peripheral rail.
      */
+    // 主外设电源过流检测
 #if defined(HAL_GPIO_PIN_VDD_5V_PERIPH_OC)
     if (palReadLine(HAL_GPIO_PIN_VDD_5V_PERIPH_OC) == 1) {
         flags |= MAV_POWER_STATUS_PERIPH_OVERCURRENT;
@@ -893,12 +928,14 @@ void AnalogIn::update_power_flags(void)
     }
 #endif
 
+    // 检测电源状态变化
     if (_power_flags != 0 &&
         _power_flags != flags &&
         hal.util->get_soft_armed()) {
         // the power status has changed while armed
         flags |= MAV_POWER_STATUS_CHANGED;
     }
+    // 更新电源状态标志
     _accumulated_power_flags |= flags;
     _power_flags = flags;
 }

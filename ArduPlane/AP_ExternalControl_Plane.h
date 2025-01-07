@@ -1,6 +1,5 @@
-
 /*
-  external control library for plane
+  飞机外部控制库
  */
 #pragma once
 
@@ -13,7 +12,7 @@
 class AP_ExternalControl_Plane : public AP_ExternalControl {
 public:
     /*
-        Sets the target global position for a loiter point.
+      设置盘旋点的全球目标位置。
     */
     bool set_global_position(const Location& loc) override WARN_IF_UNUSED;
 };

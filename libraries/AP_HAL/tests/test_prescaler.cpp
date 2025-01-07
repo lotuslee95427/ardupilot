@@ -1,37 +1,44 @@
+// 包含所需的头文件
 #include <AP_gtest.h>
 #include <AP_HAL/HAL.h>
 #include <AP_HAL/RCOutput.h>
 
+// 获取HAL实例
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
+// 定义输出类型枚举
 enum Type {
-    DSHOT,
-    DSHOT_S,
-    NEOPIXEL,
-    NONE
+    DSHOT,      // 普通DSHOT协议
+    DSHOT_S,    // BLHeli_S DSHOT协议
+    NEOPIXEL,   // NeoPixel LED协议
+    NONE        // 其他类型
 };
 
+// 预分频器参数化测试夹具类
 class PrescalerParameterizedTestFixture :public ::testing::TestWithParam<uint32_t> {
 protected:
 
+    // 测试结果结构体
     struct TestResult {
         uint32_t clock, target, rate, prescaler;
         Type type;
     };
 
+    // 静态测试结果数组和索引
     static TestResult test_results[];
     static uint32_t test_index;
 
+    // 测试预分频器计算函数
     void test_prescaler(uint32_t clock, uint32_t target_rate, bool at_least_freq)
     {
         const uint32_t prescaler = AP_HAL::RCOutput::calculate_bitrate_prescaler(clock, target_rate, at_least_freq);
-        // we would like at most a 1% discrepancy in target versus actual
+        // 计算实际频率与目标频率的误差,期望误差不超过1%
         const float rate_delta = fabsf(float(clock / (prescaler + 1)) - target_rate) / target_rate;
-        // with low prescaler values accuracy is compromised
+        // 根据预分频值确定期望的误差范围
         const float expected_delta = prescaler == 2 ? 0.3 : prescaler >= 12 ? 0.03f : 0.09f;
         ::printf("Clock: %uMHz, Target: %uKHz, Rate: %uKHz, prescaler: %u, error: %.1f%%, at-least: %i\n",
                   clock/1000000, target_rate/1000, (clock/(prescaler+1))/1000, prescaler, rate_delta * 100.f, at_least_freq);
-        // assert the output of expected results
+        // 验证测试结果是否符合预期
         EXPECT_EQ(test_results[test_index].clock, clock);
         EXPECT_EQ(test_results[test_index].target, target_rate);
         EXPECT_EQ(test_results[test_index].rate, clock/(prescaler+1));
@@ -48,6 +55,7 @@ protected:
         }
     }
 
+    // 测试NeoPixel LED的预分频器计算
     void test_prescaler_neopixel(uint32_t clock)
     {
         const uint32_t target_rate = 800000 * AP_HAL::RCOutput::NEOP_BIT_WIDTH_TICKS;
@@ -57,9 +65,10 @@ protected:
         ::printf("NeoPixel Clock: %uMHz, Target: %uKHz, Rate: %uKHz, prescaler: %u\n",
                   clock/1000000, target_rate/1000, (clock/(prescaler+1))/1000, prescaler);
 
+        // 计算位时序宽度
         const float bit_1_width_us = 1000000.0f * AP_HAL::RCOutput::NEOP_BIT_1_TICKS / actual_rate;
         const float bit_0_width_us = 1000000.0f * AP_HAL::RCOutput::NEOP_BIT_0_TICKS / actual_rate;
-        // assert the output of expected results
+        // 验证测试结果
         EXPECT_EQ(test_results[test_index].clock, clock);
         EXPECT_EQ(test_results[test_index].target, target_rate);
         EXPECT_EQ(test_results[test_index].rate, clock/(prescaler+1));
@@ -67,13 +76,14 @@ protected:
         EXPECT_EQ(test_results[test_index].type, NEOPIXEL);
         test_index++;
 
-        // timing requirements from WS2812B spec
+        // 根据WS2812B规格验证时序要求
         EXPECT_TRUE(bit_1_width_us < (0.85f + 0.15f) && bit_1_width_us > (0.85f - 0.15f));
         EXPECT_TRUE(bit_0_width_us < (0.4f + 0.15f) && bit_0_width_us > (0.4f - 0.15f));
         EXPECT_TRUE((bit_0_width_us + bit_1_width_us) < (1.25f + 0.6f) && (bit_0_width_us + bit_1_width_us) > (1.25f - 0.6f));
     }
 };
 
+// 测试不同DSHOT速率
 TEST_P(PrescalerParameterizedTestFixture, DShot150) {
     test_prescaler(GetParam(), 150000 * AP_HAL::RCOutput::DSHOT_BIT_WIDTH_TICKS, false);
 }
@@ -90,18 +100,22 @@ TEST_P(PrescalerParameterizedTestFixture, DShot1200) {
     test_prescaler(GetParam(), 1200000 * AP_HAL::RCOutput::DSHOT_BIT_WIDTH_TICKS, false);
 }
 
+// 测试直通模式
 TEST_P(PrescalerParameterizedTestFixture, Passthrough) {
     test_prescaler(GetParam(), 19200 * 10, false);
 }
 
+// 测试NeoPixel LED
 TEST_P(PrescalerParameterizedTestFixture, NeoPixel) {
     test_prescaler_neopixel(GetParam());
 }
 
+// 测试ProfiLED
 TEST_P(PrescalerParameterizedTestFixture, ProfiLED) {
     test_prescaler(GetParam(), 1500000 * AP_HAL::RCOutput::NEOP_BIT_WIDTH_TICKS, false);
 }
 
+// 测试BLHeli_S的DSHOT速率
 TEST_P(PrescalerParameterizedTestFixture, DShot150_S) {
     test_prescaler(GetParam(), 150000 * AP_HAL::RCOutput::DSHOT_BIT_WIDTH_TICKS_S, true);
 }
@@ -118,7 +132,7 @@ TEST_P(PrescalerParameterizedTestFixture, DShot1200_S) {
     test_prescaler(GetParam(), 1200000 * AP_HAL::RCOutput::DSHOT_BIT_WIDTH_TICKS_S, true);
 }
 
-
+// 实例化测试用例,使用不同的时钟频率
 INSTANTIATE_TEST_CASE_P(
         prescaler_Test,
         PrescalerParameterizedTestFixture,
@@ -134,8 +148,10 @@ INSTANTIATE_TEST_CASE_P(
 
 AP_GTEST_MAIN()
 
+// 初始化测试索引
 uint32_t PrescalerParameterizedTestFixture::test_index = 0;
 
+// 预期的测试结果数组
 PrescalerParameterizedTestFixture::TestResult PrescalerParameterizedTestFixture::test_results[] = {
     { 200000000, 1200000, 1197604, 166, DSHOT },
     { 216000000, 1200000, 1200000, 179, DSHOT },
@@ -186,7 +202,7 @@ PrescalerParameterizedTestFixture::TestResult PrescalerParameterizedTestFixture:
     { 168000000, 12000000, 12000000, 13, NONE },
     { 50000000, 12000000, 12500000, 3, NONE },
     { 80000000, 12000000, 11428571, 6, NONE },
-    // BLHeli_S bitwidth 11
+    // BLHeli_S位宽11
     { 200000000, 1650000, 1652892, 120, DSHOT_S },
     { 216000000, 1650000, 1661538, 129, DSHOT_S },
     { 108000000, 1650000, 1661538, 64, DSHOT_S },

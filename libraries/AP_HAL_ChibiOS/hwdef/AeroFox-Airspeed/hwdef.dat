@@ -1,21 +1,30 @@
+# 包含F103系列外设通用硬件定义文件
 include ../f103-periph/hwdef.inc
 
-# board ID for firmware load
+# 开发板ID,用于固件校验和加载
 APJ_BOARD_ID 1077
 
+# 设置默认空速传感器使用I2C总线0
 define HAL_AIRSPEED_BUS_DEFAULT 0
 
-# 1 I2C-MS4525D0 sensor by default
+# 默认使用MS4525D0型号空速传感器(I2C接口)
 define HAL_AIRSPEED_TYPE_DEFAULT 1
+# 最大支持1个空速传感器
 define AIRSPEED_MAX_SENSORS 1
 
+# 启用空速传感器功能
 define HAL_PERIPH_ENABLE_AIRSPEED
+# 启用磁力计功能
 define HAL_PERIPH_ENABLE_MAG
+
+# 配置QMC5883L磁力计,I2C地址0x0D,需要180度横滚和90度偏航旋转校准
 COMPASS QMC5883L I2C:0:0x0D false ROTATION_ROLL_180_YAW_90
+
+# 配置4个RM3100磁力计,I2C地址分别为0x20-0x23,无需旋转校准
 COMPASS RM3100 I2C:0:0x20 false ROTATION_NONE
-COMPASS RM3100 I2C:0:0x21 false ROTATION_NONE
+COMPASS RM3100 I2C:0:0x21 false ROTATION_NONE 
 COMPASS RM3100 I2C:0:0x22 false ROTATION_NONE
 COMPASS RM3100 I2C:0:0x23 false ROTATION_NONE
 
+# 启用NCP5623 LED驱动,但不启用通知功能
 define HAL_PERIPH_ENABLE_NCP5623_LED_WITHOUT_NOTIFY
-

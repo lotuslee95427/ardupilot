@@ -15,6 +15,7 @@
  * Code by Andrew Tridgell and Siddharth Bharat Purohit
  */
 
+// 包含必要的头文件
 #include <hal.h>
 #include "GPIO.h"
 
@@ -30,6 +31,7 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_Math/AP_Math.h>
 
+// 使用ChibiOS命名空间
 using namespace ChibiOS;
 
 #if HAL_WITH_IO_MCU
@@ -37,21 +39,22 @@ using namespace ChibiOS;
 extern AP_IOMCU iomcu;
 #endif
 
-// GPIO pin table from hwdef.dat
+// 从hwdef.dat定义的GPIO引脚表结构体
 struct gpio_entry {
-    uint8_t pin_num;
-    bool enabled;
-    uint8_t pwm_num;
-    ioline_t pal_line;
-    AP_HAL::GPIO::irq_handler_fn_t fn; // callback for GPIO interface
-    thread_reference_t thd_wait;
-    bool is_input;
-    uint8_t mode;
-    uint16_t isr_quota;
-    uint8_t isr_disabled_ticks;
-    AP_HAL::GPIO::INTERRUPT_TRIGGER_TYPE isr_mode;
+    uint8_t pin_num;                                  // 引脚编号
+    bool enabled;                                     // 是否启用
+    uint8_t pwm_num;                                 // PWM通道号
+    ioline_t pal_line;                               // ChibiOS PAL线
+    AP_HAL::GPIO::irq_handler_fn_t fn;              // GPIO中断回调函数
+    thread_reference_t thd_wait;                     // 等待线程引用
+    bool is_input;                                   // 是否为输入引脚
+    uint8_t mode;                                    // 引脚模式
+    uint16_t isr_quota;                             // 中断配额
+    uint8_t isr_disabled_ticks;                      // 中断禁用计数
+    AP_HAL::GPIO::INTERRUPT_TRIGGER_TYPE isr_mode;   // 中断触发模式
 };
 
+// 如果定义了HAL_GPIO_PINS,则启用GPIO引脚
 #ifdef HAL_GPIO_PINS
 #define HAVE_GPIO_PINS 1
 static struct gpio_entry _gpio_tab[] = HAL_GPIO_PINS;
@@ -62,6 +65,7 @@ static struct gpio_entry _gpio_tab[] = HAL_GPIO_PINS;
 
 /*
   map a user pin number to a GPIO table entry
+  将用户引脚号映射到GPIO表项
  */
 static struct gpio_entry *gpio_by_pin_num(uint8_t pin_num, bool check_enabled=true)
 {
@@ -79,12 +83,15 @@ static struct gpio_entry *gpio_by_pin_num(uint8_t pin_num, bool check_enabled=tr
     return NULL;
 }
 
+// 中断回调函数声明
 static void pal_interrupt_cb(void *arg);
 static void pal_interrupt_cb_functor(void *arg);
 
+// GPIO类构造函数
 GPIO::GPIO()
 {}
 
+// GPIO初始化函数
 void GPIO::init()
 {
 #if !APM_BUILD_TYPE(APM_BUILD_iofirmware) && !defined(HAL_BOOTLOADER_BUILD)
@@ -92,6 +99,7 @@ void GPIO::init()
     uint8_t chan_offset = 0;
 #endif
 #if HAL_WITH_IO_MCU
+    // 如果启用了IO MCU,设置GPIO掩码
     if (AP_BoardConfig::io_enabled()) {
         uint8_t GPIO_mask = 0;
         for (uint8_t i=0; i<8; i++) {
@@ -103,7 +111,7 @@ void GPIO::init()
         chan_offset = 8;
     }
 #endif
-    // auto-disable pins being used for PWM output
+    // 自动禁用用于PWM输出的引脚
 #if HAVE_GPIO_PINS
     for (uint8_t i=0; i<ARRAY_SIZE(_gpio_tab); i++) {
         struct gpio_entry *g = &_gpio_tab[i];
@@ -119,22 +127,24 @@ void GPIO::init()
 }
 
 #ifdef HAL_PIN_ALT_CONFIG
-// chosen alternative config
+// 选择的替代配置
 uint8_t GPIO::alt_config;
 
 /*
   alternative config table, selected using BRD_ALT_CONFIG
+  使用BRD_ALT_CONFIG选择的替代配置表
  */
 static const struct alt_config {
-    uint8_t alternate;
-    uint16_t mode;
-    ioline_t line;
-    PERIPH_TYPE periph_type;
-    uint8_t periph_instance;
+    uint8_t alternate;        // 替代配置编号
+    uint16_t mode;           // 引脚模式
+    ioline_t line;           // ChibiOS PAL线
+    PERIPH_TYPE periph_type; // 外设类型
+    uint8_t periph_instance; // 外设实例
 } alternate_config[] HAL_PIN_ALT_CONFIG;
 
 /*
   change pin configuration based on ALT() lines in hwdef.dat
+  根据hwdef.dat中的ALT()行更改引脚配置
  */
 void GPIO::setup_alt_config(void)
 {
@@ -144,14 +154,14 @@ void GPIO::setup_alt_config(void)
     }
     alt_config = bc->get_alt_config();
     if (alt_config == 0) {
-        // use defaults
+        // 使用默认配置
         return;
     }
     for (uint8_t i=0; i<ARRAY_SIZE(alternate_config); i++) {
         const struct alt_config &alt = alternate_config[i];
         if (alt_config == alt.alternate) {
             if (alt.periph_type == PERIPH_TYPE::GPIO) {
-                // enable pin in GPIO table
+                // 在GPIO表中启用引脚
 #if HAVE_GPIO_PINS
                 for (uint8_t j=0; j<ARRAY_SIZE(_gpio_tab); j++) {
                     struct gpio_entry *g = &_gpio_tab[j];
@@ -173,33 +183,36 @@ void GPIO::setup_alt_config(void)
 #endif // HAL_PIN_ALT_CONFIG
 
 /*
-  resolve an ioline_t to take account of alternative
-  configurations. This allows drivers to get the right ioline_t for an
-  alternative config. Note that this may return 0, meaning the pin is
-  not mapped to this peripheral in the active config
+   resolve an ioline_t to take account of alternative
+   configurations. This allows drivers to get the right ioline_t for an
+   alternative config. Note that this may return 0, meaning the pin is
+   not mapped to this peripheral in the active config
+   
+   解析ioline_t以考虑替代配置。这允许驱动程序获取替代配置的正确ioline_t。
+   注意这可能返回0,表示在当前配置中该引脚未映射到此外设。
 */
 ioline_t GPIO::resolve_alt_config(ioline_t base, PERIPH_TYPE ptype, uint8_t instance)
 {
 #ifdef HAL_PIN_ALT_CONFIG
     if (alt_config == 0) {
-        // unchanged
+        // 保持不变
         return base;
     }
     for (uint8_t i=0; i<ARRAY_SIZE(alternate_config); i++) {
         const struct alt_config &alt = alternate_config[i];
         if (alt_config == alt.alternate) {
             if (ptype == alt.periph_type && instance == alt.periph_instance) {
-                // we've reconfigured this peripheral with a different line
+                // 我们已经用不同的线重新配置了这个外设
                 return alt.line;
             }
         }
     }
-    // now search for pins that have been configured off via BRD_ALT_CONFIG
+    // 现在搜索通过BRD_ALT_CONFIG配置关闭的引脚
     for (uint8_t i=0; i<ARRAY_SIZE(alternate_config); i++) {
         const struct alt_config &alt = alternate_config[i];
         if (alt_config == alt.alternate) {
             if (alt.line == base) {
-                // this line is no longer available in this config
+                // 在此配置中此线不再可用
                 return 0;
             }
         }
@@ -209,6 +222,7 @@ ioline_t GPIO::resolve_alt_config(ioline_t base, PERIPH_TYPE ptype, uint8_t inst
 }
 
 
+// 设置引脚模式(输入/输出)
 void GPIO::pinMode(uint8_t pin, uint8_t output)
 {
     struct gpio_entry *g = gpio_by_pin_num(pin);
@@ -216,13 +230,13 @@ void GPIO::pinMode(uint8_t pin, uint8_t output)
         if (!output && g->is_input &&
             (g->mode == PAL_MODE_INPUT_PULLUP ||
              g->mode == PAL_MODE_INPUT_PULLDOWN)) {
-            // already set
+            // 已经设置
             return;
         }
         g->mode = output?PAL_MODE_OUTPUT_PUSHPULL:PAL_MODE_INPUT;
 #if defined(STM32F7) || defined(STM32H7) || defined(STM32F4) || defined(STM32G4) || defined(STM32L4) || defined(STM32L4PLUS)
         if (g->mode == PAL_MODE_OUTPUT_PUSHPULL) {
-            // retain OPENDRAIN if already set
+            // 如果已设置则保留OPENDRAIN
             iomode_t old_mode = palReadLineMode(g->pal_line);
             if ((old_mode & PAL_MODE_OUTPUT_OPENDRAIN) == PAL_MODE_OUTPUT_OPENDRAIN) {
                 g->mode = PAL_MODE_OUTPUT_OPENDRAIN;
@@ -235,6 +249,7 @@ void GPIO::pinMode(uint8_t pin, uint8_t output)
 }
 
 
+// 读取引脚状态
 uint8_t GPIO::read(uint8_t pin)
 {
     struct gpio_entry *g = gpio_by_pin_num(pin);
@@ -249,12 +264,13 @@ uint8_t GPIO::read(uint8_t pin)
     return 0;
 }
 
+// 写入引脚状态
 void GPIO::write(uint8_t pin, uint8_t value)
 {
     struct gpio_entry *g = gpio_by_pin_num(pin);
     if (g) {
         if (g->is_input) {
-            // control pullup/pulldown
+            // 控制上拉/下拉
             g->mode = value==1?PAL_MODE_INPUT_PULLUP:PAL_MODE_INPUT_PULLDOWN;
             palSetLineMode(g->pal_line, g->mode);
         } else if (value == PAL_LOW) {
@@ -271,6 +287,7 @@ void GPIO::write(uint8_t pin, uint8_t value)
 #endif
 }
 
+// 切换引脚状态
 void GPIO::toggle(uint8_t pin)
 {
     struct gpio_entry *g = gpio_by_pin_num(pin);
@@ -286,6 +303,7 @@ void GPIO::toggle(uint8_t pin)
 }
 
 /* Alternative interface: */
+// 获取数字IO对象
 AP_HAL::DigitalSource* GPIO::channel(uint16_t pin)
 {
     struct gpio_entry *g = gpio_by_pin_num(pin);
@@ -305,6 +323,8 @@ extern const AP_HAL::HAL& hal;
 /*
    Attach an interrupt handler to a GPIO pin number. The pin number
    must be one specified with a GPIO() marker in hwdef.dat
+   
+   将中断处理程序附加到GPIO引脚号。引脚号必须在hwdef.dat中用GPIO()标记指定
  */
 bool GPIO::attach_interrupt(uint8_t pin,
                             irq_handler_fn_t fn,
@@ -329,12 +349,14 @@ bool GPIO::attach_interrupt(uint8_t pin,
 
 /*
    Attach an interrupt handler to ioline_t
+   将中断处理程序附加到ioline_t
  */
 bool GPIO::_attach_interrupt(ioline_t line, AP_HAL::Proc p, uint8_t mode)
 {
     return _attach_interrupt(line, palcallback_t(p?pal_interrupt_cb:nullptr), (void*)p, mode);
 }
 
+// 附加中断处理程序
 bool GPIO::attach_interrupt(uint8_t pin,
                             AP_HAL::Proc proc,
                             INTERRUPT_TRIGGER_TYPE mode) {
@@ -348,6 +370,7 @@ bool GPIO::attach_interrupt(uint8_t pin,
     return _attach_interrupt(g->pal_line, proc, mode);
 }
 
+// 在中断上下文中附加中断
 bool GPIO::_attach_interruptI(ioline_t line, palcallback_t cb, void *p, uint8_t mode)
 {
     uint32_t chmode = 0;
@@ -370,7 +393,7 @@ bool GPIO::_attach_interruptI(ioline_t line, palcallback_t cb, void *p, uint8_t 
 
     palevent_t *pep = pal_lld_get_line_event(line);
     if (pep->cb && p != nullptr) {
-        // the pad is already being used for a callback
+        // 该引脚已被用于回调
         return false;
     }
 
@@ -385,6 +408,7 @@ bool GPIO::_attach_interruptI(ioline_t line, palcallback_t cb, void *p, uint8_t 
     return true;
 }
 
+// 附加中断
 bool GPIO::_attach_interrupt(ioline_t line, palcallback_t cb, void *p, uint8_t mode)
 {
     osalSysLock();
@@ -393,51 +417,61 @@ bool GPIO::_attach_interrupt(ioline_t line, palcallback_t cb, void *p, uint8_t m
     return ret;
 }
 
+// 检查USB是否连接
 bool GPIO::usb_connected(void)
 {
     return _usb_connected;
 }
 
+// 数字IO源构造函数
 DigitalSource::DigitalSource(ioline_t _line) :
     line(_line)
 {}
 
+// 设置数字IO源模式
 void DigitalSource::mode(uint8_t output)
 {
     palSetLineMode(line, output);
 }
 
+// 读取数字IO源状态
 uint8_t DigitalSource::read()
 {
     return palReadLine(line);
 }
 
+// 写入数字IO源状态
 void DigitalSource::write(uint8_t value)
 {
     palWriteLine(line, value);
 }
 
+// 切换数字IO源状态
 void DigitalSource::toggle()
 {
     palToggleLine(line);
 }
 
 #if HAL_WITH_IO_MCU
+// IOMCU数字IO源构造函数
 IOMCU_DigitalSource::IOMCU_DigitalSource(uint8_t _pin) :
     pin(_pin)
 {}
 
+// 写入IOMCU数字IO源状态
 void IOMCU_DigitalSource::write(uint8_t value)
 {
     iomcu.write_GPIO(pin, value);
 }
 
+// 切换IOMCU数字IO源状态
 void IOMCU_DigitalSource::toggle()
 {
     iomcu.toggle_GPIO(pin);
 }
 #endif // HAL_WITH_IO_MCU
 
+// 中断回调函数
 static void pal_interrupt_cb(void *arg)
 {
     if (arg != nullptr) {
@@ -445,6 +479,7 @@ static void pal_interrupt_cb(void *arg)
     }
 }
 
+// 中断回调函数仿函数
 static void pal_interrupt_cb_functor(void *arg)
 {
     const uint32_t now = AP_HAL::micros();
@@ -463,6 +498,9 @@ static void pal_interrupt_cb_functor(void *arg)
           quota remaining drops to 1 without it being refreshed in
           timer_tick then we disable the interrupt source. This is to
           prevent CPU overload due to very high GPIO interrupt counts
+          
+          我们为此引脚启用了中断配额。如果剩余配额降至1且在timer_tick中未刷新,
+          则禁用中断源。这是为了防止由于GPIO中断计数过高而导致CPU过载
          */
         if (g->isr_quota == 1) {
             osalSysLockFromISR();
@@ -477,6 +515,7 @@ static void pal_interrupt_cb_functor(void *arg)
 
 /*
   handle interrupt from pin change for wait_pin()
+  处理wait_pin()的引脚变化中断
  */
 static void pal_interrupt_wait(void *arg)
 {
@@ -492,6 +531,7 @@ static void pal_interrupt_wait(void *arg)
 
 /*
   block waiting for a pin to change. Return true on pin change, false on timeout
+  阻塞等待引脚变化。引脚变化时返回true,超时返回false
 */
 bool GPIO::wait_pin(uint8_t pin, INTERRUPT_TRIGGER_TYPE mode, uint32_t timeout_us)
 {
@@ -502,7 +542,7 @@ bool GPIO::wait_pin(uint8_t pin, INTERRUPT_TRIGGER_TYPE mode, uint32_t timeout_u
 
     osalSysLock();
     if (g->thd_wait) {
-        // only allow single waiter
+        // 只允许单个等待者
         osalSysUnlock();
         return false;
     }
@@ -515,7 +555,7 @@ bool GPIO::wait_pin(uint8_t pin, INTERRUPT_TRIGGER_TYPE mode, uint32_t timeout_u
         return false;
     }
 
-    // don't allow for very long timeouts, or below the delta
+    // 不允许太长或太短的超时时间
     timeout_us = constrain_uint32(TIME_US2I(timeout_us), CH_CFG_ST_TIMEDELTA, TIME_US2I(30000U));
 
     msg_t msg = osalThreadSuspendTimeoutS(&g->thd_wait, timeout_us);
@@ -528,7 +568,7 @@ bool GPIO::wait_pin(uint8_t pin, INTERRUPT_TRIGGER_TYPE mode, uint32_t timeout_u
     return msg == MSG_OK;
 }
 
-// check if a pin number is valid
+// 检查引脚号是否有效
 bool GPIO::valid_pin(uint8_t pin) const
 {
     if (gpio_by_pin_num(pin) != nullptr) {
@@ -542,8 +582,8 @@ bool GPIO::valid_pin(uint8_t pin) const
     return false;
 }
 
-// return servo channel associated with GPIO pin.  Returns true on success and fills in servo_ch argument
-// servo_ch uses zero-based indexing
+// 返回与GPIO引脚关联的舵机通道。成功时返回true并填充servo_ch参数
+// servo_ch使用从零开始的索引
 bool GPIO::pin_to_servo_channel(uint8_t pin, uint8_t& servo_ch) const
 {
 #if HAL_WITH_IO_MCU || HAVE_GPIO_PINS
@@ -551,19 +591,19 @@ bool GPIO::pin_to_servo_channel(uint8_t pin, uint8_t& servo_ch) const
 #endif
 #if HAL_WITH_IO_MCU
     if (AP_BoardConfig::io_enabled()) {
-        // check if this is one of the main pins
+        // 检查这是否是主引脚之一
         uint8_t main_servo_ch = pin;
         if (iomcu.convert_pin_number(main_servo_ch)) {
             servo_ch = main_servo_ch;
             return true;
         }
-        // with IOMCU the local (FMU) channels start at 8
+        // 使用IOMCU时,本地(FMU)通道从8开始
         fmu_chan_offset = 8;
     }
 #endif
 
 #if HAVE_GPIO_PINS
-    // search _gpio_tab for matching pin
+    // 在_gpio_tab中搜索匹配的引脚
     for (uint8_t i=0; i<ARRAY_SIZE(_gpio_tab); i++) {
         if (_gpio_tab[i].pin_num == pin) {
             if (_gpio_tab[i].pwm_num == 0) {
@@ -579,7 +619,7 @@ bool GPIO::pin_to_servo_channel(uint8_t pin, uint8_t& servo_ch) const
 
 #if defined(STM32F7) || defined(STM32H7) || defined(STM32F4) || defined(STM32F3) || defined(STM32G4) || defined(STM32L4) || defined(STM32L4PLUS)
 
-// allow for save and restore of pin settings
+// 允许保存和恢复引脚设置
 bool GPIO::get_mode(uint8_t pin, uint32_t &mode)
 {
     auto *p = gpio_by_pin_num(pin);
@@ -603,55 +643,55 @@ void GPIO::set_mode(uint8_t pin, uint32_t mode)
 /*
   timer to setup interrupt quotas for a 100ms period from
   monitor thread
+  
+  从监视线程设置100ms周期的中断配额的定时器
 */
 void GPIO::timer_tick()
 {
-    // allow 100k interrupts/second max for GPIO interrupt sources, which is
-    // 10k per 100ms call to timer_tick()
+    // 允许GPIO中断源每秒最多100k次中断,即每100ms调用timer_tick()时10k次
 #if HAVE_GPIO_PINS
     const uint16_t quota = 10000U;
     for (uint8_t i=0; i<ARRAY_SIZE(_gpio_tab); i++) {
         if (_gpio_tab[i].isr_quota != 1) {
-            // Reset quota for next tick
+            // 为下一个tick重置配额
             _gpio_tab[i].isr_quota = quota;
             continue;
         }
-        // we ran out of ISR quota for this pin since the last
-        // check. This is not really an internal error, but we use
-        // INTERNAL_ERROR() to get the reporting mechanism
+        // 自上次检查以来此引脚的ISR配额已用完。
+        // 这不是真正的内部错误,但我们使用INTERNAL_ERROR()来获取报告机制
 
         if (_gpio_tab[i].isr_disabled_ticks == 0) {
 #ifndef HAL_NO_UARTDRIVER
             GCS_SEND_TEXT(MAV_SEVERITY_ERROR,"ISR flood on pin %u", _gpio_tab[i].pin_num);
 #endif
-            // Only trigger internal error if armed
+            // 仅在解锁时触发内部错误
             if (hal.util->get_soft_armed()) {
                 INTERNAL_ERROR(AP_InternalError::error_t::gpio_isr);
             }
         }
         if (hal.util->get_soft_armed()) {
-            // Don't start counting until disarmed
+            // 在解锁前不开始计数
             _gpio_tab[i].isr_disabled_ticks = 1;
             continue;
         }
 
-        // Increment disabled ticks, don't wrap
+        // 增加禁用计数,不要溢出
         if (_gpio_tab[i].isr_disabled_ticks < UINT8_MAX) {
             _gpio_tab[i].isr_disabled_ticks++;
         }
 
-        // 100 * 100ms = 10 seconds
+        // 100 * 100ms = 10秒
         const uint8_t ISR_retry_ticks = 100U;
         if ((_gpio_tab[i].isr_disabled_ticks > ISR_retry_ticks) && (_gpio_tab[i].fn != nullptr)) {
-            // Try re-enabling
+            // 尝试重新启用
 #ifndef HAL_NO_UARTDRIVER
             GCS_SEND_TEXT(MAV_SEVERITY_NOTICE, "Retrying pin %d after ISR flood", _gpio_tab[i].pin_num);
 #endif
             if (attach_interrupt(_gpio_tab[i].pin_num, _gpio_tab[i].fn, _gpio_tab[i].isr_mode)) {
-                // Success, reset quota
+                // 成功,重置配额
                 _gpio_tab[i].isr_quota = quota;
             } else {
-                // Failed, reset disabled count to try again later
+                // 失败,重置禁用计数以便稍后重试
                 _gpio_tab[i].isr_disabled_ticks = 1;
             }
         }
@@ -659,7 +699,7 @@ void GPIO::timer_tick()
 #endif // HAVE_GPIO_PINS
 }
 
-// Check for ISR floods
+// 检查ISR洪水
 bool GPIO::arming_checks(size_t buflen, char *buffer) const
 {
 #if HAVE_GPIO_PINS

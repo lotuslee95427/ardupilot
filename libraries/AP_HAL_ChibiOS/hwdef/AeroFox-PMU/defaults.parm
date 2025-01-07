@@ -1,20 +1,26 @@
-# up to 9 motors/servos
+# 这是AeroFox-PMU的默认参数配置文件
+# 最多支持9个电机/舵机输出
 
-OUT1_FUNCTION 33
-OUT2_FUNCTION 34
-OUT3_FUNCTION 35
-OUT4_FUNCTION 36
-OUT5_FUNCTION 51
-OUT6_FUNCTION 52
-OUT7_FUNCTION 53
-OUT8_FUNCTION 54
-OUT9_FUNCTION 55
+# 配置输出通道功能:
+# OUT1-4配置为电机1-4 (功能值33-36对应Motor1-4)
+OUT1_FUNCTION 33  # 电机1输出
+OUT2_FUNCTION 34  # 电机2输出  
+OUT3_FUNCTION 35  # 电机3输出
+OUT4_FUNCTION 36  # 电机4输出
 
-# DShot 600
-ESC_PWM_TYPE 7
-OUT_BLH_OTYPE 6
+# OUT5-9配置为舵机1-5 (功能值51-55对应Servo1-5)
+OUT5_FUNCTION 51  # 舵机1输出
+OUT6_FUNCTION 52  # 舵机2输出
+OUT7_FUNCTION 53  # 舵机3输出
+OUT8_FUNCTION 54  # 舵机4输出
+OUT9_FUNCTION 55  # 舵机5输出
 
+# 配置电调协议为DShot 600
+ESC_PWM_TYPE 7    # 设置PWM类型为DShot
+OUT_BLH_OTYPE 6   # 设置BLHeli输出类型为DShot600
+
+# 设置DShot输出掩码为15(0b1111),即前4个输出通道使用DShot协议
 OUT_BLH_MASK 15
 
-# DShot telem on RX1
-ESC_TELEM_PORT 0
+# 在串口RX1上启用DShot遥测反馈
+ESC_TELEM_PORT 0  # 设置电调遥测端口为0(RX1)

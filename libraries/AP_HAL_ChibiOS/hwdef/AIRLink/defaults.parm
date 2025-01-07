@@ -1,9 +1,9 @@
-# settings for battery monitoring
-BATT_MONITOR 4
-BATT_AMP_PERVLT 37.2300
-BATT_VOLT_MULT 18.4615
-BATT_AMP_OFFSET 0.63
+# 电池监测参数配置
+BATT_MONITOR 4                  # 电池监测类型为4,表示使用电压和电流监测
+BATT_AMP_PERVLT 37.2300        # 电流传感器的伏特/安培转换比例
+BATT_VOLT_MULT 18.4615         # 电压测量的分压比例系数
+BATT_AMP_OFFSET 0.63           # 电流传感器的零点偏移值
 
-# uart settings for mission computer
-SERIAL2_PROTOCOL 2
-SERIAL2_BAUD 921 
+# 任务计算机串口配置
+SERIAL2_PROTOCOL 2             # 串口2协议类型为2,表示MAVLink v2协议
+SERIAL2_BAUD 921              # 串口2波特率设置为921600

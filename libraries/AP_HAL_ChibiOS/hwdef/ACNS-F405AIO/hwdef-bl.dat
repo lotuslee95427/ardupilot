@@ -1,42 +1,47 @@
-# hw definition file for processing by chibios_pins.py
-# for F405AIO bootloader
+# 这是F405AIO飞控板的bootloader硬件定义文件
+# 该文件由chibios_pins.py脚本处理,用于配置硬件引脚
 
-# MCU class and specific type
+# MCU类型和具体型号
+# 使用STM32F4系列的STM32F405处理器
 MCU STM32F4xx STM32F405xx
 
-# board ID for firmware load
+# 开发板ID,用于固件校验
 APJ_BOARD_ID 1116
 
-# crystal frequency
-OSCILLATOR_HZ 16000000
+# 晶振频率配置
+OSCILLATOR_HZ 16000000  # 外部晶振频率为16MHz
 
-# bootloader is installed at zero offset
+# bootloader从Flash起始位置开始
 FLASH_RESERVE_START_KB 0
 
+# Flash总大小为1MB
 FLASH_SIZE_KB 1024
 
-# the location where the bootloader will put the firmware
+# 固件加载位置在64KB处
 FLASH_BOOTLOADER_LOAD_KB 64
 
-# order of UARTs
+# 串口顺序配置(包括USB)
 SERIAL_ORDER OTG1 USART1
 
-PA11 OTG_FS_DM OTG1
-PA12 OTG_FS_DP OTG1
+# USB引脚定义
+PA11 OTG_FS_DM OTG1    # USB D-引脚
+PA12 OTG_FS_DP OTG1    # USB D+引脚
 
-PA9 USART1_TX USART1
-PA10 USART1_RX USART1
+# USART1串口引脚定义
+PA9 USART1_TX USART1   # 发送引脚
+PA10 USART1_RX USART1  # 接收引脚
 
-#PC13 VBUS INPUT OPENDRAIN
+#PC13 VBUS INPUT OPENDRAIN  # USB电源检测引脚(未启用)
 
-PC14 LED_BOOTLOADER OUTPUT LOW GPIO(0)
-PA13 LED_ACTIVITY OUTPUT LOW GPIO(1) # optional
-define HAL_LED_ON 1
+# LED配置
+PC14 LED_BOOTLOADER OUTPUT LOW GPIO(0)  # bootloader状态指示LED
+PA13 LED_ACTIVITY OUTPUT LOW GPIO(1)    # 可选的活动状态LED
+define HAL_LED_ON 1                     # 定义LED点亮电平为高电平
 
-# Add CS pins to ensure they are high in bootloader
-PA4 GYRO1_CS CS
-PC3 GYRO2_CS CS
-PB12 MAG_CS CS
-PD2 SDCARD_CS CS
-PA14 FLASH_CS CS
-PA8 ESPI_CS CS
+# 传感器片选引脚定义(确保bootloader中为高电平)
+PA4 GYRO1_CS CS        # 陀螺仪1片选
+PC3 GYRO2_CS CS        # 陀螺仪2片选
+PB12 MAG_CS CS         # 磁力计片选
+PD2 SDCARD_CS CS       # SD卡片选
+PA14 FLASH_CS CS       # Flash存储器片选
+PA8 ESPI_CS CS         # 外部SPI设备片选

@@ -1,6 +1,7 @@
 /*
   DSM decoder, based on src/modules/px4iofirmware/dsm.c from PX4Firmware
   modified for use in AP_HAL_* by Andrew Tridgell
+  基于PX4Firmware中的DSM解码器,由Andrew Tridgell修改用于AP_HAL_*
  */
 /****************************************************************************
  *
@@ -40,11 +41,11 @@
 
 #include "dsm.h"
 
-#define DSM_FRAME_SIZE		16		/**<DSM frame size in bytes*/
-#define DSM_FRAME_CHANNELS	7		/**<Max supported DSM channels*/
+#define DSM_FRAME_SIZE		16		/**<DSM帧大小(字节)*/
+#define DSM_FRAME_CHANNELS	7		/**<最大支持的DSM通道数*/
 
-static uint64_t dsm_last_frame_time;		/**< Timestamp for start of last dsm frame */
-static unsigned dsm_channel_shift;			/**< Channel resolution, 0=unknown, 10=10 bit, 11=11 bit */
+static uint64_t dsm_last_frame_time;		/**< 上一帧DSM开始的时间戳 */
+static unsigned dsm_channel_shift;			/**< 通道分辨率, 0=未知, 10=10位, 11=11位 */
 
 //#define DEBUG
 
@@ -55,29 +56,28 @@ static unsigned dsm_channel_shift;			/**< Channel resolution, 0=unknown, 10=10 b
 #endif
 
 /**
- * Attempt to decode a single channel raw channel datum
+ * 尝试解码单个通道的原始数据
  *
- * The DSM* protocol doesn't provide any explicit framing,
- * so we detect dsm frame boundaries by the inter-dsm frame delay.
+ * DSM*协议没有提供任何显式的帧边界,
+ * 所以我们通过帧间延迟来检测DSM帧边界。
  *
- * The minimum dsm frame spacing is 11ms; with 16 bytes at 115200bps
- * dsm frame transmission time is ~1.4ms.
+ * 最小DSM帧间隔是11ms;以115200bps传输16字节
+ * DSM帧传输时间约为1.4ms。
  *
- * We expect to only be called when bytes arrive for processing,
- * and if an interval of more than 5ms passes between calls,
- * the first byte we read will be the first byte of a dsm frame.
+ * 我们期望只在字节到达需要处理时被调用,
+ * 如果两次调用间隔超过5ms,
+ * 我们读取的第一个字节将是DSM帧的第一个字节。
  *
- * In the case where byte(s) are dropped from a dsm frame, this also
- * provides a degree of protection. Of course, it would be better
- * if we didn't drop bytes...
+ * 在DSM帧丢失字节的情况下,这也提供了一定程度的保护。
+ * 当然,如果我们不丢失字节会更好...
  *
- * Upon receiving a full dsm frame we attempt to decode it
+ * 收到完整的DSM帧后我们尝试解码它
  *
- * @param[in] raw 16 bit raw channel value from dsm frame
- * @param[in] shift position of channel number in raw data
- * @param[out] channel pointer to returned channel number
- * @param[out] value pointer to returned channel value
- * @return true=raw value successfully decoded
+ * @param[in] raw DSM帧中16位原始通道值
+ * @param[in] shift 原始数据中通道号的位置
+ * @param[out] channel 返回的通道号指针
+ * @param[out] value 返回的通道值指针
+ * @return true=原始值成功解码
  */
 static bool
 dsm_decode_channel(uint16_t raw, unsigned shift, unsigned *channel, unsigned *value)
@@ -97,9 +97,9 @@ dsm_decode_channel(uint16_t raw, unsigned shift, unsigned *channel, unsigned *va
 }
 
 /**
- * Attempt to guess if receiving 10 or 11 bit channel values
+ * 尝试判断接收的是10位还是11位通道值
  *
- * @param[in] reset true=reset the 10/11 bit state to unknown
+ * @param[in] reset true=重置10/11位状态为未知
  */
 static void
 dsm_guess_format(bool reset, const uint8_t dsm_frame[16])
@@ -108,7 +108,7 @@ dsm_guess_format(bool reset, const uint8_t dsm_frame[16])
 	static uint32_t	cs11;
 	static unsigned samples;
 
-	/* reset the 10/11 bit sniffed channel masks */
+	/* 重置10/11位嗅探通道掩码 */
 	if (reset) {
 		cs10 = 0;
 		cs11 = 0;
@@ -117,46 +117,44 @@ dsm_guess_format(bool reset, const uint8_t dsm_frame[16])
 		return;
 	}
 
-	/* scan the channels in the current dsm_frame in both 10- and 11-bit mode */
+	/* 以10位和11位模式扫描当前DSM帧中的通道 */
 	for (unsigned i = 0; i < DSM_FRAME_CHANNELS; i++) {
 
 		const uint8_t *dp = &dsm_frame[2 + (2 * i)];
 		uint16_t raw = (dp[0] << 8) | dp[1];
 		unsigned channel, value;
 
-		/* if the channel decodes, remember the assigned number */
+		/* 如果通道解码成功,记住分配的编号 */
 		if (dsm_decode_channel(raw, 10, &channel, &value) && (channel < 31))
 			cs10 |= (1 << channel);
 
 		if (dsm_decode_channel(raw, 11, &channel, &value) && (channel < 31))
 			cs11 |= (1 << channel);
 
-		/* XXX if we cared, we could look for the phase bit here to decide 1 vs. 2-dsm_frame format */
+		/* XXX 如果我们关心,可以在这里查看相位位来决定1帧还是2帧格式 */
 	}
 
-	/* wait until we have seen plenty of frames - 5 should normally be enough */
+	/* 等待直到我们看到足够多的帧 - 通常5帧就足够了 */
 	if (samples++ < 5)
 		return;
 
 	/*
-	 * Iterate the set of sensible sniffed channel sets and see whether
-	 * decoding in 10 or 11-bit mode has yielded anything we recognize.
+	 * 遍历合理的嗅探通道集合,看看10位或11位模式的解码
+	 * 是否产生了我们认识的东西。
 	 *
-	 * XXX Note that due to what seem to be bugs in the DSM2 high-resolution
-	 *     stream, we may want to sniff for longer in some cases when we think we
-	 *     are talking to a DSM2 receiver in high-resolution mode (so that we can
-	 *     reject it, ideally).
-	 *     See e.g. http://git.openpilot.org/cru/OPReview-116 for a discussion
-	 *     of this issue.
+	 * XXX 注意由于DSM2高分辨率流中似乎存在bug,
+	 * 在某些情况下当我们认为我们在与DSM2接收机以高分辨率模式通信时,
+	 * 我们可能需要嗅探更长时间(以便我们可以理想地拒绝它)。
+	 * 参见例如 http://git.openpilot.org/cru/OPReview-116 中关于此问题的讨论
 	 */
 	static uint32_t masks[] = {
-		0x3f,	/* 6 channels (DX6) */
-		0x7f,	/* 7 channels (DX7) */
-		0xff,	/* 8 channels (DX8) */
-		0x1ff,	/* 9 channels (DX9, etc.) */
-		0x3ff,	/* 10 channels (DX10) */
-		0x1fff,	/* 13 channels (DX10t) */
-		0x3fff	/* 18 channels (DX10) */
+		0x3f,	/* 6个通道 (DX6) */
+		0x7f,	/* 7个通道 (DX7) */
+		0xff,	/* 8个通道 (DX8) */
+		0x1ff,	/* 9个通道 (DX9等) */
+		0x3ff,	/* 10个通道 (DX10) */
+		0x1fff,	/* 13个通道 (DX10t) */
+		0x3fff	/* 18个通道 (DX10) */
 	};
 	unsigned votes10 = 0;
 	unsigned votes11 = 0;
@@ -182,13 +180,13 @@ dsm_guess_format(bool reset, const uint8_t dsm_frame[16])
 		return;
 	}
 
-	/* call ourselves to reset our state ... we have to try again */
+	/* 调用自身重置状态...我们必须重试 */
 	debug("DSM: format detect fail, 10: 0x%08x %u 11: 0x%08x %u", cs10, votes10, cs11, votes11);
 	dsm_guess_format(true, dsm_frame);
 }
 
 /**
- * Decode the entire dsm frame (all contained channels)
+ * 解码整个DSM帧(所有包含的通道)
  *
  */
 bool
@@ -200,30 +198,26 @@ dsm_decode(uint64_t frame_time, const uint8_t dsm_frame[16], uint16_t *values, u
 		dsm_frame[8], dsm_frame[9], dsm_frame[10], dsm_frame[11], dsm_frame[12], dsm_frame[13], dsm_frame[14], dsm_frame[15]);
 	*/
 	/*
-	 * If we have lost signal for at least a second, reset the
-	 * format guessing heuristic.
+	 * 如果我们至少一秒钟没有信号,重置格式猜测启发式
 	 */
 	if (((frame_time - dsm_last_frame_time) > 1000000) && (dsm_channel_shift != 0))
             dsm_guess_format(true, dsm_frame);
 
-	/* we have received something we think is a dsm_frame */
+	/* 我们收到了一些我们认为是DSM帧的东西 */
 	dsm_last_frame_time = frame_time;
 
-	/* if we don't know the dsm_frame format, update the guessing state machine */
+	/* 如果我们不知道帧格式,更新猜测状态机 */
 	if (dsm_channel_shift == 0) {
             dsm_guess_format(false, dsm_frame);
             return false;
 	}
 
 	/*
-	 * The encoding of the first two bytes is uncertain, so we're
-	 * going to ignore them for now.
+	 * 前两个字节的编码不确定,所以我们暂时忽略它们。
 	 *
-	 * Each channel is a 16-bit unsigned value containing either a 10-
-	 * or 11-bit channel value and a 4-bit channel number, shifted
-	 * either 10 or 11 bits. The MSB may also be set to indicate the
-	 * second dsm_frame in variants of the protocol where more than
-	 * seven channels are being transmitted.
+	 * 每个通道是一个16位无符号值,包含10位或11位通道值
+	 * 和4位通道号,左移10位或11位。MSB也可能被设置
+	 * 以指示协议变体中的第二帧,其中传输超过7个通道。
 	 */
 
 	for (unsigned i = 0; i < DSM_FRAME_CHANNELS; i++) {
@@ -235,40 +229,37 @@ dsm_decode(uint64_t frame_time, const uint8_t dsm_frame[16], uint16_t *values, u
 		if (!dsm_decode_channel(raw, dsm_channel_shift, &channel, &value))
 			continue;
 
-		/* ignore channels out of range */
+		/* 忽略超出范围的通道 */
 		if (channel >= max_values)
 			continue;
 
-		/* update the decoded channel count */
+		/* 更新解码的通道计数 */
 		if (channel >= *num_values)
 			*num_values = channel + 1;
 
-		/* convert 0-1024 / 0-2048 values to 1000-2000 ppm encoding. */
+		/* 将0-1024 / 0-2048值转换为1000-2000 ppm编码。 */
 		if (dsm_channel_shift == 10)
 			value *= 2;
 
 		/*
-		 * Spektrum scaling is special. There are these basic considerations
+		 * Spektrum缩放是特殊的。有这些基本考虑:
 		 *
-		 *   * Midpoint is 1520 us
-		 *   * 100% travel channels are +- 400 us
+		 *   * 中点是1520 us
+		 *   * 100%行程通道是±400 us
 		 *
-		 * We obey the original Spektrum scaling (so a default setup will scale from
-		 * 1100 - 1900 us), but we do not obey the weird 1520 us center point
-		 * and instead (correctly) center the center around 1500 us. This is in order
-		 * to get something useful without requiring the user to calibrate on a digital
-		 * link for no reason.
+		 * 我们遵循原始的Spektrum缩放(因此默认设置将从1100-1900 us缩放),
+		 * 但我们不遵循奇怪的1520 us中心点,而是(正确地)将中心点设在1500 us周围。
+		 * 这是为了在不需要用户在数字链路上校准的情况下获得有用的东西。
 		 */
 
-		/* scaled integer for decent accuracy while staying efficient */
+		/* 缩放整数以获得良好的精度同时保持效率 */
 		value = ((((int)value - 1024) * 1000) / 1700) + 1500;
 
 		/*
-		 * Store the decoded channel into the R/C input buffer, taking into
-		 * account the different ideas about channel assignement that we have.
+		 * 将解码的通道存储到R/C输入缓冲区中,考虑到我们对通道分配的不同想法。
 		 *
-		 * Specifically, the first four channels in rc_channel_data are roll, pitch, thrust, yaw,
-		 * but the first four channels from the DSM receiver are thrust, roll, pitch, yaw.
+		 * 具体来说,rc_channel_data中的前四个通道是横滚、俯仰、油门、偏航,
+		 * 但来自DSM接收机的前四个通道是油门、横滚、俯仰、偏航。
 		 */
 		switch (channel) {
 		case 0:
@@ -291,23 +282,23 @@ dsm_decode(uint64_t frame_time, const uint8_t dsm_frame[16], uint16_t *values, u
 	}
 
 	/*
-	 * Spektrum likes to send junk in higher channel numbers to fill
-	 * their packets. We don't know about a 13 channel model in their TX
-	 * lines, so if we get a channel count of 13, we'll return 12 (the last
-	 * data index that is stable).
+	 * Spektrum喜欢在更高的通道号中发送垃圾数据来填充它们的数据包。
+	 * 我们不知道他们的发射机系列中有13通道的型号,
+	 * 所以如果我们得到13个通道的计数,我们将返回12
+	 * (最后一个稳定的数据索引)。
 	 */
 	if (*num_values == 13)
 		*num_values = 12;
 
 #if 0
 	if (dsm_channel_shift == 11) {
-		/* Set the 11-bit data indicator */
+		/* 设置11位数据指示器 */
 		*num_values |= 0x8000;
 	}
 #endif
 
 	/*
-	 * XXX Note that we may be in failsafe here; we need to work out how to detect that.
+	 * XXX 注意我们可能在这里处于故障保护状态;我们需要弄清楚如何检测到这一点。
 	 */
 	return true;
 }
@@ -319,7 +310,7 @@ static enum DSM_DECODE_STATE {
 	DSM_DECODE_STATE_DESYNC = 0,
 	DSM_DECODE_STATE_SYNC
 } dsm_decode_state = DSM_DECODE_STATE_DESYNC;
-static uint64_t dsm_last_rx_time;            /**< Timestamp when we last received data */
+static uint64_t dsm_last_rx_time;            /**< 上次接收数据的时间戳 */
 static uint16_t dsm_chan_count;
 static uint16_t dsm_frame_drops;
 
@@ -328,15 +319,13 @@ dsm_parse(uint64_t now, uint8_t *frame, unsigned len, uint16_t *values,
 	  uint16_t *num_values, bool *dsm_11_bit, unsigned *frame_drops, uint16_t max_channels)
 {
 
-	/* this is set by the decoding state machine and will default to false
-	 * once everything that was decodable has been decoded.
-	 */
+	/* 这由解码状态机设置,一旦所有可解码的内容都被解码后将默认为false */
 	bool decode_ret = false;
 
-	/* keep decoding until we have consumed the buffer */
+	/* 继续解码直到我们消耗完缓冲区 */
 	for (unsigned d = 0; d < len; d++) {
 
-		/* overflow check */
+		/* 溢出检查 */
 		if (dsm_partial_frame_count == sizeof(dsm_frame) / sizeof(dsm_frame[0])) {
 			dsm_partial_frame_count = 0;
 			dsm_decode_state = DSM_DECODE_STATE_DESYNC;
@@ -366,7 +355,7 @@ dsm_parse(uint64_t now, uint8_t *frame, unsigned len, uint16_t *values,
 		switch (dsm_decode_state) {
 		case DSM_DECODE_STATE_DESYNC:
 
-			/* we are de-synced and only interested in the frame marker */
+			/* 我们处于去同步状态,只对帧标记感兴趣 */
 			if ((now - dsm_last_rx_time) > 5000) {
 				printf("resync %u\n", dsm_partial_frame_count);
 				dsm_decode_state = DSM_DECODE_STATE_SYNC;
@@ -380,14 +369,13 @@ dsm_parse(uint64_t now, uint8_t *frame, unsigned len, uint16_t *values,
 		case DSM_DECODE_STATE_SYNC: {
 				dsm_frame[dsm_partial_frame_count++] = frame[d];
 
-				/* decode whatever we got and expect */
+				/* 解码我们得到和期望的任何内容 */
 				if (dsm_partial_frame_count < DSM_FRAME_SIZE) {
 					break;
 				}
 
 				/*
-				 * Great, it looks like we might have a frame.  Go ahead and
-				 * decode it.
+				 * 很好,看起来我们可能有一帧。继续解码它。
 				 */
 				decode_ret = dsm_decode(now, dsm_frame, values, &dsm_chan_count, max_channels);
 
@@ -400,10 +388,10 @@ dsm_parse(uint64_t now, uint8_t *frame, unsigned len, uint16_t *values,
 #endif
 	
                                 
-				/* we consumed the partial frame, reset */
+				/* 我们消耗了部分帧,重置 */
 				dsm_partial_frame_count = 0;
 
-				/* if decoding failed, set proto to desync */
+				/* 如果解码失败,将协议设置为去同步 */
 				if (decode_ret == false) {
 					dsm_decode_state = DSM_DECODE_STATE_DESYNC;
 					dsm_frame_drops++;
@@ -436,7 +424,7 @@ dsm_parse(uint64_t now, uint8_t *frame, unsigned len, uint16_t *values,
 
 	dsm_last_rx_time = now;
 
-	/* return false as default */
+	/* 默认返回false */
 	return decode_ret;
 }
 #endif
@@ -444,7 +432,7 @@ dsm_parse(uint64_t now, uint8_t *frame, unsigned len, uint16_t *values,
 
 #ifdef TEST_MAIN_PROGRAM
 /*
-  test harness for use under Linux with USB serial adapter
+  测试工具,用于在Linux下使用USB串口适配器
  */
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -505,7 +493,7 @@ int main(int argc, const char *argv[])
         tv.tv_sec = 1;
         tv.tv_usec = 0;
 
-        // check if any bytes are available
+        // 检查是否有可用字节
         if (select(fd+1, &fds, nullptr, nullptr, &tv) != 1) {
             break;
         }
@@ -531,7 +519,7 @@ int main(int argc, const char *argv[])
 }
 #elif defined(TEST_HEX_STRING)
 /*
-  test harness providing hex string to decode
+  测试工具,提供十六进制字符串进行解码
  */
 #include <string.h>
 

@@ -2,6 +2,7 @@
 
 '''
 extract ISBH and ISBD messages from AP_Logging files and produce C++ arrays for consumption by the DSP subsystem
+从AP_Logging文件中提取ISBH和ISBD消息,并生成C++数组供DSP子系统使用
 '''
 from __future__ import print_function
 
@@ -13,6 +14,7 @@ import numpy
 
 from argparse import ArgumentParser
 
+# 创建命令行参数解析器
 parser = ArgumentParser(description=__doc__)
 parser.add_argument("--condition", default=None, help="select packets by condition")
 parser.add_argument("logs", metavar="LOG", nargs="+")
@@ -27,6 +29,7 @@ def isb_parser(logfile):
     '''object to store data about a single FFT plot'''
     class ISBData(object):
         def __init__(self, ffth):
+            # 初始化FFT数据对象
             self.seqno = -1
             self.fftnum = ffth.N
             self.sensor_type = ffth.type
@@ -41,6 +44,7 @@ def isb_parser(logfile):
             self.freq = None
 
         def add_isb(self, fftd):
+            # 添加ISB数据
             if fftd.N != self.fftnum:
                 print("Skipping ISBD with wrong fftnum (%u vs %u)\n" % (fftd.fftnum, self.fftnum), file=sys.stderr)
                 return
@@ -57,6 +61,7 @@ def isb_parser(logfile):
             self.data["Z"].extend(fftd.z)
 
         def prefix(self):
+            # 返回传感器类型前缀
             if self.sensor_type == 0:
                 return "Accel"
             elif self.sensor_type == 1:
@@ -70,6 +75,7 @@ def isb_parser(logfile):
         def __str__(self):
             return "%s[%u]" % (self.prefix(), self.instance)
 
+    # 打开日志文件
     mlog = mavutil.mavlink_connection(logfile)
 
     isb_frames = []
@@ -77,6 +83,7 @@ def isb_parser(logfile):
     msgcount = 0
     start_time = time.time()
     while True:
+        # 读取日志消息
         m = mlog.recv_match(condition=args.condition)
         if m is None:
             break
@@ -104,6 +111,7 @@ def isb_parser(logfile):
     sample_rates = {}
     counts = {}
 
+    # 生成C++代码
     print("#include \"GyroFrame.h\"")
     print("const uint32_t NUM_FRAMES = %d;" % len(isb_frames))
     print("const GyroFrame gyro_frames[] = {")

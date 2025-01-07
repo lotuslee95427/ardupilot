@@ -1,18 +1,14 @@
 /*
  * Copyright (C) 2015-2016  Intel Corporation. All rights reserved.
  *
- * This file is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * 本文件是自由软件：您可以根据自由软件基金会发布的GNU通用公共许可证的条款
+ * 重新分发和/或修改它，可以选择使用许可证的第3版或更高版本。
  *
- * This file is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
+ * 本文件的发布是希望它能够有用，但不提供任何保证；甚至不保证它的
+ * 适销性或适合特定用途。详细信息请参见GNU通用公共许可证。
  *
- * You should have received a copy of the GNU General Public License along
- * with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * 您应该已经收到了GNU通用公共许可证的副本。如果没有，
+ * 请访问 <http://www.gnu.org/licenses/>。
  */
 #pragma once
 
@@ -24,75 +20,94 @@
 
 namespace AP_HAL {
 
+// I2CDevice类 - 定义了I2C设备的基本接口
 class I2CDevice : public Device {
 public:
+    // 构造函数，设置设备类型为I2C
     I2CDevice() : Device(BUS_TYPE_I2C) { }
 
+    // 虚析构函数
     virtual ~I2CDevice() { }
 
-    /* Device implementation */
+    /* 设备接口实现 */
 
-    /* See Device::set_speed() */
+    // 设置设备通信速度
     virtual bool set_speed(Device::Speed speed) override = 0;
 
-    /* See Device::transfer() */
+    // 执行数据传输：发送和接收数据
     virtual bool transfer(const uint8_t *send, uint32_t send_len,
                           uint8_t *recv, uint32_t recv_len) override = 0;
 
     /*
-     * Read location from device multiple times, advancing the buffer each
-     * time
+     * 多次读取设备寄存器
+     * @param first_reg: 起始寄存器地址
+     * @param recv: 接收数据缓冲区
+     * @param recv_len: 每次接收的数据长度
+     * @param times: 读取次数
      */
     virtual bool read_registers_multiple(uint8_t first_reg, uint8_t *recv,
                                          uint32_t recv_len, uint8_t times) = 0;
 
-    /* See Device::get_semaphore() */
+    // 获取信号量，用于多线程同步
     virtual Semaphore *get_semaphore() override = 0;
 
-    /* See Device::register_periodic_callback() */
+    // 注册周期性回调函数
     virtual Device::PeriodicHandle register_periodic_callback(
         uint32_t period_usec, Device::PeriodicCb) override = 0;
 
-    /* See Device::adjust_periodic_callback() */
+    // 调整周期性回调函数的时间间隔
     virtual bool adjust_periodic_callback(
         Device::PeriodicHandle h, uint32_t period_usec) override = 0;
 
     /*
-     * Force I2C transfers to be split between send and receive parts, with a
-     * stop condition between them. Setting this allows to conveniently
-     * continue using the read_* and transfer() methods on those devices.
+     * 强制I2C传输在发送和接收部分之间分离，并在它们之间插入停止条件。
+     * 这允许在这些设备上继续方便地使用read_*和transfer()方法。
      *
-     * Some platforms may have transfers always split, in which case
-     * this method is not needed.
+     * 某些平台可能始终进行分离传输，在这种情况下不需要此方法。
      */
     virtual void set_split_transfers(bool set) {};
 };
 
+// I2C设备管理器类 - 负责管理和创建I2C设备实例
 class I2CDeviceManager {
 public:
-    /* Get a device handle */
+    /* 
+     * 获取设备句柄
+     * @param bus: 总线号
+     * @param address: 设备地址
+     * @param bus_clock: 总线时钟频率(默认400kHz)
+     * @param use_smbus: 是否使用SMBus协议
+     * @param timeout_ms: 超时时间(毫秒)
+     */
     virtual OwnPtr<AP_HAL::I2CDevice> get_device(uint8_t bus, uint8_t address,
                                                  uint32_t bus_clock=400000,
                                                  bool use_smbus = false,
                                                  uint32_t timeout_ms=4) = 0;
     /*
-      get mask of bus numbers for all configured I2C buses
+     * 获取所有已配置I2C总线的掩码
+     * 返回值默认为0x0F，表示支持0-3号总线
      */
     virtual uint32_t get_bus_mask(void) const { return 0x0F; }
 
     /*
-      get mask of bus numbers for all configured external I2C buses
+     * 获取所有已配置外部I2C总线的掩码
+     * 返回值默认为0x0F，表示支持0-3号外部总线
      */
     virtual uint32_t get_bus_mask_external(void) const { return 0x0F; }
 
     /*
-      get mask of bus numbers for all configured internal I2C buses
+     * 获取所有已配置内部I2C总线的掩码
+     * 返回值默认为0x01，表示支持0号内部总线
      */
     virtual uint32_t get_bus_mask_internal(void) const { return 0x01; }
 };
 
 /*
-  convenient macros for iterating over I2C bus numbers
+ * 用于遍历I2C总线号的便捷宏
+ * FOREACH_I2C_MASK: 遍历指定掩码的总线号
+ * FOREACH_I2C_EXTERNAL: 遍历所有外部I2C总线
+ * FOREACH_I2C_INTERNAL: 遍历所有内部I2C总线
+ * FOREACH_I2C: 遍历所有I2C总线
  */
 #define FOREACH_I2C_MASK(i,mask) for (uint32_t _bmask=mask, i=0; i<32; i++) if ((1U<<i)&_bmask)
 #define FOREACH_I2C_EXTERNAL(i) FOREACH_I2C_MASK(i,hal.i2c_mgr->get_bus_mask_external())

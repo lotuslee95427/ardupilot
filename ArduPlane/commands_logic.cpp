@@ -1,54 +1,60 @@
 #include "Plane.h"
 
 /********************************************************************************/
-// Command Event Handlers
+// 命令事件处理器
 /********************************************************************************/
 bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
 {
-    // default to non-VTOL loiter
+    // 默认为非VTOL悬停
     auto_state.vtol_loiter = false;
 
 #if AP_TERRAIN_AVAILABLE
+    // 重置地形跟随状态
     plane.target_altitude.terrain_following_pending = false;
 #endif
 
 #if HAL_LOGGING_ENABLED
-    // log when new commands start
+    // 记录新命令的开始
     if (should_log(MASK_LOG_CMD)) {
         logger.Write_Mission_Cmd(mission, cmd);
     }
 #endif
 
-    // special handling for nav vs non-nav commands
+    // 导航命令和非导航命令的特殊处理
     if (AP_Mission::is_nav_cmd(cmd)) {
-        // set takeoff_complete to true so we don't add extra elevator
-        // except in a takeoff
+        // 设置起飞完成为真，除非在起飞过程中，否则不添加额外的升降舵
         auto_state.takeoff_complete = true;
 
+        // 标记导航控制器数据为过时
         nav_controller->set_data_is_stale();
 
-        // start non-idle
+        // 开始非空闲状态
         auto_state.idle_mode = false;
         
-        // reset loiter start time. New command is a new loiter
+        // 重置悬停开始时间，新命令是新的悬停
         loiter.start_time_ms = 0;
 
+        // 检查下一个导航命令
         AP_Mission::Mission_Command next_nav_cmd;
         const uint16_t next_index = mission.get_current_nav_index() + 1;
         const bool have_next_cmd = mission.get_next_nav_cmd(next_index, next_nav_cmd);
         auto_state.wp_is_land_approach = have_next_cmd && (next_nav_cmd.id == MAV_CMD_NAV_LAND);
 #if HAL_QUADPLANE_ENABLED
+        // 如果下一个命令是VTOL着陆，则不是固定翼着陆进近
         if (have_next_cmd && quadplane.is_vtol_land(next_nav_cmd.id)) {
             auto_state.wp_is_land_approach = false;
         }
 #endif
     }
 
+    // 根据命令ID执行相应操作
     switch(cmd.id) {
 
     case MAV_CMD_NAV_TAKEOFF:
+        // 重置坠毁状态
         crash_state.is_crashed = false;
 #if HAL_QUADPLANE_ENABLED
+        // 如果是VTOL起飞，执行VTOL起飞
         if (quadplane.is_vtol_takeoff(cmd.id)) {
             return quadplane.do_vtol_takeoff(cmd);
         }
@@ -56,12 +62,13 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
         do_takeoff(cmd);
         break;
 
-    case MAV_CMD_NAV_WAYPOINT:                  // Navigate to Waypoint
+    case MAV_CMD_NAV_WAYPOINT:                  // 导航到航点
         do_nav_wp(cmd);
         break;
 
-    case MAV_CMD_NAV_LAND:              // LAND to Waypoint
+    case MAV_CMD_NAV_LAND:              // 着陆到航点
 #if HAL_QUADPLANE_ENABLED
+        // 如果是VTOL着陆，执行VTOL着陆
         if (quadplane.is_vtol_land(cmd.id)) {
             crash_state.is_crashed = false;
             return quadplane.do_vtol_land(cmd);            
@@ -70,47 +77,43 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
         do_land(cmd);
         break;
 
-    case MAV_CMD_NAV_LOITER_UNLIM:              // Loiter indefinitely
+    case MAV_CMD_NAV_LOITER_UNLIM:              // 无限期悬停
         do_loiter_unlimited(cmd);
         break;
 
-    case MAV_CMD_NAV_LOITER_TURNS:              // Loiter N Times
+    case MAV_CMD_NAV_LOITER_TURNS:              // 悬停N圈
         do_loiter_turns(cmd);
         break;
 
-    case MAV_CMD_NAV_LOITER_TIME:
+    case MAV_CMD_NAV_LOITER_TIME:               // 悬停指定时间
         do_loiter_time(cmd);
         break;
 
-    case MAV_CMD_NAV_LOITER_TO_ALT:
+    case MAV_CMD_NAV_LOITER_TO_ALT:             // 悬停到指定高度
         do_loiter_to_alt(cmd);
         break;
 
-    case MAV_CMD_NAV_RETURN_TO_LAUNCH:
+    case MAV_CMD_NAV_RETURN_TO_LAUNCH:          // 返回起飞点
         set_mode(mode_rtl, ModeReason::MISSION_CMD);
         break;
 
-    case MAV_CMD_NAV_CONTINUE_AND_CHANGE_ALT:
+    case MAV_CMD_NAV_CONTINUE_AND_CHANGE_ALT:   // 继续当前路径并改变高度
         do_continue_and_change_alt(cmd);
         break;
 
-    case MAV_CMD_NAV_ALTITUDE_WAIT:
+    case MAV_CMD_NAV_ALTITUDE_WAIT:             // 等待高度
         do_altitude_wait(cmd);
         break;
 
 #if HAL_QUADPLANE_ENABLED
-    case MAV_CMD_NAV_VTOL_TAKEOFF:
+    case MAV_CMD_NAV_VTOL_TAKEOFF:              // VTOL起飞
         crash_state.is_crashed = false;
         return quadplane.do_vtol_takeoff(cmd);
 
-    case MAV_CMD_NAV_VTOL_LAND:
-    case MAV_CMD_NAV_PAYLOAD_PLACE:
+    case MAV_CMD_NAV_VTOL_LAND:                 // VTOL着陆
+    case MAV_CMD_NAV_PAYLOAD_PLACE:             // 投放有效载荷
         if (quadplane.landing_with_fixed_wing_spiral_approach()) {
-            // the user wants to approach the landing in a fixed wing flight mode
-            // the waypoint will be used as a loiter_to_alt
-            // after which point the plane will compute the optimal into the wind direction
-            // and fly in on that direction towards the landing waypoint
-            // it will then transition to VTOL and do a normal quadplane landing
+            // 使用固定翼螺旋进近方式进行VTOL着陆
             do_landing_vtol_approach(cmd);
             break;
         } else {
@@ -118,72 +121,67 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
         }
 #endif
 
-    // Conditional commands
+    // 条件命令
 
-    case MAV_CMD_CONDITION_DELAY:
+    case MAV_CMD_CONDITION_DELAY:               // 延迟
         do_wait_delay(cmd);
         break;
 
-    case MAV_CMD_CONDITION_DISTANCE:
+    case MAV_CMD_CONDITION_DISTANCE:            // 等待距离
         do_within_distance(cmd);
         break;
 
-    // Do commands
+    // 执行命令
 
-    case MAV_CMD_DO_CHANGE_SPEED:
+    case MAV_CMD_DO_CHANGE_SPEED:               // 改变速度
         do_change_speed(cmd);
         break;
 
-    case MAV_CMD_DO_SET_HOME:
+    case MAV_CMD_DO_SET_HOME:                   // 设置Home点
         do_set_home(cmd);
         break;
 
-    case MAV_CMD_DO_INVERTED_FLIGHT:
+    case MAV_CMD_DO_INVERTED_FLIGHT:            // 倒飞
         if (cmd.p1 == 0 || cmd.p1 == 1) {
             auto_state.inverted_flight = (bool)cmd.p1;
             gcs().send_text(MAV_SEVERITY_INFO, "Set inverted %u", cmd.p1);
         }
         break;
 
-    case MAV_CMD_DO_LAND_START:
+    case MAV_CMD_DO_LAND_START:                 // 开始着陆
         break;
 
-    case MAV_CMD_DO_AUTOTUNE_ENABLE:
+    case MAV_CMD_DO_AUTOTUNE_ENABLE:            // 启用自动调谐
         autotune_enable(cmd.p1);
         break;
 
 #if HAL_MOUNT_ENABLED
-    // Sets the region of interest (ROI) for a sensor set or the
-    // vehicle itself. This can then be used by the vehicles control
-    // system to control the vehicle attitude and the attitude of various
-    // devices such as cameras.
-    //    |Region of interest mode. (see MAV_ROI enum)| Waypoint index/ target ID. (see MAV_ROI enum)| ROI index (allows a vehicle to manage multiple cameras etc.)| Empty| x the location of the fixed ROI (see MAV_FRAME)| y| z|
-    case MAV_CMD_DO_SET_ROI:
+    case MAV_CMD_DO_SET_ROI:                    // 设置兴趣区域
         if (cmd.content.location.alt == 0 && cmd.content.location.lat == 0 && cmd.content.location.lng == 0) {
-            // switch off the camera tracking if enabled
+            // 如果启用了相机跟踪，则关闭
             if (camera_mount.get_mode() == MAV_MOUNT_MODE_GPS_POINT) {
                 camera_mount.set_mode_to_default();
             }
         } else {
-            // set mount's target location
+            // 设置云台的目标位置
             camera_mount.set_roi_target(cmd.content.location);
         }
         break;
 
-    case MAV_CMD_DO_MOUNT_CONTROL:          // 205
-        // point the camera to a specified angle
+    case MAV_CMD_DO_MOUNT_CONTROL:              // 控制云台
+        // 将相机指向指定角度
         camera_mount.set_angle_target(cmd.content.mount_control.roll, cmd.content.mount_control.pitch, cmd.content.mount_control.yaw, false);
         break;
 #endif
 
 #if HAL_QUADPLANE_ENABLED
-    case MAV_CMD_DO_VTOL_TRANSITION:
+    case MAV_CMD_DO_VTOL_TRANSITION:            // VTOL转换
         plane.quadplane.handle_do_vtol_transition((enum MAV_VTOL_STATE)cmd.content.do_vtol_transition.target_state);
         break;
 #endif
 
 #if AP_ICENGINE_ENABLED
-    case MAV_CMD_DO_ENGINE_CONTROL:
+    case MAV_CMD_DO_ENGINE_CONTROL:             // 发动机控制
         plane.g2.ice_control.engine_control(cmd.content.do_engine_control.start_control,
                                             cmd.content.do_engine_control.cold_start,
                                             cmd.content.do_engine_control.height_delay_cm*0.01f,
@@ -192,33 +190,31 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
 #endif
 
 #if AP_SCRIPTING_ENABLED
-    case MAV_CMD_NAV_SCRIPT_TIME:
+    case MAV_CMD_NAV_SCRIPT_TIME:               // 脚本时间导航
         do_nav_script_time(cmd);
         break;
 #endif
 
-    case MAV_CMD_NAV_DELAY:
+    case MAV_CMD_NAV_DELAY:                     // 导航延迟
         mode_auto.do_nav_delay(cmd);
         break;
         
     default:
-        // unable to use the command, allow the vehicle to try the next command
+        // 无法使用该命令，允许飞行器尝试下一个命令
         return false;
     }
 
     return true;
 }
-
 /*******************************************************************************
-Verify command Handlers
+验证命令处理程序
 
-Each type of mission element has a "verify" operation. The verify
-operation returns true when the mission element has completed and we
-should move onto the next mission element.
-Return true if we do not recognize the command so that we move on to the next command
+每种任务元素都有一个"验证"操作。验证操作在任务元素完成时返回true,
+我们应该继续执行下一个任务元素。
+如果我们不识别该命令,则返回true,以便我们继续执行下一个命令。
 *******************************************************************************/
 
-bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Returns true if command complete
+bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // 返回true表示命令完成
 {
     switch(cmd.id) {
 
@@ -243,13 +239,12 @@ bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Ret
             return landing.verify_abort_landing(prev_WP_loc, next_WP_loc, current_loc, auto_state.takeoff_altitude_rel_cm, throttle_suppressed);
 
         } else {
-            // use rangefinder to correct if possible
+            // 使用测距仪进行修正（如果可能）
             bool rangefinder_active = false;
             float height = plane.get_landing_height(rangefinder_active);
 
-            // for flare calculations we don't want to use the terrain
-            // correction as otherwise we will flare early on rising
-            // ground
+            // 对于襟翼计算，我们不想使用地形修正
+            // 否则在上升地形上会过早襟翼
             height -= auto_state.terrain_correction;
             return landing.verify_land(prev_WP_loc, next_WP_loc, current_loc,
                                        height, auto_state.sink_rate, auto_state.wp_proportion, auto_state.last_flying_ms, arming.is_armed(), is_flying(),
@@ -283,15 +278,15 @@ bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Ret
     case MAV_CMD_NAV_VTOL_LAND:
     case MAV_CMD_NAV_PAYLOAD_PLACE:
         if (quadplane.landing_with_fixed_wing_spiral_approach() && !verify_landing_vtol_approach(cmd)) {
-            // verify_landing_vtol_approach will return true once we have completed the approach,
-            // in which case we fall over to normal vtol landing code
+            // verify_landing_vtol_approach 在完成接近时返回true
+            // 在这种情况下，我们转到正常的vtol着陆代码
             return false;
         } else {
             return quadplane.verify_vtol_land();
         }
 #endif  // HAL_QUADPLANE_ENABLED
 
-    // Conditional commands
+    // 条件命令
 
     case MAV_CMD_CONDITION_DELAY:
         return verify_wait_delay();
@@ -307,7 +302,7 @@ bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Ret
      case MAV_CMD_NAV_DELAY:
          return mode_auto.verify_nav_delay(cmd);
 
-    // do commands (always return true)
+    // do 命令（总是返回true）
     case MAV_CMD_DO_CHANGE_SPEED:
     case MAV_CMD_DO_SET_HOME:
     case MAV_CMD_DO_INVERTED_FLIGHT:
@@ -322,15 +317,15 @@ bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Ret
         return true;
 
     default:
-        // error message
-        gcs().send_text(MAV_SEVERITY_WARNING,"Skipping invalid cmd #%i",cmd.id);
-        // return true if we do not recognize the command so that we move on to the next command
+        // 错误消息
+        gcs().send_text(MAV_SEVERITY_WARNING,"跳过无效命令 #%i",cmd.id);
+        // 如果我们不识别该命令，则返回true以便我们继续执行下一个命令
         return true;
     }
 }
 
 /********************************************************************************/
-//  Nav (Must) commands
+//  导航（必须）命令
 /********************************************************************************/
 
 void Plane::do_RTL(int32_t rtl_altitude_AMSL_cm)
@@ -364,27 +359,27 @@ Location Plane::calc_best_rally_or_home_location(const Location &_current_loc, f
 }
 
 /*
-  start a NAV_TAKEOFF command
+  开始一个NAV_TAKEOFF命令
  */
 void Plane::do_takeoff(const AP_Mission::Mission_Command& cmd)
 {
     prev_WP_loc = current_loc;
     set_next_WP(cmd.content.location);
-    // pitch in deg, airspeed  m/s, throttle %, track WP 1 or 0
+    // 俯仰角（度），空速（m/s），油门（%），跟踪航点 1 或 0
     auto_state.takeoff_pitch_cd        = (int16_t)cmd.p1 * 100;
     if (auto_state.takeoff_pitch_cd <= 0) {
-        // if the mission doesn't specify a pitch use 4 degrees
+        // 如果任务没有指定俯仰角，则使用4度
         auto_state.takeoff_pitch_cd = 400;
     }
     auto_state.takeoff_altitude_rel_cm = next_WP_loc.alt - home.alt;
     next_WP_loc.lat = home.lat + 10;
     next_WP_loc.lng = home.lng + 10;
     auto_state.takeoff_speed_time_ms = 0;
-    auto_state.takeoff_complete = false; // set flag to use gps ground course during TO. IMU will be doing yaw drift correction.
+    auto_state.takeoff_complete = false; // 设置标志以在起飞期间使用GPS地面航向。IMU将进行偏航漂移校正。
     auto_state.height_below_takeoff_to_level_off_cm = 0;
-    // Flag also used to override "on the ground" throttle disable
+    // 该标志还用于覆盖"在地面上"的油门禁用
 
-    // zero locked course
+    // 将锁定航向清零
     steer_state.locked_course_err = 0;
     steer_state.hold_course_cd = -1;
     auto_state.baro_takeoff_alt = barometer.get_altitude();
@@ -399,8 +394,8 @@ void Plane::do_land(const AP_Mission::Mission_Command& cmd)
 {
     set_next_WP(cmd.content.location);
 
-    // configure abort altitude and pitch
-    // if NAV_LAND has an abort altitude then use it, else use last takeoff, else use 50m
+    // 配置中止高度和俯仰角
+    // 如果NAV_LAND有中止高度则使用它，否则使用上次起飞高度，如果没有则使用50m
     if (cmd.p1 > 0) {
         auto_state.takeoff_altitude_rel_cm = (int16_t)cmd.p1 * 100;
     } else if (auto_state.takeoff_altitude_rel_cm <= 0) {
@@ -408,19 +403,19 @@ void Plane::do_land(const AP_Mission::Mission_Command& cmd)
     }
 
     if (auto_state.takeoff_pitch_cd <= 0) {
-        // If no takeoff command has ever been used, default to a conservative 10deg
+        // 如果从未使用过起飞命令，默认使用保守的10度
         auto_state.takeoff_pitch_cd = 1000;
     }
 
 #if AP_RANGEFINDER_ENABLED
-    // zero rangefinder state, start to accumulate good samples now
+    // 将测距仪状态清零，开始累积好的样本
     memset(&rangefinder_state, 0, sizeof(rangefinder_state));
 #endif
 
     landing.do_land(cmd, relative_altitude);
 
     if (flight_stage == AP_FixedWing::FlightStage::ABORT_LANDING) {
-        // if we were in an abort we need to explicitly move out of the abort state, as it's sticky
+        // 如果我们处于中止状态，我们需要显式地移出中止状态，因为它是粘性的
         set_flight_stage(AP_FixedWing::FlightStage::LAND);
     }
 }
@@ -428,7 +423,7 @@ void Plane::do_land(const AP_Mission::Mission_Command& cmd)
 #if HAL_QUADPLANE_ENABLED
 void Plane::do_landing_vtol_approach(const AP_Mission::Mission_Command& cmd)
 {
-    //set target alt
+    //设置目标高度
     Location loc = cmd.content.location;
     loc.sanitize(current_loc);
     set_next_WP(loc);
@@ -436,24 +431,26 @@ void Plane::do_landing_vtol_approach(const AP_Mission::Mission_Command& cmd)
     vtol_approach_s.approach_stage = VTOLApproach::Stage::LOITER_TO_ALT;
 }
 #endif
-
+// 设置盘旋方向
 void Plane::loiter_set_direction_wp(const AP_Mission::Mission_Command& cmd)
 {
     if (cmd.content.location.loiter_ccw) {
-        loiter.direction = -1;
+        loiter.direction = -1; // 逆时针
     } else {
-        loiter.direction = 1;
+        loiter.direction = 1;  // 顺时针
     }
 }
 
+// 执行无限盘旋命令
 void Plane::do_loiter_unlimited(const AP_Mission::Mission_Command& cmd)
 {
     Location cmdloc = cmd.content.location;
-    cmdloc.sanitize(current_loc);
-    set_next_WP(cmdloc);
-    loiter_set_direction_wp(cmd);
+    cmdloc.sanitize(current_loc); // 确保位置有效
+    set_next_WP(cmdloc); // 设置下一个航点
+    loiter_set_direction_wp(cmd); // 设置盘旋方向
 }
 
+// 执行指定圈数的盘旋命令
 void Plane::do_loiter_turns(const AP_Mission::Mission_Command& cmd)
 {
     Location cmdloc = cmd.content.location;
@@ -462,10 +459,11 @@ void Plane::do_loiter_turns(const AP_Mission::Mission_Command& cmd)
     loiter_set_direction_wp(cmd);
     const float turns = cmd.get_loiter_turns();
 
-    loiter.total_cd = (uint32_t)(turns * 36000UL);
-    condition_value = 1; // used to signify primary turns goal not yet met
+    loiter.total_cd = (uint32_t)(turns * 36000UL); // 计算总旋转角度（厘度）
+    condition_value = 1; // 用于表示主要圈数目标尚未达成
 }
 
+// 执行指定时间的盘旋命令
 void Plane::do_loiter_time(const AP_Mission::Mission_Command& cmd)
 {
     Location cmdloc = cmd.content.location;
@@ -473,31 +471,29 @@ void Plane::do_loiter_time(const AP_Mission::Mission_Command& cmd)
     set_next_WP(cmdloc);
     loiter_set_direction_wp(cmd);
 
-    // we set start_time_ms when we reach the waypoint
-    loiter.time_max_ms = cmd.p1 * (uint32_t)1000;     // convert sec to ms
-    condition_value = 1; // used to signify primary time goal not yet met
+    // 到达航点时设置起始时间
+    loiter.time_max_ms = cmd.p1 * (uint32_t)1000;     // 将秒转换为毫秒
+    condition_value = 1; // 用于表示主要时间目标尚未达成
 }
 
+// 执行继续飞行并改变高度的命令
 void Plane::do_continue_and_change_alt(const AP_Mission::Mission_Command& cmd)
 {
-    // select heading method. Either mission, gps bearing projection or yaw based
-    // If prev_WP_loc and next_WP_loc are different then an accurate wp based bearing can
-    // be computed. However, if we had just changed modes before this, such as an aborted landing
-    // via mode change, the prev and next wps are the same.
+    // 选择航向方法：任务、GPS方位投影或偏航角
     float bearing;
     if (!prev_WP_loc.same_latlon_as(next_WP_loc)) {
-        // use waypoint based bearing, this is the usual case
+        // 使用基于航点的方位，这是通常情况
         steer_state.hold_course_cd = -1;
     } else if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_2D) {
-        // use gps ground course based bearing hold
+        // 使用基于GPS地面航向的方位保持
         steer_state.hold_course_cd = -1;
         bearing = AP::gps().ground_course();
-        next_WP_loc.offset_bearing(bearing, 1000); // push it out 1km
+        next_WP_loc.offset_bearing(bearing, 1000); // 将其推出1公里
     } else {
-        // use yaw based bearing hold
+        // 使用基于偏航角的方位保持
         steer_state.hold_course_cd = wrap_360_cd(ahrs.yaw_sensor);
         bearing = ahrs.yaw_sensor * 0.01f;
-        next_WP_loc.offset_bearing(bearing, 1000); // push it out 1km
+        next_WP_loc.offset_bearing(bearing, 1000); // 将其推出1公里
     }
 
     next_WP_loc.alt = cmd.content.location.alt + home.alt;
@@ -505,37 +501,39 @@ void Plane::do_continue_and_change_alt(const AP_Mission::Mission_Command& cmd)
     reset_offset_altitude();
 }
 
+// 执行等待高度命令
 void Plane::do_altitude_wait(const AP_Mission::Mission_Command& cmd)
 {
-    // set all servos to trim until we reach altitude or descent speed
+    // 在达到高度或下降速度之前，将所有舵机设置为微调
     auto_state.idle_mode = true;
 #if AP_PLANE_GLIDER_PULLUP_ENABLED
     mode_auto.pullup.reset();
 #endif
 }
 
+// 执行盘旋到指定高度的命令
 void Plane::do_loiter_to_alt(const AP_Mission::Mission_Command& cmd)
 {
-    //set target alt  
+    // 设置目标高度
     Location loc = cmd.content.location;
     loc.sanitize(current_loc);
     set_next_WP(loc);
     loiter_set_direction_wp(cmd);
 
-    // init to 0, set to 1 when altitude is reached
+    // 初始化为0，达到高度时设置为1
     condition_value = 0;
 }
 
-// do_nav_delay - Delay the next navigation command
+// 执行导航延迟命令
 void ModeAuto::do_nav_delay(const AP_Mission::Mission_Command& cmd)
 {
     nav_delay.time_start_ms = millis();
 
     if (cmd.content.nav_delay.seconds > 0) {
-        // relative delay
-        nav_delay.time_max_ms = cmd.content.nav_delay.seconds * 1000; // convert seconds to milliseconds
+        // 相对延迟
+        nav_delay.time_max_ms = cmd.content.nav_delay.seconds * 1000; // 将秒转换为毫秒
     } else {
-        // absolute delay to utc time
+        // 绝对延迟到UTC时间
 #if AP_RTC_ENABLED
         nav_delay.time_max_ms = AP::rtc().get_time_utc(cmd.content.nav_delay.hour_utc, cmd.content.nav_delay.min_utc, cmd.content.nav_delay.sec_utc, 0);
 #else
@@ -546,8 +544,9 @@ void ModeAuto::do_nav_delay(const AP_Mission::Mission_Command& cmd)
 }
 
 /********************************************************************************/
-//  Verify Nav (Must) commands
+//  验证导航（必须）命令
 /********************************************************************************/
+// 验证起飞是否完成
 bool Plane::verify_takeoff()
 {
     bool trust_ahrs_yaw = AP::ahrs().initialised();
@@ -564,12 +563,10 @@ bool Plane::verify_takeoff()
         }
         if (auto_state.takeoff_speed_time_ms != 0 &&
             millis() - auto_state.takeoff_speed_time_ms >= 2000) {
-            // once we reach sufficient speed for good GPS course
-            // estimation we save our current GPS ground course
-            // corrected for summed yaw to set the take off
-            // course. This keeps wings level until we are ready to
-            // rotate, and also allows us to cope with arbitrary
-            // compass errors for auto takeoff
+            // 一旦我们达到足够的速度以获得良好的GPS航向估计
+            // 我们保存当前的GPS地面航向，并根据累积的偏航角进行校正
+            // 以设置起飞航向。这保持机翼水平直到我们准备好旋转，
+            // 并且还允许我们应对自动起飞时的任意罗盘误差
             float takeoff_course = wrap_PI(radians(gps.ground_course())) - steer_state.locked_course_err;
             takeoff_course = wrap_PI(takeoff_course);
             steer_state.hold_course_cd = wrap_360_cd(degrees(takeoff_course)*100);
@@ -581,18 +578,18 @@ bool Plane::verify_takeoff()
     }
 
     if (steer_state.hold_course_cd != -1) {
-        // call navigation controller for heading hold
+        // 调用导航控制器进行航向保持
         nav_controller->update_heading_hold(steer_state.hold_course_cd);
     } else {
         nav_controller->update_level_flight();        
     }
 
-    // check for optional takeoff timeout
+    // 检查可选的起飞超时
     if (plane.check_takeoff_timeout()) {
         mission.reset();
     }
 
-    // see if we have reached takeoff altitude
+    // 检查是否达到起飞高度
     int32_t relative_alt_cm = adjusted_relative_altitude_cm();
     if (relative_alt_cm > auto_state.takeoff_altitude_rel_cm) {
         gcs().send_text(MAV_SEVERITY_INFO, "Takeoff complete at %.2fm",
@@ -605,8 +602,7 @@ bool Plane::verify_takeoff()
         plane.fence.auto_enable_fence_after_takeoff();
 #endif
 
-        // don't cross-track on completion of takeoff, as otherwise we
-        // can end up doing too sharp a turn
+        // 起飞完成时不进行横向跟踪，否则可能会导致转弯过于急剧
         auto_state.next_wp_crosstrack = false;
         return true;
     } else {
@@ -614,20 +610,16 @@ bool Plane::verify_takeoff()
     }
 }
 
-/*
-  update navigation for normal mission waypoints. Return true when the
-  waypoint is complete
- */
+// 更新正常任务航点的导航。当航点完成时返回true
 bool Plane::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
 {
     steer_state.hold_course_cd = -1;
 
-    // depending on the pass by flag either go to waypoint in regular manner or
-    // fly past it for set distance along the line of waypoints
+    // 根据通过标志，以常规方式前往航点或沿航点线飞行设定距离
     Location flex_next_WP_loc = next_WP_loc;
 
-    uint8_t cmd_passby = HIGHBYTE(cmd.p1); // distance in meters to pass beyond the wp
-    uint8_t cmd_acceptance_distance = LOWBYTE(cmd.p1); // radius in meters to accept reaching the wp
+    uint8_t cmd_passby = HIGHBYTE(cmd.p1); // 超过航点的距离（米）
+    uint8_t cmd_acceptance_distance = LOWBYTE(cmd.p1); // 接受到达航点的半径（米）
 
     if (cmd_passby > 0) {
         const float dist = prev_WP_loc.get_distance(flex_next_WP_loc);
@@ -644,12 +636,12 @@ bool Plane::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
         nav_controller->update_waypoint(current_loc, flex_next_WP_loc);
     }
 
-    // see if the user has specified a maximum distance to waypoint
-    // If override with p3 - then this is not used as it will overfly badly
+    // 检查用户是否指定了到航点的最大距离
+    // 如果用p3覆盖 - 则不使用此值，因为它会导致严重的超飞
     if (g.waypoint_max_radius > 0 &&
         auto_state.wp_distance > (uint16_t)g.waypoint_max_radius) {
         if (current_loc.past_interval_finish_line(prev_WP_loc, flex_next_WP_loc)) {
-            // this is needed to ensure completion of the waypoint
+            // 这是为了确保完成航点
             if (cmd_passby == 0) {
                 prev_WP_loc = current_loc;
             }
@@ -657,9 +649,9 @@ bool Plane::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
         return false;
     }
 
-    float acceptance_distance_m = 0; // default to: if overflown - let it fly up to the point
+    float acceptance_distance_m = 0; // 默认为：如果超飞 - 让它飞到该点
     if (cmd_acceptance_distance > 0) {
-        // allow user to override acceptance radius
+        // 允许用户覆盖接受半径
         acceptance_distance_m = cmd_acceptance_distance;
     } else if (cmd_passby == 0) {
         acceptance_distance_m = nav_controller->turn_distance(get_wp_radius(), auto_state.next_turn_angle);
@@ -672,7 +664,7 @@ bool Plane::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
         return true;
 	}
 
-    // have we flown past the waypoint?
+    // 我们是否已经飞过了航点？
     if (current_loc.past_interval_finish_line(prev_WP_loc, flex_next_WP_loc)) {
         gcs().send_text(MAV_SEVERITY_INFO, "Passed waypoint #%i dist %um",
                           (unsigned)mission.get_current_nav_cmd().index,
@@ -683,33 +675,35 @@ bool Plane::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
     return false;
 }
 
+// 验证无限盘旋
 bool Plane::verify_loiter_unlim(const AP_Mission::Mission_Command &cmd)
 {
-    // else use mission radius
+    // 使用任务半径
     update_loiter(cmd.p1);
     return false;
 }
 
+// 验证定时盘旋
 bool Plane::verify_loiter_time()
 {
     bool result = false;
-    // mission radius is always aparm.loiter_radius
+    // 任务半径始终为aparm.loiter_radius
     update_loiter(0);
 
     if (loiter.start_time_ms == 0) {
         if (reached_loiter_target() && loiter.sum_cd > 1) {
-            // we've reached the target, start the timer
+            // 我们已经到达目标，启动计时器
             loiter.start_time_ms = millis();
         }
     } else if (condition_value != 0) {
-        // primary goal, loiter time
+        // 主要目标，盘旋时间
         if ((millis() - loiter.start_time_ms) > loiter.time_max_ms) {
-            // primary goal completed, initialize secondary heading goal
+            // 主要目标完成，初始化次要航向目标
             condition_value = 0;
             result = verify_loiter_heading(true);
         }
     } else {
-        // secondary goal, loiter to heading
+        // 次要目标，盘旋到指定航向
         result = verify_loiter_heading(false);
     }
 
@@ -719,72 +713,71 @@ bool Plane::verify_loiter_time()
     }
     return result;
 }
-
+// 验证定点盘旋转弯命令
 bool Plane::verify_loiter_turns(const AP_Mission::Mission_Command &cmd)
 {
     bool result = false;
     uint16_t radius = HIGHBYTE(cmd.p1);
     if (cmd.type_specific_bits & (1U<<0)) {
-        // special storage handling allows for larger radii
+        // 特殊存储处理允许更大的半径
         radius *= 10;
     }
     update_loiter(radius);
 
-    // LOITER_TURNS makes no sense as VTOL
+    // LOITER_TURNS 对VTOL模式无意义
     auto_state.vtol_loiter = false;
 
     if (condition_value != 0) {
-        // primary goal, loiter time
+        // 主要目标：盘旋时间
         if (loiter.sum_cd > loiter.total_cd && loiter.sum_cd > 1) {
-            // primary goal completed, initialize secondary heading goal
+            // 主要目标完成，初始化次要航向目标
             condition_value = 0;
             result = verify_loiter_heading(true);
         }
     } else {
-        // secondary goal, loiter to heading
+        // 次要目标：盘旋到指定航向
         result = verify_loiter_heading(false);
     }
 
     if (result) {
-        gcs().send_text(MAV_SEVERITY_INFO,"Loiter orbits complete");
+        gcs().send_text(MAV_SEVERITY_INFO,"定点盘旋轨迹完成");
     }
     return result;
 }
 
-/*
-  verify a LOITER_TO_ALT command. This involves checking we have
-  reached both the desired altitude and desired heading. The desired
-  altitude only needs to be reached once.
- */
+// 验证盘旋到指定高度命令
+// 这涉及检查我们是否已经达到所需的高度和航向
+// 所需的高度只需要达到一次
 bool Plane::verify_loiter_to_alt(const AP_Mission::Mission_Command &cmd)
 {
     bool result = false;
 
     update_loiter(cmd.p1);
 
-    // condition_value == 0 means alt has never been reached
+    // condition_value == 0 表示从未达到目标高度
     if (condition_value == 0) {
-        // primary goal, loiter to alt
+        // 主要目标：盘旋到指定高度
         if (labs(loiter.sum_cd) > 1 && (loiter.reached_target_alt || loiter.unable_to_acheive_target_alt)) {
-            // primary goal completed, initialize secondary heading goal
+            // 主要目标完成，初始化次要航向目标
             if (loiter.unable_to_acheive_target_alt) {
-                gcs().send_text(MAV_SEVERITY_INFO,"Loiter to alt was stuck at %d", int(current_loc.alt/100));
+                gcs().send_text(MAV_SEVERITY_INFO,"盘旋到高度被卡在 %d", int(current_loc.alt/100));
             }
 
             condition_value = 1;
             result = verify_loiter_heading(true);
         }
     } else {
-        // secondary goal, loiter to heading
+        // 次要目标：盘旋到指定航向
         result = verify_loiter_heading(false);
     }
 
     if (result) {
-        gcs().send_text(MAV_SEVERITY_INFO,"Loiter to alt complete");
+        gcs().send_text(MAV_SEVERITY_INFO,"盘旋到高度完成");
     }
     return result;
 }
 
+// 验证返航（RTL）
 bool Plane::verify_RTL()
 {
     if (g.rtl_radius < 0) {
@@ -795,43 +788,44 @@ bool Plane::verify_RTL()
     update_loiter(abs(g.rtl_radius));
 	if (auto_state.wp_distance <= (uint32_t)MAX(get_wp_radius(),0) || 
         reached_loiter_target()) {
-			gcs().send_text(MAV_SEVERITY_INFO,"Reached RTL location");
+			gcs().send_text(MAV_SEVERITY_INFO,"到达RTL位置");
 			return true;
     } else {
         return false;
 	}
 }
 
+// 验证继续并改变高度
 bool Plane::verify_continue_and_change_alt()
 {
-    // is waypoint info not available and heading hold is?
+    // 航点信息不可用且航向保持可用？
     if (prev_WP_loc.same_latlon_as(next_WP_loc) &&
         steer_state.hold_course_cd != -1) {
-        //keep flying the same course with fixed steering heading computed at start if cmd
+        // 保持飞行相同的航向，使用命令开始时计算的固定转向航向
         nav_controller->update_heading_hold(steer_state.hold_course_cd);
     }
     else {
-        // Is the next_WP less than 200 m away?
+        // 下一个航点是否在200米以内？
         if (current_loc.get_distance(next_WP_loc) < 200.0f) {
-            //push another 300 m down the line
+            // 在航线上再推进300米
             int32_t next_wp_bearing_cd = prev_WP_loc.get_bearing_to(next_WP_loc);
             next_WP_loc.offset_bearing(next_wp_bearing_cd * 0.01f, 300.0f);
         }
 
-        //keep flying the same course
+        // 保持飞行相同的航向
         nav_controller->update_waypoint(prev_WP_loc, next_WP_loc);
     }
 
-    //climbing?
+    // 正在爬升？
     if (condition_value == 1 && adjusted_altitude_cm() >= next_WP_loc.alt) {
         return true;
     }
-    //descending?
+    // 正在下降？
     else if (condition_value == 2 &&
              adjusted_altitude_cm() <= next_WP_loc.alt) {
         return true;
     }    
-    //don't care if we're climbing or descending
+    // 不关心是爬升还是下降
     else if (labs(adjusted_altitude_cm() - next_WP_loc.alt) <= 500) {
         return true;
     }
@@ -839,9 +833,7 @@ bool Plane::verify_continue_and_change_alt()
     return false;
 }
 
-/*
-  see if we have reached altitude or descent speed
- */
+// 检查是否已达到高度或下降速度
 bool ModeAuto::verify_altitude_wait(const AP_Mission::Mission_Command &cmd)
 {
 #if AP_PLANE_GLIDER_PULLUP_ENABLED
@@ -850,24 +842,22 @@ bool ModeAuto::verify_altitude_wait(const AP_Mission::Mission_Command &cmd)
     }
 #endif
 
-    /*
-      the target altitude in param1 is always AMSL
-     */
+    // param1中的目标高度始终是AMSL（平均海平面以上）
     const float alt_diff = plane.current_loc.alt*0.01 - cmd.content.altitude_wait.altitude;
     bool completed = false;
     if (alt_diff > 0) {
-        gcs().send_text(MAV_SEVERITY_INFO,"Reached altitude");
+        gcs().send_text(MAV_SEVERITY_INFO,"已达到高度");
         completed = true;
     } else if (cmd.content.altitude_wait.descent_rate > 0 &&
         plane.auto_state.sink_rate > cmd.content.altitude_wait.descent_rate) {
-        gcs().send_text(MAV_SEVERITY_INFO, "Reached descent rate %.1f m/s", (double)plane.auto_state.sink_rate);
+        gcs().send_text(MAV_SEVERITY_INFO, "已达到下降率 %.1f m/s", (double)plane.auto_state.sink_rate);
         completed = true;
     }
 
     if (completed) {
 #if AP_PLANE_GLIDER_PULLUP_ENABLED
         if (pullup.pullup_start()) {
-            // we are doing a pullup, ALTITUDE_WAIT not complete until pullup is done
+            // 我们正在进行拉升，ALTITUDE_WAIT在拉升完成之前不会完成
             return false;
         }
 #endif
@@ -876,30 +866,26 @@ bool ModeAuto::verify_altitude_wait(const AP_Mission::Mission_Command &cmd)
 
     const float time_to_alt = alt_diff / MIN(plane.auto_state.sink_rate, -0.01);
 
-    /*
-      if requested, wiggle servos
-
-      we don't start a wiggle if we expect to release soon as we don't
-      want the servos to be off trim at the time of release
-    */
+    // 如果请求，摆动舵机
+    // 如果我们预计很快释放，我们不会开始摆动，因为我们不希望在释放时舵机偏离调整位置
     if (cmd.content.altitude_wait.wiggle_time != 0 &&
         (plane.auto_state.sink_rate > 0 || time_to_alt > cmd.content.altitude_wait.wiggle_time*5)) {
         if (wiggle.stage == 0 &&
             AP_HAL::millis() - wiggle.last_ms > cmd.content.altitude_wait.wiggle_time*1000) {
             wiggle.stage = 1;
             wiggle.last_ms = AP_HAL::millis();
-            // idle_wiggle_stage is updated in wiggle_servos()
+            // idle_wiggle_stage 在 wiggle_servos() 中更新
         }
     }
 
     return false;
 }
 
-// verify_nav_delay - check if we have waited long enough
+// 验证导航延迟 - 检查我们是否已经等待足够长的时间
 bool ModeAuto::verify_nav_delay(const AP_Mission::Mission_Command& cmd)
 {
     if (AP::arming().is_armed_and_safety_off()) {
-        // don't delay while armed, we need a nav controller running
+        // 在武装状态下不延迟，我们需要运行导航控制器
         return true;
     }
     if (millis() - nav_delay.time_start_ms > nav_delay.time_max_ms) {
@@ -910,24 +896,27 @@ bool ModeAuto::verify_nav_delay(const AP_Mission::Mission_Command& cmd)
 }
 
 /********************************************************************************/
-//  Condition (May) commands
+//  条件（可能）命令
 /********************************************************************************/
 
+// 执行等待延迟命令
 void Plane::do_wait_delay(const AP_Mission::Mission_Command& cmd)
 {
     condition_start = millis();
-    condition_value  = cmd.content.delay.seconds * 1000;    // convert seconds to milliseconds
+    condition_value  = cmd.content.delay.seconds * 1000;    // 将秒转换为毫秒
 }
 
+// 执行在指定距离内命令
 void Plane::do_within_distance(const AP_Mission::Mission_Command& cmd)
 {
     condition_value  = cmd.content.distance.meters;
 }
 
 /********************************************************************************/
-// Verify Condition (May) commands
+// 验证条件（可能）命令
 /********************************************************************************/
 
+// 验证等待延迟
 bool Plane::verify_wait_delay()
 {
     if ((unsigned)(millis() - condition_start) > (unsigned)condition_value) {
@@ -937,6 +926,7 @@ bool Plane::verify_wait_delay()
     return false;
 }
 
+// 验证在指定距离内
 bool Plane::verify_within_distance()
 {
     if (auto_state.wp_distance < MAX(condition_value,0)) {
@@ -947,9 +937,10 @@ bool Plane::verify_within_distance()
 }
 
 /********************************************************************************/
-//  Do (Now) commands
+//  执行（现在）命令
 /********************************************************************************/
 
+// 在当前位置执行定点盘旋
 void Plane::do_loiter_at_location()
 {
     if (aparm.loiter_radius < 0) {
@@ -960,6 +951,7 @@ void Plane::do_loiter_at_location()
     next_WP_loc = current_loc;
 }
 
+// 执行改变速度命令
 bool Plane::do_change_speed(const AP_Mission::Mission_Command& cmd)
 {
     return do_change_speed(
@@ -969,28 +961,29 @@ bool Plane::do_change_speed(const AP_Mission::Mission_Command& cmd)
         );
 }
 
+// 执行改变速度
 bool Plane::do_change_speed(uint8_t speedtype, float speed_target_ms, float throttle_pct)
 {
     switch (speedtype) {
-    case 0:             // Airspeed
+    case 0:             // 空速
         if (is_equal(speed_target_ms, -2.0f)) {
-            new_airspeed_cm = -1; // return to default airspeed
+            new_airspeed_cm = -1; // 返回默认空速
             return true;
         } else if ((speed_target_ms >= aparm.airspeed_min.get()) &&
                    (speed_target_ms <= aparm.airspeed_max.get()))  {
-            new_airspeed_cm = speed_target_ms * 100; //new airspeed target for AUTO or GUIDED modes
-            gcs().send_text(MAV_SEVERITY_INFO, "Set airspeed %u m/s", (unsigned)speed_target_ms);
+            new_airspeed_cm = speed_target_ms * 100; // AUTO或GUIDED模式的新空速目标
+            gcs().send_text(MAV_SEVERITY_INFO, "设置空速 %u m/s", (unsigned)speed_target_ms);
             return true;
         }
         break;
-    case 1:             // Ground speed
-        gcs().send_text(MAV_SEVERITY_INFO, "Set groundspeed %u", (unsigned)speed_target_ms);
+    case 1:             // 地速
+        gcs().send_text(MAV_SEVERITY_INFO, "设置地速 %u", (unsigned)speed_target_ms);
         aparm.min_groundspeed.set(speed_target_ms);
         return true;
     }
 
     if (throttle_pct > 0 && throttle_pct <= 100) {
-        gcs().send_text(MAV_SEVERITY_INFO, "Set throttle %u", (unsigned)throttle_pct);
+        gcs().send_text(MAV_SEVERITY_INFO, "设置油门 %u", (unsigned)throttle_pct);
         aparm.throttle_cruise.set(throttle_pct);
         return true;
     }
@@ -998,21 +991,22 @@ bool Plane::do_change_speed(uint8_t speedtype, float speed_target_ms, float thro
     return false;
 }
 
+// 执行设置家位置命令
 void Plane::do_set_home(const AP_Mission::Mission_Command& cmd)
 {
     if (cmd.p1 == 1 && gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
         if (!set_home_persistently(gps.location())) {
-            // silently ignore error
+            // 静默忽略错误
         }
     } else {
         if (!AP::ahrs().set_home(cmd.content.location)) {
-            // silently ignore failure
+            // 静默忽略失败
         }
     }
 }
 
-// start_command_callback - callback function called from ap-mission when it begins a new mission command
-//      we double check that the flight mode is AUTO to avoid the possibility of ap-mission triggering actions while we're not in AUTO mode
+// 开始命令回调 - 当ap-mission开始一个新的任务命令时调用的回调函数
+// 我们再次检查飞行模式是否为AUTO，以避免ap-mission在非AUTO模式下触发动作的可能性
 bool Plane::start_command_callback(const AP_Mission::Mission_Command &cmd)
 {
     if (control_mode == &mode_auto) {
@@ -1021,14 +1015,14 @@ bool Plane::start_command_callback(const AP_Mission::Mission_Command &cmd)
     return true;
 }
 
-// verify_command_callback - callback function called from ap-mission at 10hz or higher when a command is being run
-//      we double check that the flight mode is AUTO to avoid the possibility of ap-mission triggering actions while we're not in AUTO mode
+// 验证命令回调 - 当命令正在运行时，ap-mission以10Hz或更高频率调用的回调函数
+// 我们再次检查飞行模式是否为AUTO，以避免ap-mission在非AUTO模式下触发动作的可能性
 bool Plane::verify_command_callback(const AP_Mission::Mission_Command& cmd)
 {
     if (control_mode == &mode_auto) {
         bool cmd_complete = verify_command(cmd);
 
-        // send message to GCS
+        // 向GCS发送消息
         if (cmd_complete) {
             gcs().send_mission_item_reached_message(cmd.index);
         }
@@ -1037,9 +1031,8 @@ bool Plane::verify_command_callback(const AP_Mission::Mission_Command& cmd)
     }
     return false;
 }
-
-// exit_mission_callback - callback function called from ap-mission when the mission has completed
-//      we double check that the flight mode is AUTO to avoid the possibility of ap-mission triggering actions while we're not in AUTO mode
+// 当任务完成时的回调函数
+// 我们再次检查飞行模式是否为AUTO，以避免ap-mission在非AUTO模式下触发动作
 void Plane::exit_mission_callback()
 {
     if (control_mode == &mode_auto) {
@@ -1049,21 +1042,24 @@ void Plane::exit_mission_callback()
 }
 
 #if HAL_QUADPLANE_ENABLED
+// 验证VTOL着陆接近阶段
 bool Plane::verify_landing_vtol_approach(const AP_Mission::Mission_Command &cmd)
 {
+    // 计算接近半径和方向
     const float radius = is_zero(quadplane.fw_land_approach_radius)? aparm.loiter_radius : quadplane.fw_land_approach_radius;
     const int8_t direction = is_negative(radius) ? -1 : 1;
     const float abs_radius = fabsf(radius);
 
     loiter.direction = direction;
 
+    // 根据不同的接近阶段执行相应的操作
     switch (vtol_approach_s.approach_stage) {
         case VTOLApproach::Stage::RTL:
             {
-                // fly home and loiter at RTL alt
+                // 飞回家并在RTL高度盘旋
                 nav_controller->update_loiter(cmd.content.location, abs_radius, direction);
                 if (plane.reached_loiter_target()) {
-                    // decend to Q RTL alt
+                    // 下降到四旋翼RTL高度
                     plane.do_RTL(plane.home.alt + plane.quadplane.qrtl_alt*100UL);
                     plane.loiter_angle_reset();
                     vtol_approach_s.approach_stage = VTOLApproach::Stage::LOITER_TO_ALT;
@@ -1074,7 +1070,9 @@ bool Plane::verify_landing_vtol_approach(const AP_Mission::Mission_Command &cmd)
             {
                 nav_controller->update_loiter(cmd.content.location, abs_radius, direction);
 
+                // 检查是否达到目标高度或无法达到目标高度
                 if (labs(loiter.sum_cd) > 1 && (loiter.reached_target_alt || loiter.unable_to_acheive_target_alt)) {
+                    // 计算风向并选择接近路径
                     Vector3f wind = ahrs.wind_estimate();
                     vtol_approach_s.approach_direction_deg = degrees(atan2f(-wind.y, -wind.x));
                     gcs().send_text(MAV_SEVERITY_INFO, "Selected an approach path of %.1f", (double)vtol_approach_s.approach_direction_deg);
@@ -1084,8 +1082,8 @@ bool Plane::verify_landing_vtol_approach(const AP_Mission::Mission_Command &cmd)
             }
         case VTOLApproach::Stage::ENSURE_RADIUS:
             {
-                // validate that the vehicle is at least the expected distance away from the loiter point
-                // require an angle total of at least 2 centidegrees, due to special casing of 1 centidegree
+                // 验证飞机是否至少在预期距离之外
+                // 要求角度总和至少为2厘度，因为1厘度有特殊情况
                 if (((fabsF(cmd.content.location.get_distance(current_loc) - abs_radius) > 5.0f) &&
                       (cmd.content.location.get_distance(current_loc) < abs_radius)) ||
                     (labs(loiter.sum_cd) < 2)) {
@@ -1099,14 +1097,14 @@ bool Plane::verify_landing_vtol_approach(const AP_Mission::Mission_Command &cmd)
             {
                 nav_controller->update_loiter(cmd.content.location, radius, direction);
 
+                // 计算脱离方向
                 const float breakout_direction_rad = radians(vtol_approach_s.approach_direction_deg + (direction > 0 ? 270 : 90));
 
-                // breakout when within 5 degrees of the opposite direction
+                // 当在反方向的5度范围内时脱离
                 if (fabsF(wrap_PI(ahrs.get_yaw() - breakout_direction_rad)) < radians(5.0f)) {
                     gcs().send_text(MAV_SEVERITY_INFO, "Starting VTOL land approach path");
                     vtol_approach_s.approach_stage = VTOLApproach::Stage::APPROACH_LINE;
                     set_next_WP(cmd.content.location);
-                    // fallthrough
                 } else {
                     break;
                 }
@@ -1114,17 +1112,17 @@ bool Plane::verify_landing_vtol_approach(const AP_Mission::Mission_Command &cmd)
             }
         case VTOLApproach::Stage::APPROACH_LINE:
             {
-                // project an apporach path
+                // 投影接近路径
                 Location start = cmd.content.location;
                 Location end = cmd.content.location;
 
-                // project a 1km waypoint to either side of the landing location
+                // 在着陆位置两侧投影1公里的航点
                 start.offset_bearing(vtol_approach_s.approach_direction_deg + 180, 1000);
                 end.offset_bearing(vtol_approach_s.approach_direction_deg, 1000);
 
                 nav_controller->update_waypoint(start, end);
 
-                // check if we should move on to the next waypoint
+                // 检查是否应该移动到下一个航点
                 Location breakout_stopping_loc = cmd.content.location;
                 breakout_stopping_loc.offset_bearing(vtol_approach_s.approach_direction_deg + 180, quadplane.stopping_distance());
                 const bool past_finish_line = current_loc.past_interval_finish_line(start, breakout_stopping_loc);
@@ -1143,14 +1141,13 @@ bool Plane::verify_landing_vtol_approach(const AP_Mission::Mission_Command &cmd)
                 if (past_finish_line && (lined_up || half_radius)) {
                     vtol_approach_s.approach_stage = VTOLApproach::Stage::VTOL_LANDING;
                     quadplane.do_vtol_land(cmd);
-                    // fallthrough
                 } else {
                     break;
                 }
                 FALLTHROUGH;
             }
         case VTOLApproach::Stage::VTOL_LANDING:
-            // nothing to do here, we should be into the quadplane landing code
+            // 这里不需要做任何事，我们应该已经进入四旋翼着陆代码
             return true;
     }
 
@@ -1158,20 +1155,21 @@ bool Plane::verify_landing_vtol_approach(const AP_Mission::Mission_Command &cmd)
 }
 #endif // HAL_QUADPLANE_ENABLED
 
+// 验证盘旋航向
 bool Plane::verify_loiter_heading(bool init)
 {
 #if HAL_QUADPLANE_ENABLED
     if (quadplane.in_vtol_auto()) {
-        // skip heading verify if in VTOL auto
+        // 如果在VTOL自动模式，跳过航向验证
         return true;
     }
 #endif
 
-    //Get the lat/lon of next Nav waypoint after this one:
+    // 获取下一个导航航点的经纬度
     AP_Mission::Mission_Command next_nav_cmd;
     if (! mission.get_next_nav_cmd(mission.get_current_nav_index() + 1,
                                    next_nav_cmd)) {
-        //no next waypoint to shoot for -- go ahead and break out of loiter
+        // 没有下一个航点可以瞄准 -- 继续并跳出盘旋
         return true;
     }
 
@@ -1182,6 +1180,7 @@ bool Plane::verify_loiter_heading(bool init)
     return plane.mode_loiter.isHeadingLinedUp(next_WP_loc, next_nav_cmd.content.location);
 }
 
+// 获取航点半径
 float Plane::get_wp_radius() const
 {
 #if HAL_QUADPLANE_ENABLED
@@ -1193,9 +1192,7 @@ float Plane::get_wp_radius() const
 }
 
 #if AP_SCRIPTING_ENABLED
-/*
-  support for scripted navigation, with verify operation for completion
- */
+// 支持脚本化导航，带有完成验证操作
 void Plane::do_nav_script_time(const AP_Mission::Mission_Command& cmd)
 {
     nav_scripting.enabled = true;
@@ -1203,16 +1200,14 @@ void Plane::do_nav_script_time(const AP_Mission::Mission_Command& cmd)
     nav_scripting.start_ms = AP_HAL::millis();
     nav_scripting.current_ms = nav_scripting.start_ms;
 
-    // start with current roll rate, pitch rate and throttle
+    // 从当前的滚转率、俯仰率和油门开始
     nav_scripting.roll_rate_dps = plane.rollController.get_pid_info().target;
     nav_scripting.pitch_rate_dps = plane.pitchController.get_pid_info().target;
     nav_scripting.yaw_rate_dps = degrees(ahrs.get_gyro().z);
     nav_scripting.throttle_pct = SRV_Channels::get_output_scaled(SRV_Channel::k_throttle);
 }
 
-/*
-  wait for scripting to say that the mission item is complete
- */
+// 等待脚本说任务项完成
 bool Plane::verify_nav_script_time(const AP_Mission::Mission_Command& cmd)
 {
     if (cmd.content.nav_script_time.timeout_s > 0) {
@@ -1227,11 +1222,11 @@ bool Plane::verify_nav_script_time(const AP_Mission::Mission_Command& cmd)
     return !nav_scripting.enabled;
 }
 
-// check if we are in a NAV_SCRIPT_* command
+// 检查是否在NAV_SCRIPT_*命令中
 bool Plane::nav_scripting_active(void)
 {
     if (nav_scripting.enabled && AP_HAL::millis() - nav_scripting.current_ms > 1000) {
-        // set_target_throttle_rate_rpy has not been called from script in last 1000ms
+        // 在过去1000ms内脚本没有调用set_target_throttle_rate_rpy
         nav_scripting.enabled = false;
         nav_scripting.current_ms = 0;
         nav_scripting.rudder_offset_pct = 0;
@@ -1245,11 +1240,11 @@ bool Plane::nav_scripting_active(void)
     return nav_scripting.enabled;
 }
 
-// support for NAV_SCRIPTING mission command
+// 支持NAV_SCRIPTING任务命令
 bool Plane::nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4)
 {
     if (!nav_scripting_active()) {
-        // not in NAV_SCRIPT_TIME
+        // 不在NAV_SCRIPT_TIME中
         return false;
     }
     const auto &c = mission.get_current_nav_cmd().content.nav_script_time;
@@ -1262,7 +1257,7 @@ bool Plane::nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2
     return true;
 }
 
-// called when script has completed the command
+// 当脚本完成命令时调用
 void Plane::nav_script_time_done(uint16_t id)
 {
     if (id == nav_scripting.id) {
@@ -1270,7 +1265,7 @@ void Plane::nav_script_time_done(uint16_t id)
     }
 }
 
-// support for NAV_SCRIPTING mission command and aerobatics in other allowed modes
+// 支持NAV_SCRIPTING任务命令和其他允许模式下的特技飞行
 void Plane::set_target_throttle_rate_rpy(float throttle_pct, float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps)
 {
     nav_scripting.roll_rate_dps = constrain_float(roll_rate_dps, -g.acro_roll_rate, g.acro_roll_rate);
@@ -1280,14 +1275,14 @@ void Plane::set_target_throttle_rate_rpy(float throttle_pct, float roll_rate_dps
     nav_scripting.current_ms = AP_HAL::millis();
 }
 
-// support for rudder offset override in aerobatic scripting
+// 支持特技飞行脚本中的方向舵偏移覆盖
 void Plane::set_rudder_offset(float rudder_pct, bool run_yaw_rate_controller)
 {
     nav_scripting.rudder_offset_pct = rudder_pct;
     nav_scripting.run_yaw_rate_controller = run_yaw_rate_controller;
 }
 
-// enable NAV_SCRIPTING takeover in modes other than AUTO using script time mission commands
+// 在AUTO以外的模式下启用NAV_SCRIPTING接管，使用脚本时间任务命令
 bool Plane::nav_scripting_enable(uint8_t mode)
 {
    uint8_t current_control_mode = control_mode->mode_number();
@@ -1312,25 +1307,24 @@ bool Plane::nav_scripting_enable(uint8_t mode)
    return nav_scripting.enabled;
 }
 #endif // AP_SCRIPTING_ENABLED
-
 /*
-  return true if this is a LAND command
-  note that we consider a PAYLOAD_PLACE to be a land command as it
-  follows the landing logic for quadplanes
+  判断给定的命令是否为着陆命令
+  注意：我们将PAYLOAD_PLACE也视为着陆命令，因为它遵循四旋翼飞行器的着陆逻辑
  */
 bool Plane::is_land_command(uint16_t command) const
 {
     return
-        command == MAV_CMD_NAV_VTOL_LAND ||
-        command == MAV_CMD_NAV_LAND ||
-        command == MAV_CMD_NAV_PAYLOAD_PLACE;
+        command == MAV_CMD_NAV_VTOL_LAND ||    // 垂直起降着陆命令
+        command == MAV_CMD_NAV_LAND ||         // 普通着陆命令
+        command == MAV_CMD_NAV_PAYLOAD_PLACE;  // 有效载荷放置命令（视为着陆）
 }
 
 /*
-  return true if in a specific AUTO mission command
+  判断飞机是否正在执行特定的AUTO任务命令
  */
 bool Plane::in_auto_mission_id(uint16_t command) const
 {
-    return control_mode == &mode_auto && mission.get_current_nav_id() == command;
+    return control_mode == &mode_auto &&              // 确保当前处于AUTO模式
+           mission.get_current_nav_id() == command;   // 当前导航命令ID与给定命令匹配
 }
 

@@ -1,146 +1,114 @@
 /*
-   Lead developer: Andrew Tridgell
+   主要开发者: Andrew Tridgell
  
-   Authors:    Doug Weibel, Jose Julio, Jordi Munoz, Jason Short, Randy Mackay, Pat Hickey, John Arne Birkeland, Olivier Adler, Amilcar Lucas, Gregory Fletcher, Paul Riseborough, Brandon Jones, Jon Challinger, Tom Pittenger
-   Thanks to:  Chris Anderson, Michael Oborne, Paul Mather, Bill Premerlani, James Cohen, JB from rotorFX, Automatik, Fefenin, Peter Meister, Remzibi, Yury Smirnov, Sandro Benigno, Max Levine, Roberto Navoni, Lorenz Meier, Yury MonZon
+   作者:    Doug Weibel, Jose Julio, Jordi Munoz, Jason Short, Randy Mackay, Pat Hickey, John Arne Birkeland, Olivier Adler, Amilcar Lucas, Gregory Fletcher, Paul Riseborough, Brandon Jones, Jon Challinger, Tom Pittenger
+   鸣谢:  Chris Anderson, Michael Oborne, Paul Mather, Bill Premerlani, James Cohen, JB from rotorFX, Automatik, Fefenin, Peter Meister, Remzibi, Yury Smirnov, Sandro Benigno, Max Levine, Roberto Navoni, Lorenz Meier, Yury MonZon
 
-   Please contribute your ideas! See https://ardupilot.org/dev for details
+   请贡献您的想法! 详情请见 https://ardupilot.org/dev
 
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
+   本程序是自由软件：您可以根据自由软件基金会发布的GNU通用公共许可证的条款，即许可证的第3版或（您选择的）任何后来的版本重新发布它和/或修改它。
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   本程序的发布是希望它能起到作用。但没有任何保证；甚至没有隐含的保证。本程序的分发是希望它是有用的，但没有任何保证，甚至没有隐含的适销对路或适合某一特定目的的保证。参见GNU通用公共许可证了解更多细节。
 
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   您应该已经收到一份GNU通用公共许可证的副本。如果没有，请参阅<http://www.gnu.org/licenses/>。
  */
 
 #include "Plane.h"
 
+// 定义调度任务宏
 #define SCHED_TASK(func, rate_hz, max_time_micros, priority) SCHED_TASK_CLASS(Plane, &plane, func, rate_hz, max_time_micros, priority)
 #define FAST_TASK(func) FAST_TASK_CLASS(Plane, &plane, func)
 
-
-/*
-  scheduler table - all regular tasks should be listed here.
-
-  All entries in this table must be ordered by priority.
-
-  This table is interleaved with the table present in each of the
-  vehicles to determine the order in which tasks are run.  Convenience
-  methods SCHED_TASK and SCHED_TASK_CLASS are provided to build
-  entries in this structure:
-
-SCHED_TASK arguments:
- - name of static function to call
- - rate (in Hertz) at which the function should be called
- - expected time (in MicroSeconds) that the function should take to run
- - priority (0 through 255, lower number meaning higher priority)
-
-SCHED_TASK_CLASS arguments:
- - class name of method to be called
- - instance on which to call the method
- - method to call on that instance
- - rate (in Hertz) at which the method should be called
- - expected time (in MicroSeconds) that the method should take to run
- - priority (0 through 255, lower number meaning higher priority)
-
-FAST_TASK entries are run on every loop even if that means the loop
-overruns its allotted time
- */
+// 调度器任务表 - 所有常规任务都应列在此处
 const AP_Scheduler::Task Plane::scheduler_tasks[] = {
-                           // Units:   Hz      us
-    FAST_TASK(ahrs_update),
-    FAST_TASK(update_control_mode),
-    FAST_TASK(stabilize),
-    FAST_TASK(set_servos),
-    SCHED_TASK(read_radio,             50,    100,   6),
-    SCHED_TASK(check_short_failsafe,   50,    100,   9),
-    SCHED_TASK(update_speed_height,    50,    200,  12),
-    SCHED_TASK(update_throttle_hover, 100,     90,  24),
-    SCHED_TASK_CLASS(RC_Channels,     (RC_Channels*)&plane.g2.rc_channels, read_mode_switch,           7,    100, 27),
-    SCHED_TASK(update_GPS_50Hz,        50,    300,  30),
-    SCHED_TASK(update_GPS_10Hz,        10,    400,  33),
-    SCHED_TASK(navigate,               10,    150,  36),
-    SCHED_TASK(update_compass,         10,    200,  39),
-    SCHED_TASK(calc_airspeed_errors,   10,    100,  42),
-    SCHED_TASK(update_alt,             10,    200,  45),
-    SCHED_TASK(adjust_altitude_target, 10,    200,  48),
+    // 单位:   Hz      us
+    FAST_TASK(ahrs_update),                    // AHRS更新
+    FAST_TASK(update_control_mode),            // 更新控制模式
+    FAST_TASK(stabilize),                      // 稳定
+    FAST_TASK(set_servos),                     // 设置舵机
+    SCHED_TASK(read_radio,             50,    100,   6),  // 读取遥控信号
+    SCHED_TASK(check_short_failsafe,   50,    100,   9),  // 检查短期故障保护
+    SCHED_TASK(update_speed_height,    50,    200,  12),  // 更新速度和高度
+    SCHED_TASK(update_throttle_hover, 100,     90,  24),  // 更新悬停油门
+    SCHED_TASK_CLASS(RC_Channels,     (RC_Channels*)&plane.g2.rc_channels, read_mode_switch,           7,    100, 27),  // 读取模式开关
+    SCHED_TASK(update_GPS_50Hz,        50,    300,  30),  // 50Hz GPS更新
+    SCHED_TASK(update_GPS_10Hz,        10,    400,  33),  // 10Hz GPS更新
+    SCHED_TASK(navigate,               10,    150,  36),  // 导航
+    SCHED_TASK(update_compass,         10,    200,  39),  // 更新指南针
+    SCHED_TASK(calc_airspeed_errors,   10,    100,  42),  // 计算空速误差
+    SCHED_TASK(update_alt,             10,    200,  45),  // 更新高度
+    SCHED_TASK(adjust_altitude_target, 10,    200,  48),  // 调整目标高度
 #if AP_ADVANCEDFAILSAFE_ENABLED
-    SCHED_TASK(afs_fs_check,           10,    100,  51),
+    SCHED_TASK(afs_fs_check,           10,    100,  51),  // 高级故障保护检查
 #endif
-    SCHED_TASK(ekf_check,              10,     75,  54),
-    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_receive,   300,  500,  57),
-    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_send,      300,  750,  60),
+    SCHED_TASK(ekf_check,              10,     75,  54),  // EKF检查
+    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_receive,   300,  500,  57),  // GCS接收更新
+    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_send,      300,  750,  60),  // GCS发送更新
 #if AP_SERVORELAYEVENTS_ENABLED
-    SCHED_TASK_CLASS(AP_ServoRelayEvents, &plane.ServoRelayEvents, update_events, 50, 150,  63),
+    SCHED_TASK_CLASS(AP_ServoRelayEvents, &plane.ServoRelayEvents, update_events, 50, 150,  63),  // 舵机继电器事件更新
 #endif
-    SCHED_TASK_CLASS(AP_BattMonitor, &plane.battery, read,   10, 300,  66),
+    SCHED_TASK_CLASS(AP_BattMonitor, &plane.battery, read,   10, 300,  66),  // 电池监测读取
 #if AP_RANGEFINDER_ENABLED
-    SCHED_TASK(read_rangefinder,       50,    100, 78),
+    SCHED_TASK(read_rangefinder,       50,    100, 78),  // 读取测距仪
 #endif
 #if AP_ICENGINE_ENABLED
-    SCHED_TASK_CLASS(AP_ICEngine,      &plane.g2.ice_control, update,     10, 100,  81),
+    SCHED_TASK_CLASS(AP_ICEngine,      &plane.g2.ice_control, update,     10, 100,  81),  // 内燃机控制更新
 #endif
 #if AP_OPTICALFLOW_ENABLED
-    SCHED_TASK_CLASS(AP_OpticalFlow, &plane.optflow, update,    50,    50,  87),
+    SCHED_TASK_CLASS(AP_OpticalFlow, &plane.optflow, update,    50,    50,  87),  // 光流更新
 #endif
-    SCHED_TASK(one_second_loop,         1,    400,  90),
-    SCHED_TASK(three_hz_loop,           3,     75,  93),
-    SCHED_TASK(check_long_failsafe,     3,    400,  96),
+    SCHED_TASK(one_second_loop,         1,    400,  90),  // 1秒循环
+    SCHED_TASK(three_hz_loop,           3,     75,  93),  // 3Hz循环
+    SCHED_TASK(check_long_failsafe,     3,    400,  96),  // 检查长期故障保护
 #if AP_RPM_ENABLED
-    SCHED_TASK_CLASS(AP_RPM,           &plane.rpm_sensor,     update,     10, 100,  99),
+    SCHED_TASK_CLASS(AP_RPM,           &plane.rpm_sensor,     update,     10, 100,  99),  // RPM传感器更新
 #endif
 #if AP_AIRSPEED_AUTOCAL_ENABLE
-    SCHED_TASK(airspeed_ratio_update,   1,    100,  102),
+    SCHED_TASK(airspeed_ratio_update,   1,    100,  102),  // 空速比更新
 #endif // AP_AIRSPEED_AUTOCAL_ENABLE
 #if HAL_MOUNT_ENABLED
-    SCHED_TASK_CLASS(AP_Mount, &plane.camera_mount, update, 50, 100, 105),
+    SCHED_TASK_CLASS(AP_Mount, &plane.camera_mount, update, 50, 100, 105),  // 云台更新
 #endif // HAL_MOUNT_ENABLED
 #if AP_CAMERA_ENABLED
-    SCHED_TASK_CLASS(AP_Camera, &plane.camera, update,      50, 100, 108),
+    SCHED_TASK_CLASS(AP_Camera, &plane.camera, update,      50, 100, 108),  // 相机更新
 #endif // CAMERA == ENABLED
 #if HAL_LOGGING_ENABLED
-    SCHED_TASK_CLASS(AP_Scheduler, &plane.scheduler, update_logging,         0.2,    100, 111),
+    SCHED_TASK_CLASS(AP_Scheduler, &plane.scheduler, update_logging,         0.2,    100, 111),  // 调度器日志更新
 #endif
-    SCHED_TASK(compass_save,          0.1,    200, 114),
+    SCHED_TASK(compass_save,          0.1,    200, 114),  // 保存指南针校准
 #if HAL_LOGGING_ENABLED
-    SCHED_TASK(Log_Write_FullRate,        400,    300, 117),
-    SCHED_TASK(update_logging10,        10,    300, 120),
-    SCHED_TASK(update_logging25,        25,    300, 123),
+    SCHED_TASK(Log_Write_FullRate,        400,    300, 117),  // 全速率日志写入
+    SCHED_TASK(update_logging10,        10,    300, 120),  // 10Hz日志更新
+    SCHED_TASK(update_logging25,        25,    300, 123),  // 25Hz日志更新
 #endif
 #if HAL_SOARING_ENABLED
-    SCHED_TASK(update_soaring,         50,    400, 126),
+    SCHED_TASK(update_soaring,         50,    400, 126),  // 滑翔更新
 #endif
-    SCHED_TASK(parachute_check,        10,    200, 129),
+    SCHED_TASK(parachute_check,        10,    200, 129),  // 降落伞检查
 #if AP_TERRAIN_AVAILABLE
-    SCHED_TASK_CLASS(AP_Terrain, &plane.terrain, update, 10, 200, 132),
+    SCHED_TASK_CLASS(AP_Terrain, &plane.terrain, update, 10, 200, 132),  // 地形更新
 #endif // AP_TERRAIN_AVAILABLE
-    SCHED_TASK(update_is_flying_5Hz,    5,    100, 135),
+    SCHED_TASK(update_is_flying_5Hz,    5,    100, 135),  // 5Hz飞行状态更新
 #if HAL_LOGGING_ENABLED
-    SCHED_TASK_CLASS(AP_Logger,         &plane.logger, periodic_tasks, 50, 400, 138),
+    SCHED_TASK_CLASS(AP_Logger,         &plane.logger, periodic_tasks, 50, 400, 138),  // 日志周期性任务
 #endif
-    SCHED_TASK_CLASS(AP_InertialSensor, &plane.ins,    periodic,       50,  50, 141),
+    SCHED_TASK_CLASS(AP_InertialSensor, &plane.ins,    periodic,       50,  50, 141),  // 惯性传感器周期性任务
 #if HAL_ADSB_ENABLED
-    SCHED_TASK(avoidance_adsb_update,  10,    100, 144),
+    SCHED_TASK(avoidance_adsb_update,  10,    100, 144),  // ADS-B避障更新
 #endif
-    SCHED_TASK_CLASS(RC_Channels,       (RC_Channels*)&plane.g2.rc_channels, read_aux_all,           10,    200, 147),
+    SCHED_TASK_CLASS(RC_Channels,       (RC_Channels*)&plane.g2.rc_channels, read_aux_all,           10,    200, 147),  // 读取所有辅助通道
 #if HAL_BUTTON_ENABLED
-    SCHED_TASK_CLASS(AP_Button, &plane.button, update, 5, 100, 150),
+    SCHED_TASK_CLASS(AP_Button, &plane.button, update, 5, 100, 150),  // 按钮更新
 #endif
 #if AP_LANDINGGEAR_ENABLED
-    SCHED_TASK(landing_gear_update, 5, 50, 159),
+    SCHED_TASK(landing_gear_update, 5, 50, 159),  // 起落架更新
 #endif
 #if AC_PRECLAND_ENABLED
-    SCHED_TASK(precland_update, 400, 50, 160),
+    SCHED_TASK(precland_update, 400, 50, 160),  // 精确着陆更新
 #endif
 };
 
+// 获取调度器任务
 void Plane::get_scheduler_tasks(const AP_Scheduler::Task *&tasks,
                                 uint8_t &task_count,
                                 uint32_t &log_bit)
@@ -156,7 +124,7 @@ constexpr int8_t Plane::_failsafe_priorities[7];
 constexpr int8_t Plane::_failsafe_priorities[6];
 #endif
 
-// update AHRS system
+// 更新AHRS系统
 void Plane::ahrs_update()
 {
     arming.update_soft_armed();
@@ -169,7 +137,7 @@ void Plane::ahrs_update()
     }
 #endif
 
-    // calculate a scaled roll limit based on current pitch
+    // 根据当前俯仰角计算缩放后的横滚限制
     roll_limit_cd = aparm.roll_limit*100;
     pitch_limit_min = aparm.pitch_limit_min;
 
@@ -184,17 +152,16 @@ void Plane::ahrs_update()
         pitch_limit_min *= fabsf(ahrs.cos_roll());
     }
 
-    // updated the summed gyro used for ground steering and
-    // auto-takeoff. Dot product of DCM.c with gyro vector gives earth
-    // frame yaw rate
+    // 更新用于地面转向和自动起飞的陀螺仪总和
+    // DCM.c与陀螺仪向量的点积给出地球坐标系的偏航率
     steer_state.locked_course_err += ahrs.get_yaw_rate_earth() * G_Dt;
     steer_state.locked_course_err = wrap_PI(steer_state.locked_course_err);
 
 #if HAL_QUADPLANE_ENABLED
-    // check if we have had a yaw reset from the EKF
+    // 检查EKF是否有偏航重置
     quadplane.check_yaw_reset();
 
-    // update inertial_nav for quadplane
+    // 更新四旋翼的惯性导航
     quadplane.inertial_nav.update();
 #endif
 
@@ -205,9 +172,7 @@ void Plane::ahrs_update()
 #endif
 }
 
-/*
-  update 50Hz speed/height controller
- */
+// 更新50Hz速度/高度控制器
 void Plane::update_speed_height(void)
 {
     bool should_run_tecs = control_mode->does_auto_throttle();
@@ -228,9 +193,7 @@ void Plane::update_speed_height(void)
 #endif
 
     if (should_run_tecs) {
-	    // Call TECS 50Hz update. Note that we call this regardless of
-	    // throttle suppressed, as this needs to be running for
-	    // takeoff detection
+        // 调用TECS 50Hz更新。注意，无论油门是否被抑制，我们都会调用此函数，因为这需要运行以进行起飞检测
         TECS_controller.update_50hz();
     }
 
@@ -242,19 +205,14 @@ void Plane::update_speed_height(void)
 #endif
 }
 
-
-/*
-  read and update compass
- */
+// 读取和更新指南针
 void Plane::update_compass(void)
 {
     compass.read();
 }
 
 #if HAL_LOGGING_ENABLED
-/*
-  do 10Hz logging
- */
+// 执行10Hz日志记录
 void Plane::update_logging10(void)
 {
     bool log_faster = (should_log(MASK_LOG_ATTITUDE_FULLRATE) || should_log(MASK_LOG_ATTITUDE_FAST));
@@ -272,12 +230,12 @@ void Plane::update_logging10(void)
 }
 
 /*
-  do 25Hz logging
+  执行25Hz日志记录
  */
 void Plane::update_logging25(void)
 {
-    // MASK_LOG_ATTITUDE_FULLRATE logs at 400Hz, MASK_LOG_ATTITUDE_FAST at 25Hz, MASK_LOG_ATTIUDE_MED logs at 10Hz
-    // highest rate selected wins
+    // MASK_LOG_ATTITUDE_FULLRATE 以400Hz记录，MASK_LOG_ATTITUDE_FAST 以25Hz记录，MASK_LOG_ATTIUDE_MED 以10Hz记录
+    // 选择最高频率
     bool log_faster = should_log(MASK_LOG_ATTITUDE_FULLRATE);
     if (should_log(MASK_LOG_ATTITUDE_FAST) && !log_faster) {
         Log_Write_Attitude();
@@ -309,7 +267,7 @@ void Plane::update_logging25(void)
 #endif  // HAL_LOGGING_ENABLED
 
 /*
-  check for AFS failsafe check
+  检查AFS故障保护
  */
 #if AP_ADVANCEDFAILSAFE_ENABLED
 void Plane::afs_fs_check(void)
@@ -325,7 +283,7 @@ extern AP_IOMCU iomcu;
 
 void Plane::one_second_loop()
 {
-    // make it possible to change control channel ordering at runtime
+    // 使运行时更改控制通道顺序成为可能
     set_control_channels();
 
 #if HAL_WITH_IO_MCU
@@ -333,22 +291,22 @@ void Plane::one_second_loop()
 #endif
 
 #if HAL_ADSB_ENABLED
-    adsb.set_stall_speed_cm(aparm.airspeed_min * 100); // convert m/s to cm/s
+    adsb.set_stall_speed_cm(aparm.airspeed_min * 100); // 将m/s转换为cm/s
     adsb.set_max_speed(aparm.airspeed_max);
 #endif
 
     if (flight_option_enabled(FlightOptions::ENABLE_DEFAULT_AIRSPEED)) {
-        // use average of min and max airspeed as default airspeed fusion with high variance
+        // 使用最小和最大空速的平均值作为默认空速融合，具有高方差
         ahrs.writeDefaultAirSpeed((float)((aparm.airspeed_min + aparm.airspeed_max)/2),
                                   (float)((aparm.airspeed_max - aparm.airspeed_min)/2));
     }
 
-    // sync MAVLink system ID
+    // 同步MAVLink系统ID
     mavlink_system.sysid = g.sysid_this_mav;
 
     SRV_Channels::enable_aux_servos();
 
-    // update notify flags
+    // 更新通知标志
     AP_Notify::flags.pre_arm_check = arming.pre_arm_checks(false);
     AP_Notify::flags.pre_arm_gps_check = true;
     AP_Notify::flags.armed = arming.is_armed() || arming.arming_required() == AP_Arming::Required::NO;
@@ -359,20 +317,18 @@ void Plane::one_second_loop()
     }
 #endif
 
-    // update home position if NOT armed and gps position has
-    // changed. Update every 5s at most
+    // 如果未解锁且GPS位置已更改，则更新家位置。最多每5秒更新一次
     if (!arming.is_armed() &&
         gps.last_message_time_ms() - last_home_update_ms > 5000 &&
         gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
             last_home_update_ms = gps.last_message_time_ms();
             update_home();
             
-            // reset the landing altitude correction
+            // 重置着陆高度校正
             landing.alt_offset = 0;
     }
 
-    // this ensures G_Dt is correct, catching startup issues with constructors
-    // calling the scheduler methods
+    // 确保G_Dt正确，捕获构造函数调用调度程序方法时的启动问题
     if (!is_equal(1.0f/scheduler.get_loop_rate_hz(), scheduler.get_loop_period_s()) ||
         !is_equal(G_Dt, scheduler.get_loop_period_s())) {
         INTERNAL_ERROR(AP_InternalError::error_t::flow_of_control);
@@ -402,7 +358,7 @@ void Plane::compass_save()
         compass.get_learn_type() >= Compass::LEARN_INTERNAL &&
         !hal.util->get_soft_armed()) {
         /*
-          only save offsets when disarmed
+          仅在解除武装时保存偏移量
          */
         compass.save_offsets();
     }
@@ -410,37 +366,36 @@ void Plane::compass_save()
 
 #if AP_AIRSPEED_AUTOCAL_ENABLE
 /*
-  once a second update the airspeed calibration ratio
+  每秒更新一次空速校准比率
  */
 void Plane::airspeed_ratio_update(void)
 {
     if (!airspeed.enabled() ||
         gps.status() < AP_GPS::GPS_OK_FIX_3D ||
         gps.ground_speed() < 4) {
-        // don't calibrate when not moving
+        // 不移动时不校准
         return;        
     }
     if (airspeed.get_airspeed() < aparm.airspeed_min && 
         gps.ground_speed() < (uint32_t)aparm.airspeed_min) {
-        // don't calibrate when flying below the minimum airspeed. We
-        // check both airspeed and ground speed to catch cases where
-        // the airspeed ratio is way too low, which could lead to it
-        // never coming up again
+        // 飞行速度低于最小空速时不校准。我们
+        // 同时检查空速和地速，以捕获空速比
+        // 过低的情况，这可能导致它
+        // 永远不会再上升
         return;
     }
     if (labs(ahrs.roll_sensor) > roll_limit_cd ||
         ahrs.pitch_sensor > aparm.pitch_limit_max*100 ||
         ahrs.pitch_sensor < pitch_limit_min*100) {
-        // don't calibrate when going beyond normal flight envelope
+        // 超出正常飞行包络时不校准
         return;
     }
     const Vector3f &vg = gps.velocity();
     airspeed.update_calibration(vg, aparm.airspeed_max);
 }
 #endif // AP_AIRSPEED_AUTOCAL_ENABLE
-
 /*
-  read the GPS and update position
+  读取GPS并更新位置
  */
 void Plane::update_GPS_50Hz(void)
 {
@@ -450,7 +405,7 @@ void Plane::update_GPS_50Hz(void)
 }
 
 /*
-  read update GPS position - 10Hz update
+  读取更新GPS位置 - 10Hz更新
  */
 void Plane::update_GPS_10Hz(void)
 {
@@ -461,15 +416,15 @@ void Plane::update_GPS_10Hz(void)
         if (ground_start_count > 1) {
             ground_start_count--;
         } else if (ground_start_count == 1) {
-            // We countdown N number of good GPS fixes
-            // so that the altitude is more accurate
+            // 我们倒计时N次良好的GPS定位
+            // 以使高度更准确
             // -------------------------------------
             if (current_loc.lat == 0 && current_loc.lng == 0) {
                 ground_start_count = 5;
 
             } else if (!hal.util->was_watchdog_reset()) {
                 if (!set_home_persistently(gps.location())) {
-                    // silently ignore failure...
+                    // 静默忽略失败...
                 }
 
                 next_WP_loc = prev_WP_loc = home;
@@ -478,10 +433,10 @@ void Plane::update_GPS_10Hz(void)
             }
         }
 
-        // update wind estimate
+        // 更新风速估计
         ahrs.estimate_wind();
     } else if (gps.status() < AP_GPS::GPS_OK_FIX_3D && ground_start_count != 0) {
-        // lost 3D fix, start again
+        // 失去3D定位，重新开始
         ground_start_count = 5;
     }
 
@@ -489,12 +444,12 @@ void Plane::update_GPS_10Hz(void)
 }
 
 /*
-  main control mode dependent update code
+  主控制模式依赖的更新代码
  */
 void Plane::update_control_mode(void)
 {
     if (control_mode != &mode_auto) {
-        // hold_course is only used in takeoff and landing
+        // hold_course仅在起飞和着陆时使用
         steer_state.hold_course_cd = -1;
     }
 
@@ -506,9 +461,8 @@ void Plane::update_control_mode(void)
 
 void Plane::update_fly_forward(void)
 {
-    // ensure we are fly-forward when we are flying as a pure fixed
-    // wing aircraft. This helps the EKF produce better state
-    // estimates as it can make stronger assumptions
+    // 确保我们在作为纯固定翼飞行器飞行时保持前飞
+    // 这有助于EKF产生更好的状态估计，因为它可以做出更强的假设
 #if HAL_QUADPLANE_ENABLED
     if (quadplane.available() &&
         quadplane.tailsitter.is_in_fw_flight()) {
@@ -524,7 +478,7 @@ void Plane::update_fly_forward(void)
 #endif
 
     if (auto_state.idle_mode) {
-        // don't fuse airspeed when in balloon lift
+        // 在气球升力模式下不融合空速
         ahrs.set_fly_forward(false);
         return;
     }
@@ -538,7 +492,7 @@ void Plane::update_fly_forward(void)
 }
 
 /*
-  set the flight stage
+  设置飞行阶段
  */
 void Plane::set_flight_stage(AP_FixedWing::FlightStage fs)
 {
@@ -563,7 +517,7 @@ void Plane::update_alt()
 {
     barometer.update();
 
-    // calculate the sink rate.
+    // 计算下沉率
     float sink_rate;
     Vector3f vel;
     if (ahrs.get_velocity_NED(vel)) {
@@ -574,7 +528,7 @@ void Plane::update_alt()
         sink_rate = -barometer.get_climb_rate();        
     }
 
-    // low pass the sink rate to take some of the noise out
+    // 对下沉率进行低通滤波以消除一些噪声
     auto_state.sink_rate = 0.8f * auto_state.sink_rate + 0.2f*sink_rate;
 #if HAL_PARACHUTE_ENABLED
     parachute.set_sink_rate(auto_state.sink_rate);
@@ -584,7 +538,7 @@ void Plane::update_alt()
 
 #if AP_SCRIPTING_ENABLED
     if (nav_scripting_active()) {
-        // don't call TECS while we are in a trick
+        // 在执行特技动作时不调用TECS
         return;
     }
 #endif
@@ -617,9 +571,8 @@ void Plane::update_alt()
         tecs_target_alt_cm = relative_target_altitude_cm();
 
         if (control_mode == &mode_rtl && !rtl.done_climb && (g2.rtl_climb_min > 0 || (plane.flight_option_enabled(FlightOptions::CLIMB_BEFORE_TURN)))) {
-            // ensure we do the initial climb in RTL. We add an extra
-            // 10m in the demanded height to push TECS to climb
-            // quickly
+            // 确保我们在RTL模式下进行初始爬升。我们在要求的高度上再增加10m
+            // 以推动TECS快速爬升
             tecs_target_alt_cm = MAX(tecs_target_alt_cm, prev_WP_loc.alt - home.alt) + (g2.rtl_climb_min+10)*100;
         }
 
@@ -634,13 +587,12 @@ void Plane::update_alt()
                                                  g.pitch_trim.get());
     }
 }
-
 /*
-  recalculate the flight_stage
+  重新计算飞行阶段
  */
 void Plane::update_flight_stage(void)
 {
-    // Update the speed & height controller states
+    // 更新速度和高度控制器状态
     if (control_mode->does_auto_throttle() && !throttle_suppressed) {
         if (control_mode == &mode_auto) {
 #if HAL_QUADPLANE_ENABLED
@@ -654,11 +606,11 @@ void Plane::update_flight_stage(void)
                 return;
             } else if (mission.get_current_nav_cmd().id == MAV_CMD_NAV_LAND) {
                 if (landing.is_commanded_go_around() || flight_stage == AP_FixedWing::FlightStage::ABORT_LANDING) {
-                    // abort mode is sticky, it must complete while executing NAV_LAND
+                    // 中止模式是粘性的，必须在执行NAV_LAND时完成
                     set_flight_stage(AP_FixedWing::FlightStage::ABORT_LANDING);
                 } else if (landing.get_abort_throttle_enable() && get_throttle_input() >= 90 &&
                            landing.request_go_around()) {
-                    gcs().send_text(MAV_SEVERITY_INFO,"Landing aborted via throttle");
+                    gcs().send_text(MAV_SEVERITY_INFO,"通过油门中止着陆");
                     set_flight_stage(AP_FixedWing::FlightStage::ABORT_LANDING);
                 } else {
                     set_flight_stage(AP_FixedWing::FlightStage::LAND);
@@ -673,9 +625,8 @@ void Plane::update_flight_stage(void)
 #endif
             set_flight_stage(AP_FixedWing::FlightStage::NORMAL);
         } else if (control_mode != &mode_takeoff) {
-            // If not in AUTO then assume normal operation for normal TECS operation.
-            // This prevents TECS from being stuck in the wrong stage if you switch from
-            // AUTO to, say, FBWB during a landing, an aborted landing or takeoff.
+            // 如果不在AUTO模式，则假设正常操作以进行正常TECS操作。
+            // 这可以防止TECS在错误的阶段卡住，比如在着陆、中止着陆或起飞时从AUTO切换到FBWB。
             set_flight_stage(AP_FixedWing::FlightStage::NORMAL);
         }
         return;
@@ -690,13 +641,10 @@ void Plane::update_flight_stage(void)
     set_flight_stage(AP_FixedWing::FlightStage::NORMAL);
 }
 
-
-
-
 /*
-    If land_DisarmDelay is enabled (non-zero), check for a landing then auto-disarm after time expires
+    如果启用了land_DisarmDelay（非零），检查着陆后在时间到期后自动解除武装
 
-    only called from AP_Landing, when the landing library is ready to disarm
+    仅在着陆库准备解除武装时由AP_Landing调用
  */
 void Plane::disarm_if_autoland_complete()
 {
@@ -704,10 +652,10 @@ void Plane::disarm_if_autoland_complete()
         !is_flying() &&
         arming.arming_required() != AP_Arming::Required::NO &&
         arming.is_armed()) {
-        /* we have auto disarm enabled. See if enough time has passed */
+        /* 我们启用了自动解除武装。检查是否已经过去足够的时间 */
         if (millis() - auto_state.last_flying_ms >= landing.get_disarm_delay()*1000UL) {
             if (arming.disarm(AP_Arming::Method::AUTOLANDED)) {
-                gcs().send_text(MAV_SEVERITY_INFO,"Auto disarmed");
+                gcs().send_text(MAV_SEVERITY_INFO,"自动解除武装");
             }
         }
     }
@@ -728,13 +676,12 @@ bool Plane::trigger_land_abort(const float climb_to_alt_m)
     bool is_in_landing = (plane.flight_stage == AP_FixedWing::FlightStage::LAND) ||
         plane.is_land_command(mission_id);
     if (is_in_landing) {
-        // fly a user planned abort pattern if available
+        // 如果可用，执行用户计划的中止模式
         if (plane.have_position && plane.mission.jump_to_abort_landing_sequence(plane.current_loc)) {
             return true;
         }
 
-        // only fly a fixed wing abort if we aren't doing quadplane stuff, or potentially
-        // shooting a quadplane approach
+        // 只有在不执行四旋翼操作或可能进行四旋翼进场时才执行固定翼中止
 #if HAL_QUADPLANE_ENABLED
         const bool attempt_go_around =
             (!plane.quadplane.available()) ||
@@ -744,13 +691,11 @@ bool Plane::trigger_land_abort(const float climb_to_alt_m)
         const bool attempt_go_around = true;
 #endif
         if (attempt_go_around) {
-            // Initiate an aborted landing. This will trigger a pitch-up and
-            // climb-out to a safe altitude holding heading then one of the
-            // following actions will occur, check for in this order:
-            // - If MAV_CMD_CONTINUE_AND_CHANGE_ALT is next command in mission,
-            //      increment mission index to execute it
-            // - else if DO_LAND_START is available, jump to it
-            // - else decrement the mission index to repeat the landing approach
+            // 初始化中止着陆。这将触发抬头和爬升到安全高度保持航向，然后执行以下操作之一，按此顺序检查：
+            // - 如果任务中的下一个命令是MAV_CMD_CONTINUE_AND_CHANGE_ALT，
+            //   增加任务索引以执行它
+            // - 否则如果DO_LAND_START可用，跳转到它
+            // - 否则减少任务索引以重复着陆进场
 
             if (!is_zero(climb_to_alt_m)) {
                 plane.auto_state.takeoff_altitude_rel_cm = climb_to_alt_m * 100;
@@ -764,17 +709,14 @@ bool Plane::trigger_land_abort(const float climb_to_alt_m)
     return false;
 }
 
-
 /*
-  the height above field elevation that we pass to TECS
+  传递给TECS的相对于场地高度的高度
  */
 float Plane::tecs_hgt_afe(void)
 {
     /*
-      pass the height above field elevation as the height above
-      the ground when in landing, which means that TECS gets the
-      rangefinder information and thus can know when the flare is
-      coming.
+      在着陆时，将相对于场地高度的高度作为相对于地面的高度传递，
+      这意味着TECS获取测距仪信息，因此可以知道何时开始拉平。
     */
     float hgt_afe;
     if (flight_stage == AP_FixedWing::FlightStage::LAND) {
@@ -783,17 +725,16 @@ float Plane::tecs_hgt_afe(void)
         hgt_afe -= rangefinder_correction();
 #endif
     } else {
-        // when in normal flight we pass the hgt_afe as relative
-        // altitude to home
+        // 在正常飞行中，我们将hgt_afe作为相对于家的高度传递
         hgt_afe = relative_altitude;
     }
     return hgt_afe;
 }
 
-// vehicle specific waypoint info helpers
+// 特定于车辆的航点信息辅助函数
 bool Plane::get_wp_distance_m(float &distance) const
 {
-    // see GCS_MAVLINK_Plane::send_nav_controller_output()
+    // 参见 GCS_MAVLINK_Plane::send_nav_controller_output()
     if (control_mode == &mode_manual) {
         return false;
     }
@@ -809,7 +750,7 @@ bool Plane::get_wp_distance_m(float &distance) const
 
 bool Plane::get_wp_bearing_deg(float &bearing) const
 {
-    // see GCS_MAVLINK_Plane::send_nav_controller_output()
+    // 参见 GCS_MAVLINK_Plane::send_nav_controller_output()
     if (control_mode == &mode_manual) {
         return false;
     }
@@ -825,7 +766,7 @@ bool Plane::get_wp_bearing_deg(float &bearing) const
 
 bool Plane::get_wp_crosstrack_error_m(float &xtrack_error) const
 {
-    // see GCS_MAVLINK_Plane::send_nav_controller_output()
+    // 参见 GCS_MAVLINK_Plane::send_nav_controller_output()
     if (control_mode == &mode_manual) {
         return false;
     }
@@ -838,18 +779,17 @@ bool Plane::get_wp_crosstrack_error_m(float &xtrack_error) const
     xtrack_error = nav_controller->crosstrack_error();
     return true;
 }
-
 #if AP_SCRIPTING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
-// set target location (for use by external control and scripting)
+// 设置目标位置（用于外部控制和脚本）
 bool Plane::set_target_location(const Location &target_loc)
 {
     Location loc{target_loc};
 
     if (plane.control_mode != &plane.mode_guided) {
-        // only accept position updates when in GUIDED mode
+        // 仅在引导模式下接受位置更新
         return false;
     }
-    // add home alt if needed
+    // 如果需要，添加家的高度
     if (loc.relative_alt) {
         loc.alt += plane.home.alt;
         loc.relative_alt = 0;
@@ -860,7 +800,7 @@ bool Plane::set_target_location(const Location &target_loc)
 #endif //AP_SCRIPTING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
 
 #if AP_SCRIPTING_ENABLED
-// get target location (for use by scripting)
+// 获取目标位置（用于脚本）
 bool Plane::get_target_location(Location& target_loc)
 {
     switch (control_mode->mode_number()) {
@@ -884,16 +824,11 @@ bool Plane::get_target_location(Location& target_loc)
     return false;
 }
 
-/*
-  update_target_location() works in all auto navigation modes
- */
+// 更新目标位置（适用于所有自动导航模式）
 bool Plane::update_target_location(const Location &old_loc, const Location &new_loc)
 {
-    /*
-      by checking the caller has provided the correct old target
-      location we prevent a race condition where the user changes mode
-      or commands a different target in the controlling lua script
-     */
+    // 通过检查调用者提供的旧目标位置是否正确，
+    // 防止用户在控制lua脚本中更改模式或命令不同目标时的竞态条件
     if (!old_loc.same_loc_as(next_WP_loc) ||
         old_loc.get_alt_frame() != new_loc.get_alt_frame()) {
         return false;
@@ -909,7 +844,7 @@ bool Plane::update_target_location(const Location &old_loc, const Location &new_
     return true;
 }
 
-// allow for velocity matching in VTOL
+// 允许在VTOL模式下进行速度匹配
 bool Plane::set_velocity_match(const Vector2f &velocity)
 {
 #if HAL_QUADPLANE_ENABLED
@@ -922,7 +857,7 @@ bool Plane::set_velocity_match(const Vector2f &velocity)
     return false;
 }
 
-// allow for override of land descent rate
+// 允许覆盖着陆下降率
 bool Plane::set_land_descent_rate(float descent_rate)
 {
 #if HAL_QUADPLANE_ENABLED
@@ -936,8 +871,8 @@ bool Plane::set_land_descent_rate(float descent_rate)
     return false;
 }
 
-// Allow for scripting to have control over the crosstracking when exiting and resuming missions or guided flight
-// It's up to the Lua script to ensure the provided location makes sense
+// 允许脚本控制退出和恢复任务或引导飞行时的交叉跟踪
+// Lua脚本负责确保提供的位置是合理的
 bool Plane::set_crosstrack_start(const Location &new_start_location)
 {        
     prev_WP_loc = new_start_location;
@@ -947,7 +882,7 @@ bool Plane::set_crosstrack_start(const Location &new_start_location)
 
 #endif // AP_SCRIPTING_ENABLED
 
-// returns true if vehicle is landing.
+// 返回飞机是否正在着陆
 bool Plane::is_landing() const
 {
 #if HAL_QUADPLANE_ENABLED
@@ -958,7 +893,7 @@ bool Plane::is_landing() const
     return control_mode->is_landing();
 }
 
-// returns true if vehicle is taking off.
+// 返回飞机是否正在起飞
 bool Plane::is_taking_off() const
 {
 #if HAL_QUADPLANE_ENABLED
@@ -969,7 +904,7 @@ bool Plane::is_taking_off() const
     return control_mode->is_taking_off();
 }
 
-// correct AHRS pitch for PTCH_TRIM_DEG in non-VTOL modes, and return VTOL view in VTOL
+// 在非VTOL模式下修正AHRS俯仰角以适应PTCH_TRIM_DEG，并在VTOL模式下返回VTOL视图
 void Plane::get_osd_roll_pitch_rad(float &roll, float &pitch) const
 {
 #if HAL_QUADPLANE_ENABLED
@@ -981,33 +916,32 @@ void Plane::get_osd_roll_pitch_rad(float &roll, float &pitch) const
 #endif
     pitch = ahrs.get_pitch();
     roll = ahrs.get_roll();
-    if (!(flight_option_enabled(FlightOptions::OSD_REMOVE_TRIM_PITCH))) {  // correct for PTCH_TRIM_DEG
+    if (!(flight_option_enabled(FlightOptions::OSD_REMOVE_TRIM_PITCH))) {  // 修正PTCH_TRIM_DEG
         pitch -= g.pitch_trim * DEG_TO_RAD;
     }
 }
 
-/*
-  update current_loc Location
- */
+// 更新当前位置
 void Plane::update_current_loc(void)
 {
     have_position = plane.ahrs.get_location(plane.current_loc);
 
-    // re-calculate relative altitude
+    // 重新计算相对高度
     ahrs.get_relative_position_D_home(plane.relative_altitude);
     relative_altitude *= -1.0f;
 }
 
-// check if FLIGHT_OPTION is enabled
+// 检查FLIGHT_OPTION是否启用
 bool Plane::flight_option_enabled(FlightOptions flight_option) const
 {
     return g2.flight_options & flight_option;
 }
 
 #if AC_PRECLAND_ENABLED
+// 更新精确着陆
 void Plane::precland_update(void)
 {
-    // alt will be unused if we pass false through as the second parameter:
+    // 如果我们将false作为第二个参数传递，alt将不会被使用：
 #if AP_RANGEFINDER_ENABLED
     return g2.precland.update(rangefinder_state.height_estimate*100, rangefinder_state.in_range);
 #else

@@ -1,2 +1,4 @@
-# setup for LEDs on chan13
+# 配置通道13的LED功能
+# SERVO13_FUNCTION 120 - 将舵机通道13配置为LED输出
+# 120是LED功能的功能码,这样可以通过通道13控制LED的亮灭和亮度
 SERVO13_FUNCTION 120

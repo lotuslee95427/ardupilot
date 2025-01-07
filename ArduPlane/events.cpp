@@ -1,7 +1,6 @@
 #include "Plane.h"
 
-// returns true if the vehicle is in landing sequence.  Intended only
-// for use in failsafe code.
+// 返回车辆是否处于着陆序列中。仅用于故障保护代码。
 bool Plane::failsafe_in_landing_sequence() const
 {
     if (flight_stage == AP_FixedWing::FlightStage::LAND) {
@@ -18,9 +17,10 @@ bool Plane::failsafe_in_landing_sequence() const
     return false;
 }
 
+// 处理短时间失控信号故障保护事件
 void Plane::failsafe_short_on_event(enum failsafe_state fstype, ModeReason reason)
 {
-    // This is how to handle a short loss of control signal failsafe.
+    // 这是如何处理短时间失去控制信号的故障保护
     failsafe.state = fstype;
     failsafe.short_timer_ms = millis();
     failsafe.saved_mode_number = control_mode->mode_number();
@@ -35,7 +35,7 @@ void Plane::failsafe_short_on_event(enum failsafe_state fstype, ModeReason reaso
     case Mode::Number::CRUISE:
     case Mode::Number::TRAINING:  
         if(plane.emergency_landing) {
-            set_mode(mode_fbwa, reason); // emergency landing switch overrides normal action to allow out of range landing
+            set_mode(mode_fbwa, reason); // 紧急着陆开关覆盖正常操作，允许超出范围着陆
             break;
         }
         if(g.fs_action_short == FS_ACTION_SHORT_FBWA) {
@@ -43,7 +43,7 @@ void Plane::failsafe_short_on_event(enum failsafe_state fstype, ModeReason reaso
         } else if (g.fs_action_short == FS_ACTION_SHORT_FBWB) {
             set_mode(mode_fbwb, reason);
         } else {
-            set_mode(mode_circle, reason); // circle if action = 0 or 1 
+            set_mode(mode_circle, reason); // 如果动作 = 0 或 1，则进入盘旋模式
         }
         break;
 
@@ -67,7 +67,7 @@ void Plane::failsafe_short_on_event(enum failsafe_state fstype, ModeReason reaso
 
     case Mode::Number::AUTO: {
         if (failsafe_in_landing_sequence()) {
-            // don't failsafe in a landing sequence
+            // 在着陆序列中不执行故障保护
             break;
         }
         FALLTHROUGH;
@@ -76,7 +76,7 @@ void Plane::failsafe_short_on_event(enum failsafe_state fstype, ModeReason reaso
     case Mode::Number::GUIDED:
     case Mode::Number::LOITER:
     case Mode::Number::THERMAL:
-        if (g.fs_action_short != FS_ACTION_SHORT_BESTGUESS) { // if acton = 0(BESTGUESS) this group of modes take no action
+        if (g.fs_action_short != FS_ACTION_SHORT_BESTGUESS) { // 如果动作 = 0(BESTGUESS)，这组模式不采取任何动作
             failsafe.saved_mode_number = control_mode->mode_number();
             if (g.fs_action_short == FS_ACTION_SHORT_FBWA) {
                 set_mode(mode_fbwa, reason);
@@ -87,7 +87,7 @@ void Plane::failsafe_short_on_event(enum failsafe_state fstype, ModeReason reaso
             }
         }
          break;
-    case Mode::Number::CIRCLE:  // these modes never take any short failsafe action and continue
+    case Mode::Number::CIRCLE:  // 这些模式永远不会采取任何短时故障保护动作，继续当前模式
     case Mode::Number::TAKEOFF:
     case Mode::Number::RTL:
 #if HAL_QUADPLANE_ENABLED
@@ -99,17 +99,17 @@ void Plane::failsafe_short_on_event(enum failsafe_state fstype, ModeReason reaso
         break;
     }
     if (failsafe.saved_mode_number != control_mode->mode_number()) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "RC Short Failsafe: switched to %s", control_mode->name());
+        gcs().send_text(MAV_SEVERITY_WARNING, "RC短时故障保护：切换到 %s", control_mode->name());
     } else {
-        gcs().send_text(MAV_SEVERITY_WARNING, "RC Short Failsafe On");
+        gcs().send_text(MAV_SEVERITY_WARNING, "RC短时故障保护已启动");
     }
 }
 
+// 处理长时间失控信号故障保护事件
 void Plane::failsafe_long_on_event(enum failsafe_state fstype, ModeReason reason)
 {
-
-    // This is how to handle a long loss of control signal failsafe.
-    //  If the GCS is locked up we allow control to revert to RC
+    // 这是如何处理长时间失去控制信号的故障保护
+    //  如果GCS锁定，我们允许控制恢复到RC
     RC_Channels::clear_overrides();
     failsafe.state = fstype;
     switch (control_mode->mode_number())
@@ -127,14 +127,14 @@ void Plane::failsafe_long_on_event(enum failsafe_state fstype, ModeReason reason
     case Mode::Number::THERMAL:
     case Mode::Number::TAKEOFF:
         if (plane.flight_stage == AP_FixedWing::FlightStage::TAKEOFF && !(g.fs_action_long == FS_ACTION_LONG_GLIDE || g.fs_action_long == FS_ACTION_LONG_PARACHUTE)) {
-            // don't failsafe if in inital climb of TAKEOFF mode and FS action is not parachute or glide
-            // long failsafe will be re-called if still in fs after initial climb
+            // 如果在TAKEOFF模式的初始爬升阶段且FS动作不是滑翔或降落伞，则不执行故障保护
+            // 如果初始爬升后仍处于故障保护状态，将重新调用长时故障保护
             long_failsafe_pending = true;
             break;
         }
 
         if(plane.emergency_landing) {
-            set_mode(mode_fbwa, reason); // emergency landing switch overrides normal action to allow out of range landing
+            set_mode(mode_fbwa, reason); // 紧急着陆开关覆盖正常操作，允许超出范围着陆
             break;
         }
         if(g.fs_action_long == FS_ACTION_LONG_PARACHUTE) {
@@ -170,14 +170,14 @@ void Plane::failsafe_long_on_event(enum failsafe_state fstype, ModeReason reason
 
     case Mode::Number::AUTO:
         if (failsafe_in_landing_sequence()) {
-            // don't failsafe in a landing sequence
+            // 在着陆序列中不执行故障保护
             break;
         }
 
 #if HAL_QUADPLANE_ENABLED
         if (quadplane.in_vtol_takeoff()) {
             set_mode(mode_qland, reason);
-            // QLAND if in VTOL takeoff
+            // 如果在VTOL起飞中，执行QLAND
             break;
         }
 #endif
@@ -212,34 +212,35 @@ void Plane::failsafe_long_on_event(enum failsafe_state fstype, ModeReason reason
     case Mode::Number::INITIALISING:
         break;
     }
-    gcs().send_text(MAV_SEVERITY_WARNING, "%s Failsafe On: %s", (reason == ModeReason:: GCS_FAILSAFE) ? "GCS" : "RC Long", control_mode->name());
+    gcs().send_text(MAV_SEVERITY_WARNING, "%s 故障保护已启动: %s", (reason == ModeReason:: GCS_FAILSAFE) ? "GCS" : "RC长时", control_mode->name());
 }
 
+// 处理短时间故障保护解除事件
 void Plane::failsafe_short_off_event(ModeReason reason)
 {
-    // We're back in radio contact
-    gcs().send_text(MAV_SEVERITY_WARNING, "Short Failsafe Cleared");
+    // 我们重新获得了无线电联系
+    gcs().send_text(MAV_SEVERITY_WARNING, "短时故障保护已清除");
     failsafe.state = FAILSAFE_NONE;
-    // restore entry mode if desired but check that our current mode is still due to failsafe
+    // 如果需要，恢复进入模式，但检查我们当前的模式是否仍然由于故障保护
     if (control_mode_reason == ModeReason::RADIO_FAILSAFE) { 
        set_mode_by_number(failsafe.saved_mode_number, ModeReason::RADIO_FAILSAFE_RECOVERY);
-       gcs().send_text(MAV_SEVERITY_INFO,"Flight mode %s restored",control_mode->name());
+       gcs().send_text(MAV_SEVERITY_INFO,"飞行模式 %s 已恢复",control_mode->name());
     }
 }
 
+// 处理长时间故障保护解除事件
 void Plane::failsafe_long_off_event(ModeReason reason)
 {
     long_failsafe_pending = false;
-    // We're back in radio contact with RC or GCS
+    // 我们重新获得了与RC或GCS的无线电联系
     if (reason == ModeReason:: GCS_FAILSAFE) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "GCS Failsafe Off");
+        gcs().send_text(MAV_SEVERITY_WARNING, "GCS故障保护已关闭");
     }
     else {
-        gcs().send_text(MAV_SEVERITY_WARNING, "RC Long Failsafe Cleared");
+        gcs().send_text(MAV_SEVERITY_WARNING, "RC长时故障保护已清除");
     }
     failsafe.state = FAILSAFE_NONE;
 }
-
 void Plane::handle_battery_failsafe(const char *type_str, const int8_t action)
 {
     switch ((Failsafe_Action)action) {
@@ -266,9 +267,9 @@ void Plane::handle_battery_failsafe(const char *type_str, const int8_t action)
             }
 #endif
             if (!already_landing && plane.have_position) {
-                // never stop a landing if we were already committed
+                // 如果我们已经开始着陆，永远不要停止
                 if (plane.mission.is_best_land_sequence(plane.current_loc)) {
-                    // continue mission as it will reach a landing in less distance
+                    // 继续任务，因为它将在更短的距离内达到着陆点
                     plane.mission.set_in_landing_sequence_flag(true);
                     break;
                 }
@@ -288,9 +289,9 @@ void Plane::handle_battery_failsafe(const char *type_str, const int8_t action)
             }
 #endif
             if (!already_landing) {
-                // never stop a landing if we were already committed
+                // 如果我们已经开始着陆，永远不要停止
                 if ((g.rtl_autoland == RtlAutoland::RTL_IMMEDIATE_DO_LAND_START) && plane.have_position && plane.mission.is_best_land_sequence(plane.current_loc)) {
-                    // continue mission as it will reach a landing in less distance
+                    // 继续任务，因为它将在更短的距离内达到着陆点
                     plane.mission.set_in_landing_sequence_flag(true);
                     break;
                 }
@@ -317,8 +318,8 @@ void Plane::handle_battery_failsafe(const char *type_str, const int8_t action)
             break;
 
         case Failsafe_Action_None:
-            // don't actually do anything, however we should still flag the system as having hit a failsafe
-            // and ensure all appropriate flags are going off to the user
+            // 实际上不做任何事情，但我们仍应标记系统已触发故障保护
+            // 并确保所有适当的标志都向用户发出警告
             break;
     }
 }

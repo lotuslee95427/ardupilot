@@ -1,6 +1,8 @@
+// 防止头文件重复包含
 #pragma once
 
 /* Your layer exports should depend on AP_HAL.h ONLY. */
+// 仅依赖AP_HAL.h头文件
 #include <AP_HAL/AP_HAL.h>
 
 /**
@@ -18,4 +20,7 @@
  * When creating a new HAL, declare a new HAL_BOARD_ in AP_HAL/AP_HAL_Boards.h
  */
 
+// 包含ChibiOS HAL类定义
+// 该类实现了AP_HAL::HAL接口,提供了ChibiOS系统的硬件抽象层功能
+// 包含了所有ChibiOS平台相关的硬件操作实现
 #include "HAL_ChibiOS_Class.h"

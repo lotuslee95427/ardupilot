@@ -15,39 +15,46 @@
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// 确保头文件只被包含一次
 #pragma once
 
+// 包含标准整数类型定义
 #include <stdint.h>
+// 包含HAL命名空间定义
 #include "AP_HAL_Namespace.h"
+// 包含HAL支持的主板定义
 #include "AP_HAL_Boards.h"
 
 class ExpandingString;
 
 /**
- * Raw CAN frame, as passed to/from the CAN driver.
+ * 原始CAN帧,用于CAN驱动程序的输入/输出
  */
 struct AP_HAL::CANFrame {
-    static const uint32_t MaskStdID = 0x000007FFU;
-    static const uint32_t MaskExtID = 0x1FFFFFFFU;
-    static const uint32_t FlagEFF = 1U << 31;                  ///< Extended frame format
-    static const uint32_t FlagRTR = 1U << 30;                  ///< Remote transmission request
-    static const uint32_t FlagERR = 1U << 29;                  ///< Error frame
+    static const uint32_t MaskStdID = 0x000007FFU;    // 标准帧ID掩码(11位)
+    static const uint32_t MaskExtID = 0x1FFFFFFFU;    // 扩展帧ID掩码(29位)
+    static const uint32_t FlagEFF = 1U << 31;         // 扩展帧格式标志位
+    static const uint32_t FlagRTR = 1U << 30;         // 远程传输请求标志位
+    static const uint32_t FlagERR = 1U << 29;         // 错误帧标志位
 
 #if HAL_CANFD_SUPPORTED
-    static const uint8_t NonFDCANMaxDataLen = 8;
-    static const uint8_t MaxDataLen = 64;
+    // 支持CANFD时的最大数据长度定义
+    static const uint8_t NonFDCANMaxDataLen = 8;      // 普通CAN最大数据长度
+    static const uint8_t MaxDataLen = 64;             // CANFD最大数据长度
 #else
+    // 不支持CANFD时的最大数据长度定义
     static const uint8_t NonFDCANMaxDataLen = 8;
     static const uint8_t MaxDataLen = 8;
 #endif
-    uint32_t id;                ///< CAN ID with flags (above)
+    uint32_t id;                // CAN ID及标志位
     union {
-        uint8_t data[MaxDataLen];
-        uint32_t data_32[MaxDataLen/4];
+        uint8_t data[MaxDataLen];       // 字节数组形式的数据
+        uint32_t data_32[MaxDataLen/4]; // 32位整数数组形式的数据
     };
-    uint8_t dlc;                ///< Data Length Code
-    bool canfd;
+    uint8_t dlc;               // 数据长度代码
+    bool canfd;                // 是否为CANFD帧
 
+    // 构造函数,初始化所有成员
     CANFrame() :
         id(0),
         dlc(0),
@@ -56,96 +63,111 @@ struct AP_HAL::CANFrame {
         memset(data,0, MaxDataLen);
     }
 
+    // 带参数的构造函数
     CANFrame(uint32_t can_id, const uint8_t* can_data, uint8_t data_len, bool canfd_frame = false);
 
+    // 不等运算符重载
     bool operator!=(const CANFrame& rhs) const
     {
         return !operator==(rhs);
     }
+    // 相等运算符重载
     bool operator==(const CANFrame& rhs) const
     {
         return (id == rhs.id) && (dlc == rhs.dlc) && (memcmp(data, rhs.data, dlc) == 0);
     }
 
-    // signed version of id, for use by scriping where uint32_t is expensive
+    // 返回ID的有符号版本,用于脚本处理(uint32_t开销较大)
     int32_t id_signed(void) const {
         return isExtended()? int32_t(id & MaskExtID) : int32_t(id & MaskStdID);
     }
 
-    bool isExtended()                  const
+    // 判断是否为扩展帧
+    bool isExtended() const
     {
         return id & FlagEFF;
     }
+    // 判断是否为远程帧
     bool isRemoteTransmissionRequest() const
     {
         return id & FlagRTR;
     }
-    bool isErrorFrame()                const
+    // 判断是否为错误帧
+    bool isErrorFrame() const
     {
         return id & FlagERR;
     }
+    // 设置是否为CANFD帧
     void setCanFD(bool canfd_frame)
     {
         canfd = canfd_frame;
     }
 
+    // 判断是否为CANFD帧
     bool isCanFDFrame() const
     {
         return canfd;
     }
 
+    // DLC与实际数据长度的转换函数
     static uint8_t dlcToDataLength(uint8_t dlc);
-
     static uint8_t dataLengthToDlc(uint8_t data_length);
+
     /**
-     * CAN frame arbitration rules, particularly STD vs EXT:
-     *     Marco Di Natale - "Understanding and using the Controller Area Network"
-     *     http://www6.in.tum.de/pub/Main/TeachingWs2013MSE/CANbus.pdf
+     * CAN帧仲裁规则,特别是标准帧vs扩展帧:
+     * Marco Di Natale - "Understanding and using the Controller Area Network"
+     * http://www6.in.tum.de/pub/Main/TeachingWs2013MSE/CANbus.pdf
      */
+    // 判断优先级是否高于另一帧
     bool priorityHigherThan(const CANFrame& rhs) const;
+    // 判断优先级是否低于另一帧
     bool priorityLowerThan(const CANFrame& rhs) const
     {
         return rhs.priorityHigherThan(*this);
     }
 };
 
+// CAN接口类
 class AP_HAL::CANIface
 {
 public:
-
+    // CAN接口工作模式枚举
     enum OperatingMode {
-        PassThroughMode,
-        NormalMode,
-        SilentMode,
-        FilteredMode
+        PassThroughMode,    // 透传模式
+        NormalMode,         // 正常模式
+        SilentMode,         // 静默模式
+        FilteredMode        // 过滤模式
     };
 
+    // 获取当前工作模式
     OperatingMode get_operating_mode() { return mode_; }
 
+    // CAN IO标志位类型定义
     typedef uint16_t CanIOFlags;
-    static const CanIOFlags Loopback = 1;
-    static const CanIOFlags AbortOnError = 2;
-    static const CanIOFlags IsMAVCAN = 4;
+    static const CanIOFlags Loopback = 1;        // 回环模式
+    static const CanIOFlags AbortOnError = 2;    // 出错时中止
+    static const CanIOFlags IsMAVCAN = 4;        // MAVCAN协议
 
-    // Single Rx Frame with related info
+    // 单个接收帧及相关信息结构体
     struct CanRxItem {
-        uint64_t timestamp_us = 0;
-        CanIOFlags flags = 0;
-        CANFrame frame;
+        uint64_t timestamp_us = 0;   // 时间戳(微秒)
+        CanIOFlags flags = 0;        // IO标志位
+        CANFrame frame;              // CAN帧
     };
 
-    // Single Tx Frame with related info
+    // 单个发送帧及相关信息结构体
     struct CanTxItem {
-        uint64_t deadline = 0;
-        CANFrame frame;
-        uint32_t index = 0;
-        bool loopback:1;
-        bool abort_on_error:1;
-        bool aborted:1;
-        bool pushed:1;
-        bool setup:1;
-        bool canfd_frame:1;
+        uint64_t deadline = 0;       // 截止时间
+        CANFrame frame;              // CAN帧
+        uint32_t index = 0;          // 索引
+        bool loopback:1;             // 是否回环
+        bool abort_on_error:1;       // 出错时是否中止
+        bool aborted:1;              // 是否已中止
+        bool pushed:1;               // 是否已推送
+        bool setup:1;                // 是否已设置
+        bool canfd_frame:1;          // 是否为CANFD帧
 
+        // 小于运算符重载,用于优先级比较
         bool operator<(const CanTxItem& rhs) const
         {
             if (frame.priorityLowerThan(rhs.frame)) {
@@ -158,125 +180,134 @@ public:
         }
     };
 
+    // CAN过滤器配置结构体
     struct CanFilterConfig {
-        uint32_t id = 0;
-        uint32_t mask = 0;
+        uint32_t id = 0;            // 过滤器ID
+        uint32_t mask = 0;          // 过滤器掩码
 
+        // 相等运算符重载
         bool operator==(const CanFilterConfig& rhs) const
         {
             return rhs.id == id && rhs.mask == mask;
         }
     };
 
+    // 初始化接口(支持CANFD)
     virtual bool init(const uint32_t bitrate, const uint32_t fdbitrate, const OperatingMode mode) {
         return init(bitrate, mode);
     }
 
-    // Initialise the interface with hardware configuration required to start comms.
+    // 初始化接口(基本CAN)
     virtual bool init(const uint32_t bitrate, const OperatingMode mode) = 0;
 
-    // Select method to notify user of Rx and Tx buffer state.
-    // fill read select with true if a frame is available in Rx buffer
-    // fill write select with true if space is available in Tx buffer
-    // Also waits for Rx or Tx event depending on read_select and write_select values
-    // passed to the method until timeout. Returns true if the Rx/Tx even occurred
-    // while waiting, false if timedout
+    // 选择方法通知用户Rx和Tx缓冲区状态
+    // 如果Rx缓冲区有帧可用,则read_select为true
+    // 如果Tx缓冲区有空间可用,则write_select为true
+    // 根据read_select和write_select的值等待Rx或Tx事件,直到超时
+    // 如果等待期间发生Rx/Tx事件则返回true,超时则返回false
     virtual bool select(bool &read_select, bool &write_select,
                         const CANFrame* const pending_tx, uint64_t timeout)
     {
         return false;
     }
 
+    // 设置事件句柄
     virtual bool set_event_handle(AP_HAL::BinarySemaphore *sem_handle)
     {
         return true;
     }
 
-    // Put frame in queue to be sent, return negative if error occurred, 0 if no space, and 1 if successful
-    // must be called on child class
+    // 将帧放入发送队列
+    // 返回负值表示出错,0表示无空间,1表示成功
+    // 必须在子类中实现
     virtual int16_t send(const CANFrame& frame, uint64_t tx_deadline, CanIOFlags flags);
 
-    // Non blocking receive frame that pops the frames received inside the buffer, return negative if error occurred, 
-    // 0 if no frame available, 1 if successful
-    // must be called on child class
+    // 非阻塞接收帧,从缓冲区弹出接收到的帧
+    // 返回负值表示出错,0表示无帧可用,1表示成功
+    // 必须在子类中实现
     virtual int16_t receive(CANFrame& out_frame, uint64_t& out_ts_monotonic, CanIOFlags& out_flags);
 
-    //Configure filters so as to reject frames that are not going to be handled by us
+    // 配置过滤器以拒绝不需要处理的帧
     virtual bool configureFilters(const CanFilterConfig* filter_configs, uint16_t num_configs)
     {
         return 0;
     }
 
-    
-    //Number of available hardware filters.
+    // 返回可用的硬件过滤器数量
     virtual uint16_t getNumFilters() const
     {
         return 0;
     }
 
-    //Return Total Error Count generated so far
+    // 返回累计错误计数
     virtual uint32_t getErrorCount() const
     {
         return 0;
     }
 
+    // 总线统计信息结构体
     typedef struct {
-        uint32_t tx_requests;
-        uint32_t tx_rejected;
-        uint32_t tx_overflow;
-        uint32_t tx_success;
-        uint32_t tx_timedout;
-        uint32_t tx_abort;
-        uint32_t rx_received;
-        uint32_t rx_overflow;
-        uint32_t rx_errors;
-        uint32_t num_busoff_err;
-        uint64_t last_transmit_us;
+        uint32_t tx_requests;      // 发送请求数
+        uint32_t tx_rejected;      // 发送被拒绝数
+        uint32_t tx_overflow;      // 发送溢出数
+        uint32_t tx_success;       // 发送成功数
+        uint32_t tx_timedout;      // 发送超时数
+        uint32_t tx_abort;         // 发送中止数
+        uint32_t rx_received;      // 接收帧数
+        uint32_t rx_overflow;      // 接收溢出数
+        uint32_t rx_errors;        // 接收错误数
+        uint32_t num_busoff_err;   // 总线关闭错误数
+        uint64_t last_transmit_us; // 最后发送时间(微秒)
     } bus_stats_t;
 
 #if !defined(HAL_BOOTLOADER_BUILD)
-    //Get status info of the interface
+    // 获取接口状态信息
     virtual void get_stats(ExpandingString &str) {}
 
     /*
-      return bus statistics for logging
-      return nullptr if no statistics available
+      返回总线统计信息用于日志记录
+      如果没有统计信息可用则返回nullptr
      */
     virtual const bus_stats_t *get_statistics(void) const { return nullptr; };
 #endif
 
-    // return true if busoff was detected and not cleared
+    // 返回总线关闭状态是否被检测到且未清除
     virtual bool is_busoff() const
     {
         return false;
     }
 
-    // Methods to be used only while testing CANBus
-    // Not for normal operation or use case
-    virtual void flush_tx() {}
-    virtual void clear_rx() {}
+    // 仅用于测试CANBus的方法
+    // 不用于正常操作或使用场景
+    virtual void flush_tx() {}     // 刷新发送缓冲区
+    virtual void clear_rx() {}     // 清空接收缓冲区
 
-    // return true if init was called and successful
+    // 返回init是否被调用且成功
     virtual bool is_initialized() const = 0;
 
+    // 定义帧回调函数类型
     FUNCTOR_TYPEDEF(FrameCb, void, uint8_t, const AP_HAL::CANFrame &);
 
-    // register a frame callback function
+    // 注册帧回调函数
     virtual bool register_frame_callback(FrameCb cb, uint8_t &cb_id);
+    // 注销帧回调函数
     virtual void unregister_frame_callback(uint8_t cb_id);
 
 protected:
+    // 获取接口编号
     virtual int8_t get_iface_num() const = 0;
+    // 添加到接收队列
     virtual bool add_to_rx_queue(const CanRxItem &rx_item) = 0;
 
+    // 回调函数相关结构
     struct {
 #ifndef HAL_BOOTLOADER_BUILD
-        HAL_Semaphore sem;
+        HAL_Semaphore sem;        // 信号量
 #endif
-        // allow up to 2 callbacks per interface
-        FrameCb cb[2];
+        // 每个接口最多允许2个回调
+        FrameCb cb[2];            // 回调函数数组
     } callbacks;
 
-    uint32_t bitrate_;
-    OperatingMode mode_;
+    uint32_t bitrate_;           // 波特率
+    OperatingMode mode_;         // 工作模式
 };

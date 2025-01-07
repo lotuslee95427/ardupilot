@@ -1,4 +1,11 @@
+# 禁用串口3的通信协议(-1表示禁用)
 SERIAL3_PROTOCOL -1
+
+# 禁用所有蜂鸣器提示音类型
 NTF_BUZZ_TYPES 0
+
+# 设置蜂鸣器音量为0(静音)
 NTF_BUZZ_VOLUME 0
+
+# 设置该飞行器的MAVLink系统ID为2
 SYSID_THISMAV 2

@@ -3,6 +3,7 @@
 #include "quadplane.h"
 #include "qautotune.h"
 
+// 根据模式编号返回对应的模式对象
 Mode *Plane::mode_from_mode_num(const enum Mode::Number num)
 {
     Mode *ret = nullptr;
@@ -48,7 +49,7 @@ Mode *Plane::mode_from_mode_num(const enum Mode::Number num)
         ret = &mode_avoidADSB;
         break;
 #endif
-    // if ADSB is not compiled in then fallthrough to guided
+    // 如果ADSB未编译，则转到GUIDED模式
     case Mode::Number::GUIDED:
         ret = &mode_guided;
         break;
@@ -98,28 +99,28 @@ Mode *Plane::mode_from_mode_num(const enum Mode::Number num)
     return ret;
 }
 
+// 读取模式开关
 void RC_Channels_Plane::read_mode_switch()
 {
     if (millis() - plane.failsafe.last_valid_rc_ms > 100) {
-        // only use signals that are less than 0.1s old.
+        // 只使用不超过0.1秒的信号
         return;
     }
     RC_Channels::read_mode_switch();
 }
 
+// 模式开关改变时的处理
 void RC_Channel_Plane::mode_switch_changed(modeswitch_pos_t new_pos)
 {
     if (new_pos < 0 || (uint8_t)new_pos > plane.num_flight_modes) {
-        // should not have been called
+        // 不应该被调用
         return;
     }
 
     plane.set_mode_by_number((Mode::Number)plane.flight_modes[new_pos].get(), ModeReason::RC_COMMAND);
 }
 
-/*
-  called when entering autotune
- */
+// 进入自动调谐模式时调用
 void Plane::autotune_start(void)
 {
     const bool tune_roll = g2.axis_bitmask.get() & int8_t(AutoTuneAxis::ROLL);
@@ -143,9 +144,7 @@ void Plane::autotune_start(void)
     }        
 }
 
-/*
-  called when exiting autotune
- */
+// 退出自动调谐模式时调用
 void Plane::autotune_restore(void)
 {
     rollController.autotune_restore();
@@ -157,9 +156,7 @@ void Plane::autotune_restore(void)
     }
 }
 
-/*
-  enable/disable autotune for AUTO modes
- */
+// 为AUTO模式启用/禁用自动调谐
 void Plane::autotune_enable(bool enable)
 {
     if (enable) {
@@ -169,16 +166,14 @@ void Plane::autotune_enable(bool enable)
     }
 }
 
-/*
-  are we flying inverted?
- */
+// 判断是否处于倒飞状态
 bool Plane::fly_inverted(void)
 {
     if (control_mode == &plane.mode_manual) {
         return false;
     }
     if (inverted_flight) {
-        // controlled with aux switch
+        // 通过辅助开关控制
         return true;
     }
     if (control_mode == &mode_auto && auto_state.inverted_flight) {

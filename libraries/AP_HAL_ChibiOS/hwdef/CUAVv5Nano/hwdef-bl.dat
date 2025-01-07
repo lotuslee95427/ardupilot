@@ -1,45 +1,51 @@
-# hw definition file for processing by chibios_hwdef.py
-# CUAVv5Nano
+# 这是CUAVv5Nano飞控板的bootloader硬件定义文件
+# 由chibios_hwdef.py脚本处理生成配置
 
-# MCU class and specific type
+# 定义MCU型号为STM32F767xx,属于STM32F7系列
 MCU STM32F7xx STM32F767xx
 
-# crystal frequency
+# 设置外部晶振频率为16MHz
 OSCILLATOR_HZ 16000000
 
-# board ID for firmware load
+# 设置固件加载的板卡ID为50
 APJ_BOARD_ID 50
 
+# 定义Flash大小为2048KB
 FLASH_SIZE_KB 2048
 
-# bootloader is installed at zero offset
+# bootloader从Flash起始地址(0 offset)安装
 FLASH_RESERVE_START_KB 0
 
-# the location where the bootloader will put the firmware
+# bootloader将固件加载到Flash的32KB偏移处
 FLASH_BOOTLOADER_LOAD_KB 32
 
-# start with PE3 low
+# 取消PE3引脚定义并重新配置
 undef PE3
+# 配置PE3为3.3V传感器电源使能引脚,初始为低电平
 PE3 VDD_3V3_SENSORS_EN OUTPUT LOW
 
-PC6 LED_BOOTLOADER OUTPUT HIGH
-PC7 LED_ACTIVITY OUTPUT HIGH
-define HAL_LED_ON 0
+# 配置LED引脚
+PC6 LED_BOOTLOADER OUTPUT HIGH  # bootloader状态指示LED
+PC7 LED_ACTIVITY OUTPUT HIGH    # 活动状态指示LED
+define HAL_LED_ON 0            # 定义LED点亮为低电平
 
-# order of UARTs (and USB)
+# 配置串口顺序(包括USB)
 SERIAL_ORDER OTG1 USART2 UART7
 
-# USART2 is telem1
-PD6 USART2_RX USART2
-PD5 USART2_TX USART2
-PD3 USART2_CTS USART2
-PD4 USART2_RTS USART2
+# 配置USART2作为遥测串口1
+PD6 USART2_RX USART2   # USART2接收引脚
+PD5 USART2_TX USART2   # USART2发送引脚
+PD3 USART2_CTS USART2  # USART2 CTS流控引脚
+PD4 USART2_RTS USART2  # USART2 RTS流控引脚
 
-PF6 UART7_RX UART7 NODMA
-PE8 UART7_TX UART7 NODMA
+# 配置UART7,禁用DMA
+PF6 UART7_RX UART7 NODMA  # UART7接收引脚
+PE8 UART7_TX UART7 NODMA  # UART7发送引脚
 
-PA11 OTG_FS_DM OTG1
-PA12 OTG_FS_DP OTG1
+# 配置USB OTG1接口引脚
+PA11 OTG_FS_DM OTG1    # USB D-引脚
+PA12 OTG_FS_DP OTG1    # USB D+引脚
 
-PA13 JTMS-SWDIO SWD
-PA14 JTCK-SWCLK SWD
+# 配置SWD调试接口引脚
+PA13 JTMS-SWDIO SWD    # SWDIO数据线
+PA14 JTCK-SWCLK SWD    # SWCLK时钟线

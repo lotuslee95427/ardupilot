@@ -1,6 +1,11 @@
+# 这是AeroFox-DLVR空速计的bootloader硬件定义文件
+# 该文件由chibios_pins.py脚本处理,用于配置硬件引脚和外设
+
+# 包含STM32F103外设通用bootloader配置文件
+# 该文件包含了F103系列MCU的基本配置,如时钟、Flash等
 include ../f103-periph/hwdef-bl.inc
 
-# board ID for firmware load
+# 开发板ID,用于固件校验和加载
+# 每个开发板都有唯一的ID,用于区分不同硬件
+# 1104是分配给AeroFox-DLVR空速计的ID号
 APJ_BOARD_ID 1104
-
-

@@ -1,37 +1,36 @@
 /*
- *  logic for dealing with the current command in the mission and home location
+ *  处理当前任务命令和家位置的逻辑
  */
 
 #include "Plane.h"
 
 /*
- *  set_next_WP - sets the target location the vehicle should fly to
+ *  set_next_WP - 设置飞行器应该飞往的目标位置
  */
 void Plane::set_next_WP(const Location &loc)
 {
     if (auto_state.next_wp_crosstrack) {
-        // copy the current WP into the OldWP slot
+        // 将当前航点复制到OldWP槽
         prev_WP_loc = next_WP_loc;
         auto_state.crosstrack = true;
     } else {
-        // we should not try to cross-track for this waypoint
+        // 对于这个航点我们不应该尝试横向跟踪
         prev_WP_loc = current_loc;
-        // use cross-track for the next waypoint
+        // 为下一个航点使用横向跟踪
         auto_state.next_wp_crosstrack = true;
         auto_state.crosstrack = false;
     }
 
-    // Load the next_WP slot
+    // 加载next_WP槽
     // ---------------------
     next_WP_loc = loc;
 
-    // if lat and lon is zero, then use current lat/lon
-    // this allows a mission to contain a "loiter on the spot"
-    // command
+    // 如果纬度和经度为零，则使用当前纬度/经度
+    // 这允许任务包含一个"原地盘旋"命令
     if (next_WP_loc.lat == 0 && next_WP_loc.lng == 0) {
         next_WP_loc.lat = current_loc.lat;
         next_WP_loc.lng = current_loc.lng;
-        // additionally treat zero altitude as current altitude
+        // 另外，将零高度视为当前高度
         if (next_WP_loc.alt == 0) {
             next_WP_loc.alt = current_loc.alt;
             next_WP_loc.relative_alt = false;
@@ -39,82 +38,80 @@ void Plane::set_next_WP(const Location &loc)
         }
     }
 
-    // convert relative alt to absolute alt
+    // 将相对高度转换为绝对高度
     if (next_WP_loc.relative_alt) {
         next_WP_loc.relative_alt = false;
         next_WP_loc.alt += home.alt;
     }
 
-    // are we already past the waypoint? This happens when we jump
-    // waypoints, and it can cause us to skip a waypoint. If we are
-    // past the waypoint when we start on a leg, then use the current
-    // location as the previous waypoint, to prevent immediately
-    // considering the waypoint complete
+    // 我们是否已经越过了航点？这种情况发生在我们跳过航点时，
+    // 可能导致我们跳过一个航点。如果我们在开始一段航线时已经
+    // 越过了航点，那么使用当前位置作为前一个航点，以防立即
+    // 认为航点已完成
     if (current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc)) {
         prev_WP_loc = current_loc;
     }
 
-    // zero out our loiter vals to watch for missed waypoints
+    // 将我们的盘旋值清零以监视错过的航点
     loiter_angle_reset();
 
     setup_glide_slope();
     setup_turn_angle();
 
-    // update plane.target_altitude straight away, or if we are too
-    // close to out loiter point we may decide we are at the correct
-    // altitude before updating it (this is based on scheduler table
-    // ordering, where we navigate() before we
-    // adjust_altitude_target(), and navigate() uses values updated in
-    // adjust_altitude_target()
+    // 立即更新plane.target_altitude，否则如果我们太接近盘旋点，
+    // 我们可能会在更新之前就认为我们处于正确的高度
+    // （这是基于调度器表的顺序，我们在adjust_altitude_target()之前
+    // 执行navigate()，而navigate()使用在adjust_altitude_target()
+    // 中更新的值）
     adjust_altitude_target();
 }
 
 void Plane::set_guided_WP(const Location &loc)
 {
+    // 设置盘旋方向
     if (aparm.loiter_radius < 0 || loc.loiter_ccw) {
         loiter.direction = -1;
     } else {
         loiter.direction = 1;
     }
 
-    // copy the current location into the OldWP slot
+    // 将当前位置复制到OldWP槽
     // ---------------------------------------
     prev_WP_loc = current_loc;
 
-    // Load the next_WP slot
+    // 加载next_WP槽
     // ---------------------
     next_WP_loc = loc;
 
-    // used to control FBW and limit the rate of climb
+    // 用于控制FBW和限制爬升率
     // -----------------------------------------------
     set_target_altitude_current();
 
     setup_glide_slope();
     setup_turn_angle();
 
-    // disable crosstrack, head directly to the point
+    // 禁用横向跟踪，直接飞向目标点
     auto_state.crosstrack = false;
 
-    // reset loiter start time.
+    // 重置盘旋开始时间
     loiter.start_time_ms = 0;
 
-    // start in non-VTOL mode
+    // 以非VTOL模式开始
     auto_state.vtol_loiter = false;
     
     loiter_angle_reset();
 
 #if HAL_QUADPLANE_ENABLED
-    // cancel pending takeoff
+    // 取消待定的起飞
     quadplane.guided_takeoff = false;
 #endif
 }
 
 /*
-  update home location from GPS
-  this is called as long as we have 3D lock and the arming switch is
-  not pushed
+  从GPS更新家位置
+  只要我们有3D锁定且解锁开关未按下，就会调用此函数
 
-  returns true if home is changed
+  如果家位置改变则返回true
 */
 bool Plane::update_home()
 {
@@ -124,28 +121,24 @@ bool Plane::update_home()
     if ((g2.home_reset_threshold == -1) ||
         ((g2.home_reset_threshold > 0) &&
          (fabsf(barometer.get_altitude()) > g2.home_reset_threshold))) {
-        // don't auto-update if we have changed barometer altitude
-        // significantly. This allows us to cope with slow baro drift
-        // but not re-do home and the baro if we have changed height
-        // significantly
+        // 如果气压高度变化显著，则不自动更新
+        // 这允许我们应对缓慢的气压漂移，但如果我们显著改变了高度，
+        // 则不重新设置家和气压计
         return false;
     }
     bool ret = false;
     if (ahrs.home_is_set() && !ahrs.home_is_locked() && gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
         Location loc;
         if (ahrs.get_location(loc)) {
-            // we take the altitude directly from the GPS as we are
-            // about to reset the baro calibration. We can't use AHRS
-            // altitude or we can end up perpetuating a bias in
-            // altitude, as AHRS alt depends on home alt, which means
-            // we would have a circular dependency
+            // 我们直接从GPS获取高度，因为我们即将重置气压计校准
+            // 我们不能使用AHRS高度，否则可能会永久保持高度偏差，
+            // 因为AHRS高度依赖于家高度，这意味着我们会有一个循环依赖
             loc.alt = gps.location().alt;
             ret = AP::ahrs().set_home(loc);
         }
     }
 
-    // even if home is not updated we do a baro reset to stop baro
-    // drift errors while disarmed
+    // 即使家未更新，我们也进行气压计重置以停止解除武装时的气压漂移错误
     barometer.update_calibration();
     ahrs.resetHeightDatum();
 
@@ -163,7 +156,7 @@ bool Plane::set_home_persistently(const Location &loc)
         return false;
     }
 
-    // Save Home to EEPROM
+    // 将家位置保存到EEPROM
     mission.write_home_to_storage();
 
     return true;

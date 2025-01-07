@@ -1,18 +1,18 @@
 #include "Plane.h"
 
 /*
- *  failsafe support
- *  Andrew Tridgell, December 2011
+ *  故障保护支持
+ *  Andrew Tridgell, 2011年12月
  */
 
 /*
- *  our failsafe strategy is to detect main loop lockup and switch to
- *  passing inputs straight from the RC inputs to RC outputs.
+ *  我们的故障保护策略是检测主循环锁定，并切换到
+ *  直接将输入从RC输入传递到RC输出。
  */
 
 /*
- *  this failsafe_check function is called from the core timer interrupt
- *  at 1kHz.
+ *  这个failsafe_check函数从核心定时器中断
+ *  以1kHz的频率调用。
  */
 void Plane::failsafe_check(void)
 {
@@ -23,7 +23,7 @@ void Plane::failsafe_check(void)
 
     const uint16_t ticks = scheduler.ticks();
     if (ticks != last_ticks) {
-        // the main loop is running, all is OK
+        // 主循环正在运行，一切正常
         last_ticks = ticks;
         last_timestamp = tnow;
         in_failsafe = false;
@@ -31,16 +31,16 @@ void Plane::failsafe_check(void)
     }
 
     if (tnow - last_timestamp > 200000) {
-        // we have gone at least 0.2 seconds since the main loop
-        // ran. That means we're in trouble, or perhaps are in
-        // an initialisation routine or log erase. Start passing RC
-        // inputs through to outputs
+        // 自主循环运行以来已经过去至少0.2秒。
+        // 这意味着我们遇到了麻烦，或者可能处于
+        // 初始化例程或日志擦除中。开始将RC
+        // 输入直接传递到输出
         in_failsafe = true;
     }
 
     if (in_failsafe && tnow - last_timestamp > 20000) {
 
-        // ensure we have the latest RC inputs
+        // 确保我们有最新的RC输入
         rc().read_input();
 
         last_timestamp = tnow;
@@ -49,18 +49,18 @@ void Plane::failsafe_check(void)
 
 #if AP_ADVANCEDFAILSAFE_ENABLED
         if (in_calibration) {
-            // tell the failsafe system that we are calibrating
-            // sensors, so don't trigger failsafe
+            // 告诉故障保护系统我们正在校准
+            // 传感器，所以不要触发故障保护
             afs.heartbeat();
         }
 #endif
 
         if (RC_Channels::get_valid_channel_count() < 5) {
-            // we don't have any RC input to pass through
+            // 我们没有任何RC输入可以传递
             return;
         }
 
-        // pass RC inputs to outputs every 20ms
+        // 每20ms将RC输入传递到输出
         RC_Channels::clear_overrides();
 
         float roll = roll_in_expo(false);
@@ -72,17 +72,15 @@ void Plane::failsafe_check(void)
             throttle = 0;
         }
         
-        // setup secondary output channels that don't have
-        // corresponding input channels
+        // 设置没有对应输入通道的次要输出通道
         SRV_Channels::set_output_scaled(SRV_Channel::k_aileron, roll);
         SRV_Channels::set_output_scaled(SRV_Channel::k_elevator, pitch);
         SRV_Channels::set_output_scaled(SRV_Channel::k_rudder, rudder);
         SRV_Channels::set_output_scaled(SRV_Channel::k_steering, rudder);
         SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, throttle);
 
-        // this is to allow the failsafe module to deliberately crash 
-        // the plane. Only used in extreme circumstances to meet the
-        // OBC rules
+        // 这允许故障保护模块故意使飞机坠毁。
+        // 仅在极端情况下用于满足OBC规则
 #if AP_ADVANCEDFAILSAFE_ENABLED
         if (afs.should_crash_vehicle()) {
             afs.terminate_vehicle();
@@ -92,19 +90,18 @@ void Plane::failsafe_check(void)
         }
 #endif
 
-        // setup secondary output channels that do have
-        // corresponding input channels
+        // 设置有对应输入通道的次要输出通道
         SRV_Channels::copy_radio_in_out(SRV_Channel::k_manual, true);
         SRV_Channels::set_output_scaled(SRV_Channel::k_flap, 0.0);
         SRV_Channels::set_output_scaled(SRV_Channel::k_flap_auto, 0.0);
 
-        // setup flaperons
+        // 设置襟副翼
         flaperon_update();
 
         servos_output();
 
-        // in SITL we send through the servo outputs so we can verify
-        // we're manipulating surfaces
+        // 在SITL中，我们发送伺服输出，以便我们可以验证
+        // 我们正在操纵表面
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         GCS_MAVLINK *chan = gcs().chan(0);
         if (HAVE_PAYLOAD_SPACE(chan->get_chan(), SERVO_OUTPUT_RAW)) {

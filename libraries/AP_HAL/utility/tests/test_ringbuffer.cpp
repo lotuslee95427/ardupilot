@@ -14,11 +14,13 @@
  * You should have received a copy of the GNU General Public License along
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+// 包含所需的头文件
 #include <AP_gtest.h>
 
 #include <utility>
 #include <AP_HAL/utility/RingBuffer.h>
 
+// 测试字节缓冲区的基本功能
 TEST(ByteBufferTest, Basic)
 {
     const uint16_t size = 32;
@@ -28,19 +30,20 @@ TEST(ByteBufferTest, Basic)
     EXPECT_EQ(x.space(), unsigned(size-1));
     EXPECT_TRUE(x.is_empty());
 
-    // write a char in, check numbers again:
+    // 写入一个字符并检查状态
     EXPECT_EQ(x.write((uint8_t*)"f", 1), 1U);
     EXPECT_EQ(x.available(), 1U);
     EXPECT_EQ(x.get_size(), unsigned(size));
     EXPECT_EQ(x.space(), unsigned(size-2));
     EXPECT_FALSE(x.is_empty());
-    // clear that byte, check numbers again
+    // 清空缓冲区并再次检查状态
     x.clear();
     EXPECT_EQ(x.available(), 0U);
     EXPECT_EQ(x.get_size(), size);
     EXPECT_EQ(x.space(), unsigned(size-1));
     EXPECT_TRUE(x.is_empty());
 
+    // 测试写入和读取字符串
     constexpr auto str_size = 3;
     static const char str[str_size] = "fo";
     EXPECT_EQ(x.write((uint8_t*)str, 2), 2U);
@@ -49,6 +52,7 @@ TEST(ByteBufferTest, Basic)
     EXPECT_STREQ((char*)buf, (char*)str);
 }
 
+// 测试设置缓冲区大小功能
 TEST(ByteBufferTest, SetSize)
 {
     const uint16_t size = 32;
@@ -60,6 +64,7 @@ TEST(ByteBufferTest, SetSize)
     EXPECT_TRUE(x.is_empty());
 }
 
+// 测试对象缓冲区的基本功能
 TEST(ObjectBufferTest, Basic)
 {
     const uint16_t size = 32;
@@ -73,13 +78,13 @@ TEST(ObjectBufferTest, Basic)
     EXPECT_EQ(x.space(), unsigned(size));
     EXPECT_TRUE(x.is_empty());
 
-    // write an object in, check numbers again:
+    // 写入一个对象并检查状态
     x.push(TestData{});
     EXPECT_EQ(x.available(), 1U);
     EXPECT_EQ(x.get_size(), unsigned(size));
     EXPECT_EQ(x.space(), unsigned(size-1));
     EXPECT_FALSE(x.is_empty());
-    // clear that byte, check numbers again
+    // 清空缓冲区并再次检查状态
     x.clear();
     EXPECT_EQ(x.available(), 0U);
     EXPECT_EQ(x.get_size(), size);
@@ -87,6 +92,7 @@ TEST(ObjectBufferTest, Basic)
     EXPECT_TRUE(x.is_empty());
 }
 
+// 测试对象缓冲区的大小设置功能
 TEST(ObjectBufferTest, SetSize)
 {
     const uint16_t size = 32;
@@ -102,6 +108,7 @@ TEST(ObjectBufferTest, SetSize)
     EXPECT_TRUE(x.is_empty());
 }
 
+// 测试缓冲区的Peek功能
 TEST(ObjectBufferTest, PeekTest)
 {
     ByteBuffer bb(128);
@@ -122,4 +129,5 @@ TEST(ObjectBufferTest, PeekTest)
     }
 }
 
+// 主函数入口
 AP_GTEST_MAIN()

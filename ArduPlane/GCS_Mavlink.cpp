@@ -5,6 +5,7 @@
 #include <AP_Airspeed/AP_Airspeed_config.h>
 #include <AP_EFI/AP_EFI_config.h>
 
+// 返回飞行器类型
 MAV_TYPE GCS_Plane::frame_type() const
 {
 #if HAL_QUADPLANE_ENABLED
@@ -14,18 +15,12 @@ MAV_TYPE GCS_Plane::frame_type() const
 #endif
 }
 
+// 返回基本模式
 MAV_MODE GCS_MAVLINK_Plane::base_mode() const
 {
     uint8_t _base_mode = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
 
-    // work out the base_mode. This value is not very useful
-    // for APM, but we calculate it as best we can so a generic
-    // MAVLink enabled ground station can work out something about
-    // what the MAV is up to. The actual bit values are highly
-    // ambiguous for most of the APM flight modes. In practice, you
-    // only get useful information from the custom_mode, which maps to
-    // the APM flight mode and has a well defined meaning in the
-    // ArduPlane documentation
+    // 根据当前飞行模式计算base_mode
     switch (plane.control_mode->mode_number()) {
     case Mode::Number::MANUAL:
     case Mode::Number::TRAINING:
@@ -65,47 +60,46 @@ MAV_MODE GCS_MAVLINK_Plane::base_mode() const
 #endif
         _base_mode = MAV_MODE_FLAG_GUIDED_ENABLED |
                      MAV_MODE_FLAG_STABILIZE_ENABLED;
-        // note that MAV_MODE_FLAG_AUTO_ENABLED does not match what
-        // APM does in any mode, as that is defined as "system finds its own goal
-        // positions", which APM does not currently do
         break;
     case Mode::Number::INITIALISING:
         break;
     }
 
+    // 检查训练模式下的手动控制
     if (!plane.training_manual_pitch || !plane.training_manual_roll) {
         _base_mode |= MAV_MODE_FLAG_STABILIZE_ENABLED;        
     }
 
+    // 检查是否启用了稳定器
     if (plane.control_mode != &plane.mode_manual && plane.control_mode != &plane.mode_initializing) {
-        // stabiliser of some form is enabled
         _base_mode |= MAV_MODE_FLAG_STABILIZE_ENABLED;
     }
 
+    // 检查摇杆混合模式
     if (plane.g.stick_mixing != StickMixing::NONE && plane.control_mode != &plane.mode_initializing) {
         if ((plane.g.stick_mixing != StickMixing::VTOL_YAW) || (plane.control_mode == &plane.mode_auto)) {
-            // all modes except INITIALISING have some form of manual
-            // override if stick mixing is enabled
             _base_mode |= MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
         }
     }
 
-    // we are armed if we are not initialising
+    // 检查是否已解锁
     if (plane.control_mode != &plane.mode_initializing && plane.arming.is_armed()) {
         _base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
     }
 
-    // indicate we have set a custom mode
+    // 设置自定义模式标志
     _base_mode |= MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
 
     return (MAV_MODE)_base_mode;
 }
 
+// 返回自定义模式
 uint32_t GCS_Plane::custom_mode() const
 {
     return plane.control_mode->mode_number();
 }
 
+// 返回飞行器系统状态
 MAV_STATE GCS_MAVLINK_Plane::vehicle_system_status() const
 {
     if (plane.control_mode == &plane.mode_initializing) {
@@ -124,7 +118,7 @@ MAV_STATE GCS_MAVLINK_Plane::vehicle_system_status() const
     return MAV_STATE_STANDBY;
 }
 
-
+// 发送姿态信息
 void GCS_MAVLINK_Plane::send_attitude() const
 {
     const AP_AHRS &ahrs = AP::ahrs();
@@ -133,11 +127,13 @@ void GCS_MAVLINK_Plane::send_attitude() const
     float p = ahrs.get_pitch();
     float y = ahrs.get_yaw();
 
+    // 根据飞行选项调整俯仰角
     if (!(plane.flight_option_enabled(FlightOptions::GCS_REMOVE_TRIM_PITCH))) {
         p -= radians(plane.g.pitch_trim);
     }
 
 #if HAL_QUADPLANE_ENABLED
+    // 四旋翼模式下使用特定视图
     if (plane.quadplane.show_vtol_view()) {
         r = plane.quadplane.ahrs_view->roll;
         p = plane.quadplane.ahrs_view->pitch;
@@ -157,10 +153,11 @@ void GCS_MAVLINK_Plane::send_attitude() const
         omega.z);
 }
 
+// 发送姿态目标
 void GCS_MAVLINK_Plane::send_attitude_target() 
 {
 #if HAL_QUADPLANE_ENABLED
-    // Check if the attitude target is valid for reporting
+    // 检查姿态目标是否有效
     const uint32_t now = AP_HAL::millis();
     if (now  - plane.quadplane.last_att_control_ms > 100) {
         return;
@@ -176,17 +173,18 @@ void GCS_MAVLINK_Plane::send_attitude_target()
 
     mavlink_msg_attitude_target_send(
         chan,
-        now,                    // time since boot (ms)
-        typemask,               // Bitmask that tells the system what control dimensions should be ignored by the vehicle
-        quat_out,               // Target attitude quaternion [w, x, y, z] order, zero-rotation is [1, 0, 0, 0], unit-length
-        ang_vel.x,              // bodyframe target roll rate (rad/s)
-        ang_vel.y,              // bodyframe target pitch rate (rad/s)
-        ang_vel.z,              // bodyframe yaw rate (rad/s)
-        throttle);              // Collective thrust, normalized to 0 .. 1
+        now,
+        typemask,
+        quat_out,
+        ang_vel.x,
+        ang_vel.y,
+        ang_vel.z,
+        throttle);
 
 #endif // HAL_QUADPLANE_ENABLED 
 }
 
+// 发送迎角和侧滑角
 void GCS_MAVLINK_Plane::send_aoa_ssa()
 {
     AP_AHRS &ahrs = AP::ahrs();
@@ -198,6 +196,7 @@ void GCS_MAVLINK_Plane::send_aoa_ssa()
         ahrs.getSSA());
 }
 
+// 发送导航控制器输出
 void GCS_MAVLINK_Plane::send_nav_controller_output() const
 {
     if (plane.control_mode == &plane.mode_manual) {
@@ -220,7 +219,7 @@ void GCS_MAVLINK_Plane::send_nav_controller_output() const
             degrees(error.angle()),
             MIN(error.length(), UINT16_MAX),
             (plane.control_mode != &plane.mode_qstabilize) ? quadplane.pos_control->get_pos_error_z_cm() * 0.01 : 0,
-            plane.airspeed_error * 100,  // incorrect units; see PR#7933
+            plane.airspeed_error * 100,
             quadplane.wp_nav->crosstrack_error());
         return;
     }
@@ -235,11 +234,12 @@ void GCS_MAVLINK_Plane::send_nav_controller_output() const
             nav_controller->target_bearing_cd() * 0.01,
             MIN(plane.auto_state.wp_distance, UINT16_MAX),
             plane.calc_altitude_error_cm() * 0.01,
-            plane.airspeed_error * 100,  // incorrect units; see PR#7933
+            plane.airspeed_error * 100,
             nav_controller->crosstrack_error());
     }
 }
 
+// 发送全球位置目标
 void GCS_MAVLINK_Plane::send_position_target_global_int()
 {
     if (plane.control_mode == &plane.mode_manual) {
@@ -257,12 +257,12 @@ void GCS_MAVLINK_Plane::send_position_target_global_int()
 
     mavlink_msg_position_target_global_int_send(
         chan,
-        AP_HAL::millis(), // time_boot_ms
-        MAV_FRAME_GLOBAL, // targets are always global altitude
-        TYPE_MASK, // ignore everything except the x/y/z components
-        next_WP_loc.lat, // latitude as 1e7
-        next_WP_loc.lng, // longitude as 1e7
-        alt * 0.01, // altitude is sent as a float
+        AP_HAL::millis(),
+        MAV_FRAME_GLOBAL,
+        TYPE_MASK,
+        next_WP_loc.lat,
+        next_WP_loc.lng,
+        alt * 0.01,
         0.0f, // vx
         0.0f, // vy
         0.0f, // vz
@@ -273,34 +273,34 @@ void GCS_MAVLINK_Plane::send_position_target_global_int()
         0.0f); // yaw_rate
 }
 
-
+// 返回VFR HUD的空速
 float GCS_MAVLINK_Plane::vfr_hud_airspeed() const
 {
-    // airspeed sensors are best.  While the AHRS airspeed_estimate
-    // will use an airspeed sensor, that value is constrained by the
-    // ground speed.  When reporting we should send the true airspeed
-    // value if possible:
+    // 空速传感器是最佳选择。虽然AHRS的空速估计会使用空速传感器，
+    // 但该值受地速限制。在报告时，我们应尽可能发送真实的空速值：
 #if AP_AIRSPEED_ENABLED
     if (plane.airspeed.enabled() && plane.airspeed.healthy()) {
         return plane.airspeed.get_airspeed();
     }
 #endif
 
-    // airspeed estimates are OK:
+    // 空速估计也可以接受：
     float aspeed;
     if (AP::ahrs().airspeed_estimate(aspeed)) {
         return aspeed;
     }
 
-    // lying is worst:
+    // 最差的情况是返回0：
     return 0;
 }
 
+// 返回VFR HUD的油门百分比
 int16_t GCS_MAVLINK_Plane::vfr_hud_throttle() const
 {
     return plane.throttle_percentage();
 }
 
+// 返回VFR HUD的爬升率
 float GCS_MAVLINK_Plane::vfr_hud_climbrate() const
 {
 #if HAL_SOARING_ENABLED
@@ -311,18 +311,18 @@ float GCS_MAVLINK_Plane::vfr_hud_climbrate() const
     return GCS_MAVLINK::vfr_hud_climbrate();
 }
 
+// 发送风速信息
 void GCS_MAVLINK_Plane::send_wind() const
 {
     const Vector3f wind = AP::ahrs().wind_estimate();
     mavlink_msg_wind_send(
         chan,
-        degrees(atan2f(-wind.y, -wind.x)), // use negative, to give
-                                          // direction wind is coming from
+        degrees(atan2f(-wind.y, -wind.x)), // 使用负值，给出风的来向
         wind.length(),
         wind.z);
 }
 
-// sends a single pid info over the provided channel
+// 通过提供的通道发送单个PID信息
 void GCS_MAVLINK_Plane::send_pid_info(const AP_PIDInfo *pid_info,
                           const uint8_t axis, const float achieved)
 {
@@ -343,19 +343,18 @@ void GCS_MAVLINK_Plane::send_pid_info(const AP_PIDInfo *pid_info,
                                  pid_info->Dmod);
 }
 
-/*
-  send PID tuning message
- */
+// 发送PID调谐消息
 void GCS_MAVLINK_Plane::send_pid_tuning()
 {
     if (plane.control_mode == &plane.mode_manual) {
-        // no PIDs should be used in manual
+        // 手动模式下不应使用PID
         return;
     }
 
     const Parameters &g = plane.g;
 
     const AP_PIDInfo *pid_info;
+    // 发送滚转PID信息
     if (g.gcs_pid_mask & TUNING_BITS_ROLL) {
         pid_info = &plane.rollController.get_pid_info();
 #if HAL_QUADPLANE_ENABLED
@@ -365,6 +364,7 @@ void GCS_MAVLINK_Plane::send_pid_tuning()
 #endif
         send_pid_info(pid_info, PID_TUNING_ROLL, pid_info->actual);
     }
+    // 发送俯仰PID信息
     if (g.gcs_pid_mask & TUNING_BITS_PITCH) {
         pid_info = &plane.pitchController.get_pid_info();
 #if HAL_QUADPLANE_ENABLED
@@ -374,6 +374,7 @@ void GCS_MAVLINK_Plane::send_pid_tuning()
 #endif
         send_pid_info(pid_info, PID_TUNING_PITCH, pid_info->actual);
     }
+    // 发送偏航PID信息
     if (g.gcs_pid_mask & TUNING_BITS_YAW) {
         pid_info = &plane.yawController.get_pid_info();
 #if HAL_QUADPLANE_ENABLED
@@ -383,16 +384,19 @@ void GCS_MAVLINK_Plane::send_pid_tuning()
 #endif
         send_pid_info(pid_info, PID_TUNING_YAW, pid_info->actual);
     }
+    // 发送转向PID信息
     if (g.gcs_pid_mask & TUNING_BITS_STEER) {
         pid_info = &plane.steerController.get_pid_info();
         send_pid_info(pid_info, PID_TUNING_STEER, pid_info->actual);
     }
+    // 发送着陆PID信息
     if ((g.gcs_pid_mask & TUNING_BITS_LAND) && (plane.flight_stage == AP_FixedWing::FlightStage::LAND)) {
         AP_AHRS &ahrs = AP::ahrs();
         const Vector3f &gyro = ahrs.get_gyro();
         send_pid_info(plane.landing.get_pid_info(), PID_TUNING_LANDING, degrees(gyro.z));
     }
 #if HAL_QUADPLANE_ENABLED
+    // 发送垂直加速度PID信息（仅在VTOL模式下）
     if (g.gcs_pid_mask & TUNING_BITS_ACCZ && plane.quadplane.in_vtol_mode()) {
         pid_info = &plane.quadplane.pos_control->get_accel_z_pid().get_pid_info();
         send_pid_info(pid_info, PID_TUNING_ACCZ, pid_info->actual);
@@ -400,27 +404,31 @@ void GCS_MAVLINK_Plane::send_pid_tuning()
 #endif
  }
 
+// 返回地面站的系统ID
 uint8_t GCS_MAVLINK_Plane::sysid_my_gcs() const
 {
     return plane.g.sysid_my_gcs;
 }
+
+// 返回是否强制执行系统ID
 bool GCS_MAVLINK_Plane::sysid_enforce() const
 {
     return plane.g2.sysid_enforce;
 }
 
+// 返回遥测延迟
 uint32_t GCS_MAVLINK_Plane::telem_delay() const
 {
     return (uint32_t)(plane.g.telem_delay);
 }
 
-// try to send a message, return false if it won't fit in the serial tx buffer
+// 尝试发送消息，如果无法放入串行发送缓冲区则返回false
 bool GCS_MAVLINK_Plane::try_send_message(enum ap_message id)
 {
     switch (id) {
 
     case MSG_SERVO_OUT:
-        // unused
+        // 未使用
         break;
 
     case MSG_TERRAIN:
@@ -464,6 +472,7 @@ bool GCS_MAVLINK_Plane::try_send_message(enum ap_message id)
 }
 
 #if AP_AIRSPEED_HYGROMETER_ENABLE
+// 发送湿度计数据
 void GCS_MAVLINK_Plane::send_hygrometer()
 {
     if (!HAVE_PAYLOAD_SPACE(chan, HYGROMETER_SENSOR)) {
@@ -484,7 +493,7 @@ void GCS_MAVLINK_Plane::send_hygrometer()
             continue;
         }
         if (now - last_sample_ms > 2000) {
-            // not updating, stop sending
+            // 数据未更新，停止发送
             continue;
         }
         if (!HAVE_PAYLOAD_SPACE(chan, HYGROMETER_SENSOR)) {
@@ -500,15 +509,13 @@ void GCS_MAVLINK_Plane::send_hygrometer()
     }
 }
 #endif // AP_AIRSPEED_HYGROMETER_ENABLE
-
-
 /*
-  default stream rates to 1Hz
+  默认流速率设置为1Hz
  */
 const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     // @Param: RAW_SENS
-    // @DisplayName: Raw sensor stream rate
-    // @Description: MAVLink Stream rate of RAW_IMU, SCALED_IMU2, SCALED_IMU3, SCALED_PRESSURE, SCALED_PRESSURE2, SCALED_PRESSURE3 and AIRSPEED
+    // @DisplayName: 原始传感器流速率
+    // @Description: RAW_IMU, SCALED_IMU2, SCALED_IMU3, SCALED_PRESSURE, SCALED_PRESSURE2, SCALED_PRESSURE3 和 AIRSPEED 的 MAVLink 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -517,8 +524,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("RAW_SENS", 0, GCS_MAVLINK_Parameters, streamRates[0],  1),
 
     // @Param: EXT_STAT
-    // @DisplayName: Extended status stream rate
-    // @Description: MAVLink Stream rate of SYS_STATUS, POWER_STATUS, MCU_STATUS, MEMINFO, CURRENT_WAYPOINT, GPS_RAW_INT, GPS_RTK (if available), GPS2_RAW_INT (if available), GPS2_RTK (if available), NAV_CONTROLLER_OUTPUT, FENCE_STATUS, and GLOBAL_TARGET_POS_INT
+    // @DisplayName: 扩展状态流速率
+    // @Description: SYS_STATUS, POWER_STATUS, MCU_STATUS, MEMINFO, CURRENT_WAYPOINT, GPS_RAW_INT, GPS_RTK (如可用), GPS2_RAW_INT (如可用), GPS2_RTK (如可用), NAV_CONTROLLER_OUTPUT, FENCE_STATUS, 和 GLOBAL_TARGET_POS_INT 的 MAVLink 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -527,8 +534,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("EXT_STAT", 1, GCS_MAVLINK_Parameters, streamRates[1],  1),
 
     // @Param: RC_CHAN
-    // @DisplayName: RC Channel stream rate
-    // @Description: MAVLink Stream rate of SERVO_OUTPUT_RAW and RC_CHANNELS
+    // @DisplayName: RC 通道流速率
+    // @Description: SERVO_OUTPUT_RAW 和 RC_CHANNELS 的 MAVLink 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -537,8 +544,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("RC_CHAN",  2, GCS_MAVLINK_Parameters, streamRates[2],  1),
 
     // @Param: RAW_CTRL
-    // @DisplayName: Raw Control stream rate
-    // @Description: MAVLink Raw Control stream rate of SERVO_OUT
+    // @DisplayName: 原始控制流速率
+    // @Description: SERVO_OUT 的 MAVLink 原始控制流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -547,8 +554,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("RAW_CTRL", 3, GCS_MAVLINK_Parameters, streamRates[3],  1),
 
     // @Param: POSITION
-    // @DisplayName: Position stream rate
-    // @Description: MAVLink Stream rate of GLOBAL_POSITION_INT and LOCAL_POSITION_NED
+    // @DisplayName: 位置流速率
+    // @Description: GLOBAL_POSITION_INT 和 LOCAL_POSITION_NED 的 MAVLink 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -557,8 +564,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("POSITION", 4, GCS_MAVLINK_Parameters, streamRates[4],  1),
 
     // @Param: EXTRA1
-    // @DisplayName: Extra data type 1 stream rate
-    // @Description: MAVLink Stream rate of ATTITUDE, SIMSTATE (SIM only), AHRS2, RPM, AOA_SSA, LANDING,ESC_TELEMETRY,EFI_STATUS, and PID_TUNING
+    // @DisplayName: 额外数据类型1流速率
+    // @Description: ATTITUDE, SIMSTATE (仅限SIM), AHRS2, RPM, AOA_SSA, LANDING, ESC_TELEMETRY, EFI_STATUS 和 PID_TUNING 的 MAVLink 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -567,8 +574,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("EXTRA1",   5, GCS_MAVLINK_Parameters, streamRates[5],  1),
 
     // @Param: EXTRA2
-    // @DisplayName: Extra data type 2 stream rate
-    // @Description: MAVLink Stream rate of VFR_HUD
+    // @DisplayName: 额外数据类型2流速率
+    // @Description: VFR_HUD 的 MAVLink 流速率
     // @Range: 0 50
     // @Increment: 1
     // @RebootRequired: True
@@ -576,8 +583,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("EXTRA2",   6, GCS_MAVLINK_Parameters, streamRates[6],  1),
 
     // @Param: EXTRA3
-    // @DisplayName: Extra data type 3 stream rate
-    // @Description: MAVLink Stream rate of AHRS, SYSTEM_TIME, WIND, RANGEFINDER, DISTANCE_SENSOR, TERRAIN_REQUEST, BATTERY2, GIMBAL_DEVICE_ATTITUDE_STATUS, OPTICAL_FLOW, MAG_CAL_REPORT, MAG_CAL_PROGRESS, EKF_STATUS_REPORT, VIBRATION, and BATTERY_STATUS
+    // @DisplayName: 额外数据类型3流速率
+    // @Description: AHRS, SYSTEM_TIME, WIND, RANGEFINDER, DISTANCE_SENSOR, TERRAIN_REQUEST, BATTERY2, GIMBAL_DEVICE_ATTITUDE_STATUS, OPTICAL_FLOW, MAG_CAL_REPORT, MAG_CAL_PROGRESS, EKF_STATUS_REPORT, VIBRATION 和 BATTERY_STATUS 的 MAVLink 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -586,8 +593,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("EXTRA3",   7, GCS_MAVLINK_Parameters, streamRates[7],  1),
 
     // @Param: PARAMS
-    // @DisplayName: Parameter stream rate
-    // @Description: MAVLink Stream rate of PARAM_VALUE
+    // @DisplayName: 参数流速率
+    // @Description: PARAM_VALUE 的 MAVLink 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -596,8 +603,8 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPINFO("PARAMS",   8, GCS_MAVLINK_Parameters, streamRates[8],  10),
 
     // @Param: ADSB
-    // @DisplayName: ADSB stream rate
-    // @Description: MAVLink ADSB stream rate
+    // @DisplayName: ADSB 流速率
+    // @Description: MAVLink ADSB 流速率
     // @Units: Hz
     // @Range: 0 50
     // @Increment: 1
@@ -607,6 +614,7 @@ const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
     AP_GROUPEND
 };
 
+// 原始传感器流消息
 static const ap_message STREAM_RAW_SENSORS_msgs[] = {
     MSG_RAW_IMU,
     MSG_SCALED_IMU2,
@@ -618,6 +626,8 @@ static const ap_message STREAM_RAW_SENSORS_msgs[] = {
     MSG_AIRSPEED,
 #endif
 };
+
+// 扩展状态流消息
 static const ap_message STREAM_EXTENDED_STATUS_msgs[] = {
     MSG_SYS_STATUS,
     MSG_POWER_STATUS,
@@ -638,20 +648,28 @@ static const ap_message STREAM_EXTENDED_STATUS_msgs[] = {
 #endif
     MSG_POSITION_TARGET_GLOBAL_INT,
 };
+
+// 位置流消息
 static const ap_message STREAM_POSITION_msgs[] = {
     MSG_LOCATION,
     MSG_LOCAL_POSITION
 };
+
+// 原始控制器流消息
 static const ap_message STREAM_RAW_CONTROLLER_msgs[] = {
     MSG_SERVO_OUT,
 };
+
+// RC通道流消息
 static const ap_message STREAM_RC_CHANNELS_msgs[] = {
     MSG_SERVO_OUTPUT_RAW,
     MSG_RC_CHANNELS,
 #if AP_MAVLINK_MSG_RC_CHANNELS_RAW_ENABLED
-    MSG_RC_CHANNELS_RAW, // only sent on a mavlink1 connection
+    MSG_RC_CHANNELS_RAW, // 仅在mavlink1连接时发送
 #endif
 };
+
+// 额外数据类型1流消息
 static const ap_message STREAM_EXTRA1_msgs[] = {
     MSG_ATTITUDE,
 #if AP_SIM_ENABLED
@@ -674,9 +692,13 @@ static const ap_message STREAM_EXTRA1_msgs[] = {
     MSG_HYGROMETER,
 #endif
 };
+
+// 额外数据类型2流消息
 static const ap_message STREAM_EXTRA2_msgs[] = {
     MSG_VFR_HUD
 };
+
+// 额外数据类型3流消息
 static const ap_message STREAM_EXTRA3_msgs[] = {
     MSG_AHRS,
     MSG_WIND,
@@ -704,9 +726,13 @@ static const ap_message STREAM_EXTRA3_msgs[] = {
     MSG_EKF_STATUS_REPORT,
     MSG_VIBRATION,
 };
+
+// 参数流消息
 static const ap_message STREAM_PARAMS_msgs[] = {
     MSG_NEXT_PARAM
 };
+
+// ADSB流消息
 static const ap_message STREAM_ADSB_msgs[] = {
     MSG_ADSB_VEHICLE,
 #if AP_AIS_ENABLED
@@ -714,6 +740,7 @@ static const ap_message STREAM_ADSB_msgs[] = {
 #endif
 };
 
+// 所有流条目
 const struct GCS_MAVLINK::stream_entries GCS_MAVLINK::all_stream_entries[] = {
     MAV_STREAM_ENTRY(STREAM_RAW_SENSORS),
     MAV_STREAM_ENTRY(STREAM_EXTENDED_STATUS),
@@ -725,12 +752,11 @@ const struct GCS_MAVLINK::stream_entries GCS_MAVLINK::all_stream_entries[] = {
     MAV_STREAM_ENTRY(STREAM_EXTRA3),
     MAV_STREAM_ENTRY(STREAM_PARAMS),
     MAV_STREAM_ENTRY(STREAM_ADSB),
-    MAV_STREAM_TERMINATOR // must have this at end of stream_entries
+    MAV_STREAM_TERMINATOR // 必须在stream_entries末尾
 };
 
 /*
-  handle a request to switch to guided mode. This happens via a
-  callback from handle_mission_item()
+  处理切换到引导模式的请求。这通过handle_mission_item()的回调发生
  */
 bool GCS_MAVLINK_Plane::handle_guided_request(AP_Mission::Mission_Command &cmd)
 {
@@ -738,8 +764,7 @@ bool GCS_MAVLINK_Plane::handle_guided_request(AP_Mission::Mission_Command &cmd)
 }
 
 /*
-  handle a request to change current WP altitude. This happens via a
-  callback from handle_mission_item()
+  处理更改当前WP高度的请求。这通过handle_mission_item()的回调发生
  */
 void GCS_MAVLINK_Plane::handle_change_alt_request(AP_Mission::Mission_Command &cmd)
 {
@@ -752,9 +777,8 @@ void GCS_MAVLINK_Plane::handle_change_alt_request(AP_Mission::Mission_Command &c
     plane.reset_offset_altitude();
 }
 
-
 /*
-  handle a LANDING_TARGET command. The timestamp has been jitter corrected
+  处理LANDING_TARGET命令。时间戳已经进行了抖动校正
 */
 void GCS_MAVLINK_Plane::handle_landing_target(const mavlink_landing_target_t &packet, uint32_t timestamp_ms)
 {
@@ -763,6 +787,7 @@ void GCS_MAVLINK_Plane::handle_landing_target(const mavlink_landing_target_t &pa
 #endif
 }
 
+// 处理飞行前校准命令
 MAV_RESULT GCS_MAVLINK_Plane::handle_command_preflight_calibration(const mavlink_command_int_t &packet, const mavlink_message_t &msg)
 {
     plane.in_calibration = true;
@@ -772,6 +797,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_preflight_calibration(const mavlink
     return ret;
 }
 
+// 处理接收到的数据包
 void GCS_MAVLINK_Plane::packetReceived(const mavlink_status_t &status,
                                        const mavlink_message_t &msg)
 {
@@ -779,95 +805,104 @@ void GCS_MAVLINK_Plane::packetReceived(const mavlink_status_t &status,
     plane.avoidance_adsb.handle_msg(msg);
 #endif
 #if AP_SCRIPTING_ENABLED && AP_FOLLOW_ENABLED
-    // pass message to follow library
+    // 将消息传递给follow库
     plane.g2.follow.handle_msg(msg);
 #endif
     GCS_MAVLINK::packetReceived(status, msg);
 }
-
-
+// 将当前位置设置为新的Home点
 bool Plane::set_home_to_current_location(bool _lock)
 {
+    // 尝试将当前GPS位置设置为新的Home点
     if (!set_home_persistently(AP::gps().location())) {
         return false;
     }
+    // 如果需要，锁定Home点
     if (_lock) {
         AP::ahrs().lock_home();
     }
+    // 如果当前模式是RTL或QRTL，重新进入该模式以更新目标位置
     if ((control_mode == &mode_rtl)
 #if HAL_QUADPLANE_ENABLED
             || (control_mode == &mode_qrtl)
 #endif
                                                         ) {
-        // if in RTL head to the updated home location
-        control_mode->enter();
-    }
-    return true;
-}
-bool Plane::set_home(const Location& loc, bool _lock)
-{
-    if (!AP::ahrs().set_home(loc)) {
-        return false;
-    }
-    if (_lock) {
-        AP::ahrs().lock_home();
-    }
-    if ((control_mode == &mode_rtl)
-#if HAL_QUADPLANE_ENABLED
-            || (control_mode == &mode_qrtl)
-#endif
-                                                        ) {
-        // if in RTL head to the updated home location
         control_mode->enter();
     }
     return true;
 }
 
+// 将指定位置设置为新的Home点
+bool Plane::set_home(const Location& loc, bool _lock)
+{
+    // 尝试设置新的Home点
+    if (!AP::ahrs().set_home(loc)) {
+        return false;
+    }
+    // 如果需要，锁定Home点
+    if (_lock) {
+        AP::ahrs().lock_home();
+    }
+    // 如果当前模式是RTL或QRTL，重新进入该模式以更新目标位置
+    if ((control_mode == &mode_rtl)
+#if HAL_QUADPLANE_ENABLED
+            || (control_mode == &mode_qrtl)
+#endif
+                                                        ) {
+        control_mode->enter();
+    }
+    return true;
+}
+
+// 处理MAV_CMD_DO_REPOSITION命令
 MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_do_reposition(const mavlink_command_int_t &packet)
 {
-    // sanity check location
+    // 检查经纬度是否有效
     if (!check_latlng(packet.x, packet.y)) {
         return MAV_RESULT_DENIED;
     }
 
     Location requested_position;
+    // 从命令包中提取位置信息
     if (!location_from_command_t(packet, requested_position)) {
         return MAV_RESULT_DENIED;
     }
 
+    // 设置盘旋方向
     if (isnan(packet.param4) || is_zero(packet.param4)) {
         requested_position.loiter_ccw = 0;
     } else {
         requested_position.loiter_ccw = 1;
     }
 
+    // 检查位置是否合理
     if (requested_position.sanitize(plane.current_loc)) {
-        // if the location wasn't already sane don't load it
         return MAV_RESULT_DENIED;
     }
 
 #if AP_FENCE_ENABLED
-    // reject destination if outside the fence
+    // 检查目标位置是否在围栏内
     if (!plane.fence.check_destination_within_fence(requested_position)) {
         LOGGER_WRITE_ERROR(LogErrorSubsystem::NAVIGATION, LogErrorCode::DEST_OUTSIDE_FENCE);
         return MAV_RESULT_DENIED;
     }
 #endif
 
-    // location is valid load and set
+    // 如果需要改变模式或当前已经是GUIDED模式，则设置新的引导目标
     if (((int32_t)packet.param2 & MAV_DO_REPOSITION_FLAGS_CHANGE_MODE) ||
         (plane.control_mode == &plane.mode_guided)) {
         plane.set_mode(plane.mode_guided, ModeReason::GCS_COMMAND);
 
-        // add home alt if needed
+        // 如果是相对高度，加上Home点高度
         if (requested_position.relative_alt) {
             requested_position.alt += plane.home.alt;
             requested_position.relative_alt = 0;
         }
 
+        // 设置引导模式的目标航点
         plane.set_guided_WP(requested_position);
 
-        // Loiter radius for planes. Positive radius in meters, direction is controlled by Yaw (param4) value, parsed above
+        // 设置盘旋半径（如果提供）
         if (!isnan(packet.param3) && packet.param3 > 0) {
             plane.mode_guided.set_radius_and_direction(packet.param3, requested_position.loiter_ccw);
         }
@@ -878,74 +913,73 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_do_reposition(const mavlink_com
 }
 
 #if AP_PLANE_OFFBOARD_GUIDED_SLEW_ENABLED
-// these are GUIDED mode commands that are RATE or slew enabled, so you can have more powerful control than default controls.
+// 处理GUIDED模式下的速度、高度和航向渐变命令
 MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_guided_slew_commands(const mavlink_command_int_t &packet)
 {
   switch(packet.command) {
     case MAV_CMD_GUIDED_CHANGE_SPEED: {
-        // command is only valid in guided mode
+        // 仅在GUIDED模式下有效
         if (plane.control_mode != &plane.mode_guided) {
             return MAV_RESULT_FAILED;
         }
 
-         // only airspeed commands are supported right now...
-        if (int(packet.param1) != SPEED_TYPE_AIRSPEED) {  // since SPEED_TYPE is int in range 0-1 and packet.param1 is a *float* this works.
+        // 目前只支持空速命令
+        if (int(packet.param1) != SPEED_TYPE_AIRSPEED) {
             return MAV_RESULT_DENIED;
         }
 
-         // reject airspeeds that are outside of the tuning envelope
+        // 拒绝超出调整范围的空速
         if (packet.param2 > plane.aparm.airspeed_max || packet.param2 < plane.aparm.airspeed_min) {
             return MAV_RESULT_DENIED;
         }
 
-         // no need to process any new packet/s with the
-         //  same airspeed any further, if we are already doing it.
+        // 如果目标空速未变，无需处理
         float new_target_airspeed_cm = packet.param2 * 100;
-        if ( is_equal(new_target_airspeed_cm,plane.guided_state.target_airspeed_cm)) { 
+        if (is_equal(new_target_airspeed_cm, plane.guided_state.target_airspeed_cm)) { 
             return MAV_RESULT_ACCEPTED;
         }
         plane.guided_state.target_airspeed_cm = new_target_airspeed_cm;
         plane.guided_state.target_airspeed_time_ms = AP_HAL::millis();
 
-         if (is_zero(packet.param3)) {
-            // the user wanted /maximum acceleration, pick a large value as close enough
+        // 设置加速度
+        if (is_zero(packet.param3)) {
             plane.guided_state.target_airspeed_accel = 1000.0f;
         } else {
             plane.guided_state.target_airspeed_accel = fabsf(packet.param3);
         }
 
-         // assign an acceleration direction
+        // 设置加速度方向
         if (plane.guided_state.target_airspeed_cm < plane.target_airspeed_cm) {
             plane.guided_state.target_airspeed_accel *= -1.0f;
         }
         return MAV_RESULT_ACCEPTED;
     }
 
-     case MAV_CMD_GUIDED_CHANGE_ALTITUDE: {
-        // command is only valid in guided
+    case MAV_CMD_GUIDED_CHANGE_ALTITUDE: {
+        // 仅在GUIDED模式下有效
         if (plane.control_mode != &plane.mode_guided) {
             return MAV_RESULT_FAILED;
         }
 
-        // disallow default value of -1 and dangerous value of zero
+        // 拒绝无效的高度值
         if (is_equal(packet.z, -1.0f) || is_equal(packet.z, 0.0f)){
             return MAV_RESULT_DENIED;
         }
 
+        // 转换高度框架
         Location::AltFrame new_target_alt_frame;
         if (!mavlink_coordinate_frame_to_location_alt_frame((MAV_FRAME)packet.frame, new_target_alt_frame)) {
             return MAV_RESULT_DENIED;
         }
-        // keep a copy of what came in via MAVLink - this is needed for logging, but not for anything else
         plane.guided_state.target_mav_frame = packet.frame;
 
+        // 设置目标高度
         const int32_t new_target_alt_cm = packet.z * 100;
         plane.guided_state.target_location.set_alt_cm(new_target_alt_cm, new_target_alt_frame); 
         plane.guided_state.target_alt_time_ms = AP_HAL::millis();
 
-        // param3 contains the desired vertical velocity (not acceleration)
+        // 设置垂直速率
         if (is_zero(packet.param3)) {
-            // the user wanted /maximum altitude change rate, pick a large value as close enough
             plane.guided_state.target_alt_rate = 1000.0;
         } else {
             plane.guided_state.target_alt_rate = fabsf(packet.param3);
@@ -954,45 +988,43 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_guided_slew_commands(const mavl
         return MAV_RESULT_ACCEPTED;
     }
 
-     case MAV_CMD_GUIDED_CHANGE_HEADING: {
-
-        // command is only valid in guided mode
+    case MAV_CMD_GUIDED_CHANGE_HEADING: {
+        // 仅在GUIDED模式下有效
         if (plane.control_mode != &plane.mode_guided) {
             return MAV_RESULT_FAILED;
         }
 
-         // don't accept packets outside of [0-360] degree range
+        // 拒绝超出[0-360]度范围的航向
         if (packet.param2 < 0.0f || packet.param2 >= 360.0f) {
             return MAV_RESULT_DENIED;
         }
 
         float new_target_heading = radians(wrap_180(packet.param2));
 
-        // course over ground
-        if ( int(packet.param1) == HEADING_TYPE_COURSE_OVER_GROUND) { // compare as nearest int
+        // 设置航向类型（地面航向或飞机航向）
+        if (int(packet.param1) == HEADING_TYPE_COURSE_OVER_GROUND) {
             plane.guided_state.target_heading_type = GUIDED_HEADING_COG;
             plane.prev_WP_loc = plane.current_loc;
-        // normal vehicle heading
-        } else if (int(packet.param1) == HEADING_TYPE_HEADING) { // compare as nearest int
+        } else if (int(packet.param1) == HEADING_TYPE_HEADING) {
             plane.guided_state.target_heading_type = GUIDED_HEADING_HEADING;
         } else {
-            //  MAV_RESULT_DENIED  means Command is invalid (is supported but has invalid parameters).
             return MAV_RESULT_DENIED;
         }
 
+        // 重置积分器
         plane.g2.guidedHeading.reset_I();
 
+        // 设置目标航向和相关参数
         plane.guided_state.target_heading = new_target_heading;
         plane.guided_state.target_heading_accel_limit = MAX(packet.param3, 0.05f);
         plane.guided_state.target_heading_time_ms = AP_HAL::millis();
         return MAV_RESULT_ACCEPTED;
     }
   }
-  // anything else ...
+  // 不支持的命令
   return MAV_RESULT_UNSUPPORTED;
 }
 #endif // AP_PLANE_OFFBOARD_GUIDED_SLEW_ENABLED
-
 MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_int_t &packet, const mavlink_message_t &msg)
 {
     switch(packet.command) {
@@ -1004,7 +1036,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
         return handle_command_int_do_reposition(packet);
 
 #if AP_PLANE_OFFBOARD_GUIDED_SLEW_ENABLED
-    // special 'slew-enabled' guided commands here... for speed,alt, and direction commands
+    // 特殊的'滑移启用'引导命令，用于速度、高度和方向命令
     case MAV_CMD_GUIDED_CHANGE_SPEED:
     case MAV_CMD_GUIDED_CHANGE_ALTITUDE:
     case MAV_CMD_GUIDED_CHANGE_HEADING:
@@ -1013,7 +1045,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
 
 #if AP_SCRIPTING_ENABLED && AP_FOLLOW_ENABLED
     case MAV_CMD_DO_FOLLOW:
-        // param1: sysid of target to follow
+        // param1: 要跟随的目标的系统ID
         if ((packet.param1 > 0) && (packet.param1 <= 255)) {
             plane.g2.follow.set_target_sysid((uint8_t)packet.param1);
             return MAV_RESULT_ACCEPTED;
@@ -1052,7 +1084,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
         return plane.trigger_land_abort(packet.param1) ? MAV_RESULT_ACCEPTED : MAV_RESULT_FAILED;
 
     case MAV_CMD_DO_LAND_START:
-        // attempt to switch to next DO_LAND_START command in the mission
+        // 尝试切换到任务中的下一个DO_LAND_START命令
         if (plane.have_position && plane.mission.jump_to_landing_sequence(plane.current_loc)) {
             plane.set_mode(plane.mode_auto, ModeReason::GCS_COMMAND);
             return MAV_RESULT_ACCEPTED;
@@ -1061,7 +1093,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
 
     case MAV_CMD_MISSION_START:
         if (!is_zero(packet.param1) || !is_zero(packet.param2)) {
-            // first-item/last item not supported
+            // 不支持第一项/最后一项
             return MAV_RESULT_DENIED;
         }
         plane.set_mode(plane.mode_auto, ModeReason::GCS_COMMAND);
@@ -1088,28 +1120,25 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
 
 MAV_RESULT GCS_MAVLINK_Plane::handle_command_DO_CHANGE_SPEED(const mavlink_command_int_t &packet)
 {
-        // if we're in failsafe modes (e.g., RTL, LOITER) or in pilot
-        // controlled modes (e.g., MANUAL, TRAINING)
-        // this command should be ignored since it comes in from GCS
-        // or a companion computer:
-        if ((!plane.control_mode->is_guided_mode()) &&
-            (plane.control_mode != &plane.mode_auto)) {
-            // failed
-            return MAV_RESULT_FAILED;
-        }
-
-        if (plane.do_change_speed(packet.param1, packet.param2, packet.param3)) {
-            return MAV_RESULT_ACCEPTED;
-        }
+    // 如果我们处于故障保护模式（例如，RTL，LOITER）或飞行员控制模式（例如，MANUAL，TRAINING）
+    // 这个命令应该被忽略，因为它来自GCS或伴随计算机：
+    if ((!plane.control_mode->is_guided_mode()) &&
+        (plane.control_mode != &plane.mode_auto)) {
+        // 失败
         return MAV_RESULT_FAILED;
+    }
+
+    if (plane.do_change_speed(packet.param1, packet.param2, packet.param3)) {
+        return MAV_RESULT_ACCEPTED;
+    }
+    return MAV_RESULT_FAILED;
 }
 
 #if HAL_QUADPLANE_ENABLED
 #if AP_MAVLINK_COMMAND_LONG_ENABLED
 void GCS_MAVLINK_Plane::convert_MAV_CMD_NAV_TAKEOFF_to_COMMAND_INT(const mavlink_command_long_t &in, mavlink_command_int_t &out)
 {
-    // convert to MAV_FRAME_LOCAL_OFFSET_NED, "NED local tangent frame
-    // with origin that travels with the vehicle"
+    // 转换为MAV_FRAME_LOCAL_OFFSET_NED，"以车辆为原点的NED局部切线坐标系"
     out = {};
     out.target_system = in.target_system;
     out.target_component = in.target_component;
@@ -1117,13 +1146,13 @@ void GCS_MAVLINK_Plane::convert_MAV_CMD_NAV_TAKEOFF_to_COMMAND_INT(const mavlink
     out.command = in.command;
     // out.current = 0;
     // out.autocontinue = 0;
-    // out.param1 = in.param1;  // we only use the "z" parameter in this command:
+    // out.param1 = in.param1;  // 我们在这个命令中只使用"z"参数：
     // out.param2 = in.param2;
     // out.param3 = in.param3;
     // out.param4 = in.param4;
-    // out.x = 0;  // we don't handle positioning when doing takeoffs
+    // out.x = 0;  // 我们在起飞时不处理定位
     // out.y = 0;
-    out.z = -in.param7;  // up -> down
+    out.z = -in.param7;  // 上 -> 下
 }
 
 void GCS_MAVLINK_Plane::convert_COMMAND_LONG_to_COMMAND_INT(const mavlink_command_long_t &in, mavlink_command_int_t &out, MAV_FRAME frame)
@@ -1141,11 +1170,11 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_MAV_CMD_NAV_TAKEOFF(const mavlink_c
 {
     float takeoff_alt = packet.z;
     switch (packet.frame) {
-    case MAV_FRAME_LOCAL_OFFSET_NED:  // "NED local tangent frame with origin that travels with the vehicle"
-        takeoff_alt = -takeoff_alt;  // down -> up
+    case MAV_FRAME_LOCAL_OFFSET_NED:  // "以车辆为原点的NED局部切线坐标系"
+        takeoff_alt = -takeoff_alt;  // 下 -> 上
         break;
     default:
-        return MAV_RESULT_DENIED; // "is supported but has invalid parameters"
+        return MAV_RESULT_DENIED; // "支持但参数无效"
     }
     if (!plane.quadplane.available()) {
         return MAV_RESULT_FAILED;
@@ -1159,72 +1188,70 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_MAV_CMD_NAV_TAKEOFF(const mavlink_c
 
 MAV_RESULT GCS_MAVLINK_Plane::handle_MAV_CMD_DO_AUTOTUNE_ENABLE(const mavlink_command_int_t &packet)
 {
-        // param1 : enable/disable
-        plane.autotune_enable(!is_zero(packet.param1));
-        return MAV_RESULT_ACCEPTED;
+    // param1 : 启用/禁用
+    plane.autotune_enable(!is_zero(packet.param1));
+    return MAV_RESULT_ACCEPTED;
 }
 
 #if HAL_PARACHUTE_ENABLED
 MAV_RESULT GCS_MAVLINK_Plane::handle_MAV_CMD_DO_PARACHUTE(const mavlink_command_int_t &packet)
 {
-        // configure or release parachute
-        switch ((uint16_t)packet.param1) {
-        case PARACHUTE_DISABLE:
-            plane.parachute.enabled(false);
-            return MAV_RESULT_ACCEPTED;
-        case PARACHUTE_ENABLE:
-            plane.parachute.enabled(true);
-            return MAV_RESULT_ACCEPTED;
-        case PARACHUTE_RELEASE:
-            // treat as a manual release which performs some additional check of altitude
-            if (plane.parachute.released()) {
-                gcs().send_text(MAV_SEVERITY_NOTICE, "Parachute already released");
-                return MAV_RESULT_FAILED;
-            }
-            if (!plane.parachute.enabled()) {
-                gcs().send_text(MAV_SEVERITY_NOTICE, "Parachute not enabled");
-                return MAV_RESULT_FAILED;
-            }
-            if (!plane.parachute_manual_release()) {
-                return MAV_RESULT_FAILED;
-            }
-            return MAV_RESULT_ACCEPTED;
-        default:
-            break;
+    // 配置或释放降落伞
+    switch ((uint16_t)packet.param1) {
+    case PARACHUTE_DISABLE:
+        plane.parachute.enabled(false);
+        return MAV_RESULT_ACCEPTED;
+    case PARACHUTE_ENABLE:
+        plane.parachute.enabled(true);
+        return MAV_RESULT_ACCEPTED;
+    case PARACHUTE_RELEASE:
+        // 视为手动释放，执行一些额外的高度检查
+        if (plane.parachute.released()) {
+            gcs().send_text(MAV_SEVERITY_NOTICE, "降落伞已释放");
+            return MAV_RESULT_FAILED;
         }
-        return MAV_RESULT_FAILED;
+        if (!plane.parachute.enabled()) {
+            gcs().send_text(MAV_SEVERITY_NOTICE, "降落伞未启用");
+            return MAV_RESULT_FAILED;
+        }
+        if (!plane.parachute_manual_release()) {
+            return MAV_RESULT_FAILED;
+        }
+        return MAV_RESULT_ACCEPTED;
+    default:
+        break;
+    }
+    return MAV_RESULT_FAILED;
 }
 #endif
-
-
 #if HAL_QUADPLANE_ENABLED
 MAV_RESULT GCS_MAVLINK_Plane::handle_MAV_CMD_DO_MOTOR_TEST(const mavlink_command_int_t &packet)
 {
-        // param1 : motor sequence number (a number from 1 to max number of motors on the vehicle)
-        // param2 : throttle type (0=throttle percentage, 1=PWM, 2=pilot throttle channel pass-through. See MOTOR_TEST_THROTTLE_TYPE enum)
-        // param3 : throttle (range depends upon param2)
-        // param4 : timeout (in seconds)
-        // param5 : motor count (number of motors to test in sequence)
-        return plane.quadplane.mavlink_motor_test_start(chan,
-                                                        (uint8_t)packet.param1,
-                                                        (uint8_t)packet.param2,
-                                                        (uint16_t)packet.param3,
-                                                        packet.param4,
-                                                        (uint8_t)packet.x);
+    // param1 : 电机序列号（从1到车辆最大电机数的数字）
+    // param2 : 油门类型（0=油门百分比，1=PWM，2=飞行员油门通道直通。参见MOTOR_TEST_THROTTLE_TYPE枚举）
+    // param3 : 油门（范围取决于param2）
+    // param4 : 超时（以秒为单位）
+    // param5 : 电机数量（要按顺序测试的电机数量）
+    return plane.quadplane.mavlink_motor_test_start(chan,
+                                                    (uint8_t)packet.param1,
+                                                    (uint8_t)packet.param2,
+                                                    (uint16_t)packet.param3,
+                                                    packet.param4,
+                                                    (uint8_t)packet.x);
 }
 
 MAV_RESULT GCS_MAVLINK_Plane::handle_command_DO_VTOL_TRANSITION(const mavlink_command_int_t &packet)
 {
-        if (!plane.quadplane.handle_do_vtol_transition((enum MAV_VTOL_STATE)packet.param1)) {
-            return MAV_RESULT_FAILED;
-        }
-        return MAV_RESULT_ACCEPTED;
+    // 处理VTOL转换命令
+    if (!plane.quadplane.handle_do_vtol_transition((enum MAV_VTOL_STATE)packet.param1)) {
+        return MAV_RESULT_FAILED;
+    }
+    return MAV_RESULT_ACCEPTED;
 }
 #endif
 
-// this is called on receipt of a MANUAL_CONTROL packet and is
-// expected to call manual_override to override RC input on desired
-// axes.
+// 这个函数在收到MANUAL_CONTROL数据包时被调用，
+// 预期会调用manual_override来覆盖所需轴上的RC输入。
 void GCS_MAVLINK_Plane::handle_manual_control_axes(const mavlink_manual_control_t &packet, const uint32_t tnow)
 {
     manual_override(plane.channel_roll, packet.y, 1000, 2000, tnow);
@@ -1263,148 +1290,144 @@ void GCS_MAVLINK_Plane::handle_message(const mavlink_message_t &msg)
 } // end handle mavlink
 
 void GCS_MAVLINK_Plane::handle_set_attitude_target(const mavlink_message_t &msg)
-    {
-        // Only allow companion computer (or other external controller) to
-        // control attitude in GUIDED mode.  We DON'T want external control
-        // in e.g., RTL, CICLE. Specifying a single mode for companion
-        // computer control is more safe (even more so when using
-        // FENCE_ACTION = 4 for geofence failures).
-        if (plane.control_mode != &plane.mode_guided) { // don't screw up failsafes
-            return;
-        }
-
-        mavlink_set_attitude_target_t att_target;
-        mavlink_msg_set_attitude_target_decode(&msg, &att_target);
-
-        // Mappings: If any of these bits are set, the corresponding input should be ignored.
-        // NOTE, when parsing the bits we invert them for easier interpretation but transport has them inverted
-        // bit 1: body roll rate
-        // bit 2: body pitch rate
-        // bit 3: body yaw rate
-        // bit 4: unknown
-        // bit 5: unknown
-        // bit 6: reserved
-        // bit 7: throttle
-        // bit 8: attitude
-
-        // if not setting all Quaternion values, use _rate flags to indicate which fields.
-
-        // Extract the Euler roll angle from the Quaternion.
-        Quaternion q(att_target.q[0], att_target.q[1],
-                att_target.q[2], att_target.q[3]);
-
-        // NOTE: att_target.type_mask is inverted for easier interpretation
-        att_target.type_mask = att_target.type_mask ^ 0xFF;
-
-        uint8_t attitude_mask = att_target.type_mask & 0b10000111; // q plus rpy
-
-        uint32_t now = AP_HAL::millis();
-        if ((attitude_mask & 0b10000001) ||    // partial, including roll
-                (attitude_mask == 0b10000000)) { // all angles
-            plane.guided_state.forced_rpy_cd.x = degrees(q.get_euler_roll()) * 100.0f;
-
-            // Update timer for external roll to the nav control
-            plane.guided_state.last_forced_rpy_ms.x = now;
-        }
-
-        if ((attitude_mask & 0b10000010) ||    // partial, including pitch
-                (attitude_mask == 0b10000000)) { // all angles
-            plane.guided_state.forced_rpy_cd.y = degrees(q.get_euler_pitch()) * 100.0f;
-
-            // Update timer for external pitch to the nav control
-            plane.guided_state.last_forced_rpy_ms.y = now;
-        }
-
-        if ((attitude_mask & 0b10000100) ||    // partial, including yaw
-                (attitude_mask == 0b10000000)) { // all angles
-            plane.guided_state.forced_rpy_cd.z = degrees(q.get_euler_yaw()) * 100.0f;
-
-            // Update timer for external yaw to the nav control
-            plane.guided_state.last_forced_rpy_ms.z = now;
-        }
-        if (att_target.type_mask & 0b01000000) { // throttle
-            plane.guided_state.forced_throttle = att_target.thrust * 100.0f;
-
-            // Update timer for external throttle
-            plane.guided_state.last_forced_throttle_ms = now;
-        }
+{
+    // 只允许伴随计算机（或其他外部控制器）在GUIDED模式下控制姿态。
+    // 我们不希望在例如RTL、CICLE等模式下进行外部控制。
+    // 为伴随计算机控制指定单一模式更安全（在使用FENCE_ACTION = 4进行地理围栏失败时更是如此）。
+    if (plane.control_mode != &plane.mode_guided) { // 不要破坏故障保护
+        return;
     }
+
+    mavlink_set_attitude_target_t att_target;
+    mavlink_msg_set_attitude_target_decode(&msg, &att_target);
+
+    // 映射：如果设置了这些位中的任何一个，相应的输入应被忽略。
+    // 注意，在解析位时我们将它们反转以便更容易解释，但传输时它们是反转的
+    // bit 1: 机体横滚速率
+    // bit 2: 机体俯仰速率
+    // bit 3: 机体偏航速率
+    // bit 4: 未知
+    // bit 5: 未知
+    // bit 6: 保留
+    // bit 7: 油门
+    // bit 8: 姿态
+
+    // 如果不设置所有四元数值，使用_rate标志来指示哪些字段。
+
+    // 从四元数中提取欧拉横滚角。
+    Quaternion q(att_target.q[0], att_target.q[1],
+            att_target.q[2], att_target.q[3]);
+
+    // 注意：att_target.type_mask被反转以便更容易解释
+    att_target.type_mask = att_target.type_mask ^ 0xFF;
+
+    uint8_t attitude_mask = att_target.type_mask & 0b10000111; // q加上rpy
+
+    uint32_t now = AP_HAL::millis();
+    if ((attitude_mask & 0b10000001) ||    // 部分，包括横滚
+            (attitude_mask == 0b10000000)) { // 所有角度
+        plane.guided_state.forced_rpy_cd.x = degrees(q.get_euler_roll()) * 100.0f;
+
+        // 更新外部横滚到导航控制的计时器
+        plane.guided_state.last_forced_rpy_ms.x = now;
+    }
+
+    if ((attitude_mask & 0b10000010) ||    // 部分，包括俯仰
+            (attitude_mask == 0b10000000)) { // 所有角度
+        plane.guided_state.forced_rpy_cd.y = degrees(q.get_euler_pitch()) * 100.0f;
+
+        // 更新外部俯仰到导航控制的计时器
+        plane.guided_state.last_forced_rpy_ms.y = now;
+    }
+
+    if ((attitude_mask & 0b10000100) ||    // 部分，包括偏航
+            (attitude_mask == 0b10000000)) { // 所有角度
+        plane.guided_state.forced_rpy_cd.z = degrees(q.get_euler_yaw()) * 100.0f;
+
+        // 更新外部偏航到导航控制的计时器
+        plane.guided_state.last_forced_rpy_ms.z = now;
+    }
+    if (att_target.type_mask & 0b01000000) { // 油门
+        plane.guided_state.forced_throttle = att_target.thrust * 100.0f;
+
+        // 更新外部油门的计时器
+        plane.guided_state.last_forced_throttle_ms = now;
+    }
+}
 
 void GCS_MAVLINK_Plane::handle_set_position_target_local_ned(const mavlink_message_t &msg)
-    {
-        // decode packet
-        mavlink_set_position_target_local_ned_t packet;
-        mavlink_msg_set_position_target_local_ned_decode(&msg, &packet);
+{
+    // 解码数据包
+    mavlink_set_position_target_local_ned_t packet;
+    mavlink_msg_set_position_target_local_ned_decode(&msg, &packet);
 
-        // exit if vehicle is not in Guided mode
-        if (plane.control_mode != &plane.mode_guided) {
-            return;
-        }
-
-        // only local moves for now
-        if (packet.coordinate_frame != MAV_FRAME_LOCAL_OFFSET_NED) {
-            return;
-        }
-
-        // just do altitude for now
-        plane.next_WP_loc.alt += -packet.z*100.0;
-        gcs().send_text(MAV_SEVERITY_INFO, "Change alt to %.1f",
-                        (double)((plane.next_WP_loc.alt - plane.home.alt)*0.01));
+    // 如果车辆不在Guided模式，则退出
+    if (plane.control_mode != &plane.mode_guided) {
+        return;
     }
+
+    // 目前只处理本地移动
+    if (packet.coordinate_frame != MAV_FRAME_LOCAL_OFFSET_NED) {
+        return;
+    }
+
+    // 目前只处理高度
+    plane.next_WP_loc.alt += -packet.z*100.0;
+    gcs().send_text(MAV_SEVERITY_INFO, "Change alt to %.1f",
+                    (double)((plane.next_WP_loc.alt - plane.home.alt)*0.01));
+}
 
 void GCS_MAVLINK_Plane::handle_set_position_target_global_int(const mavlink_message_t &msg)
-    {
-        // Only want to allow companion computer position control when
-        // in a certain mode to avoid inadvertently sending these
-        // kinds of commands when the autopilot is responding to problems
-        // in modes such as RTL, CIRCLE, etc.  Specifying ONLY one mode
-        // for companion computer control is more safe (provided
-        // one uses the FENCE_ACTION = 4 (RTL) for geofence failures).
-        if (plane.control_mode != &plane.mode_guided) {
-            //don't screw up failsafes
-            return;
-        }
-
-        mavlink_set_position_target_global_int_t pos_target;
-        mavlink_msg_set_position_target_global_int_decode(&msg, &pos_target);
-        // Unexpectedly, the mask is expecting "ones" for dimensions that should
-        // be IGNORNED rather than INCLUDED.  See mavlink documentation of the
-        // SET_POSITION_TARGET_GLOBAL_INT message, type_mask field.
-        const uint16_t alt_mask = 0b1111111111111011; // (z mask at bit 3)
-            
-        bool msg_valid = true;
-        AP_Mission::Mission_Command cmd = {0};
-        
-        if (pos_target.type_mask & alt_mask)
-        {
-            cmd.content.location.alt = pos_target.alt * 100;
-            cmd.content.location.relative_alt = false;
-            cmd.content.location.terrain_alt = false;
-            switch (pos_target.coordinate_frame) 
-            {
-                case MAV_FRAME_GLOBAL:
-                case MAV_FRAME_GLOBAL_INT:
-                    break; //default to MSL altitude
-                case MAV_FRAME_GLOBAL_RELATIVE_ALT:
-                case MAV_FRAME_GLOBAL_RELATIVE_ALT_INT:
-                    cmd.content.location.relative_alt = true;
-                    break;
-                case MAV_FRAME_GLOBAL_TERRAIN_ALT:
-                case MAV_FRAME_GLOBAL_TERRAIN_ALT_INT:
-                    cmd.content.location.relative_alt = true;
-                    cmd.content.location.terrain_alt = true;
-                    break;
-                default:
-                    gcs().send_text(MAV_SEVERITY_WARNING, "Invalid coord frame in SET_POSTION_TARGET_GLOBAL_INT");
-                    msg_valid = false;
-                    break;
-            }    
-
-            if (msg_valid) {
-                handle_change_alt_request(cmd);
-            }
-        } // end if alt_mask       
+{
+    // 只希望在特定模式下允许伴随计算机进行位置控制，
+    // 以避免在自动驾驶仪响应RTL、CIRCLE等模式中的问题时
+    // 无意中发送这些类型的命令。
+    // 为伴随计算机控制指定只有一种模式更安全
+    // （前提是使用FENCE_ACTION = 4（RTL）处理地理围栏故障）。
+    if (plane.control_mode != &plane.mode_guided) {
+        // 不要破坏故障保护
+        return;
     }
+
+    mavlink_set_position_target_global_int_t pos_target;
+    mavlink_msg_set_position_target_global_int_decode(&msg, &pos_target);
+    // 出乎意料的是，掩码期望对应该被忽略而不是包含的维度使用"1"。
+    // 参见SET_POSITION_TARGET_GLOBAL_INT消息的mavlink文档中的type_mask字段。
+    const uint16_t alt_mask = 0b1111111111111011; // （z掩码在第3位）
+        
+    bool msg_valid = true;
+    AP_Mission::Mission_Command cmd = {0};
+    
+    if (pos_target.type_mask & alt_mask)
+    {
+        cmd.content.location.alt = pos_target.alt * 100;
+        cmd.content.location.relative_alt = false;
+        cmd.content.location.terrain_alt = false;
+        switch (pos_target.coordinate_frame) 
+        {
+            case MAV_FRAME_GLOBAL:
+            case MAV_FRAME_GLOBAL_INT:
+                break; // 默认为MSL高度
+            case MAV_FRAME_GLOBAL_RELATIVE_ALT:
+            case MAV_FRAME_GLOBAL_RELATIVE_ALT_INT:
+                cmd.content.location.relative_alt = true;
+                break;
+            case MAV_FRAME_GLOBAL_TERRAIN_ALT:
+            case MAV_FRAME_GLOBAL_TERRAIN_ALT_INT:
+                cmd.content.location.relative_alt = true;
+                cmd.content.location.terrain_alt = true;
+                break;
+            default:
+                gcs().send_text(MAV_SEVERITY_WARNING, "Invalid coord frame in SET_POSTION_TARGET_GLOBAL_INT");
+                msg_valid = false;
+                break;
+        }    
+
+        if (msg_valid) {
+            handle_change_alt_request(cmd);
+        }
+    } // end if alt_mask       
+}
 
 MAV_RESULT GCS_MAVLINK_Plane::handle_command_do_set_mission_current(const mavlink_command_int_t &packet)
 {
@@ -1413,7 +1436,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_do_set_mission_current(const mavlin
         return result;
     }
 
-    // if you change this you must change handle_mission_set_current
+    // 如果你改变这里，你必须改变handle_mission_set_current
     plane.auto_state.next_wp_crosstrack = false;
     if (plane.control_mode == &plane.mode_auto && plane.mission.state() == AP_Mission::MISSION_STOPPED) {
         plane.mission.resume();
@@ -1423,9 +1446,10 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_do_set_mission_current(const mavlin
 }
 
 #if AP_MAVLINK_MISSION_SET_CURRENT_ENABLED
+// 处理设置当前任务的消息
 void GCS_MAVLINK_Plane::handle_mission_set_current(AP_Mission &mission, const mavlink_message_t &msg)
 {
-    // if you change this you must change handle_command_do_set_mission_current
+    // 如果你改变这里，你必须改变handle_command_do_set_mission_current
     plane.auto_state.next_wp_crosstrack = false;
     GCS_MAVLINK::handle_mission_set_current(mission, msg);
     if (plane.control_mode == &plane.mode_auto && plane.mission.state() == AP_Mission::MISSION_STOPPED) {
@@ -1434,6 +1458,7 @@ void GCS_MAVLINK_Plane::handle_mission_set_current(AP_Mission &mission, const ma
 }
 #endif
 
+// 返回飞机的能力
 uint64_t GCS_MAVLINK_Plane::capabilities() const
 {
     return (MAV_PROTOCOL_CAPABILITY_MISSION_FLOAT |
@@ -1448,6 +1473,7 @@ uint64_t GCS_MAVLINK_Plane::capabilities() const
 }
 
 #if HAL_HIGH_LATENCY2_ENABLED
+// 返回高延迟模式下的目标高度
 int16_t GCS_MAVLINK_Plane::high_latency_target_altitude() const
 {
     AP_AHRS &ahrs = AP::ahrs();
@@ -1456,7 +1482,7 @@ int16_t GCS_MAVLINK_Plane::high_latency_target_altitude() const
 
 #if HAL_QUADPLANE_ENABLED
     const QuadPlane &quadplane = plane.quadplane;
-    //return units are m
+    // 返回单位为米
     if (quadplane.show_vtol_view()) {
         return (plane.control_mode != &plane.mode_qstabilize) ? 0.01 * (global_position_current.alt + quadplane.pos_control->get_pos_error_z_cm()) : 0;
     }
@@ -1464,9 +1490,10 @@ int16_t GCS_MAVLINK_Plane::high_latency_target_altitude() const
     return 0.01 * (global_position_current.alt + plane.calc_altitude_error_cm());
 }
 
+// 返回高延迟模式下的目标航向
 uint8_t GCS_MAVLINK_Plane::high_latency_tgt_heading() const
 {
-    // return units are deg/2
+    // 返回单位为度/2
 #if HAL_QUADPLANE_ENABLED
     const QuadPlane &quadplane = plane.quadplane;
     if (quadplane.show_vtol_view()) {
@@ -1475,11 +1502,11 @@ uint8_t GCS_MAVLINK_Plane::high_latency_tgt_heading() const
     }
 #endif
         const AP_Navigation *nav_controller = plane.nav_controller;
-        // need to convert -18000->18000 to 0->360/2
+        // 需要将-18000->18000转换为0->360/2
         return wrap_360_cd(nav_controller->target_bearing_cd() ) / 200;
 }
 
-// return units are dm
+// 返回高延迟模式下的目标距离，单位为分米
 uint16_t GCS_MAVLINK_Plane::high_latency_tgt_dist() const
 {
 #if HAL_QUADPLANE_ENABLED
@@ -1493,31 +1520,35 @@ uint16_t GCS_MAVLINK_Plane::high_latency_tgt_dist() const
     return MIN(plane.auto_state.wp_distance, UINT16_MAX) / 10;
 }
 
+// 返回高延迟模式下的目标空速
 uint8_t GCS_MAVLINK_Plane::high_latency_tgt_airspeed() const
 {
-    // return units are m/s*5
+    // 返回单位为m/s*5
     return plane.target_airspeed_cm * 0.05;
 }
 
+// 返回高延迟模式下的风速
 uint8_t GCS_MAVLINK_Plane::high_latency_wind_speed() const
 {
     Vector3f wind;
     wind = AP::ahrs().wind_estimate();
 
-    // return units are m/s*5
+    // 返回单位为m/s*5
     return MIN(wind.length() * 5, UINT8_MAX);
 }
 
+// 返回高延迟模式下的风向
 uint8_t GCS_MAVLINK_Plane::high_latency_wind_direction() const
 {
     const Vector3f wind = AP::ahrs().wind_estimate();
 
-    // return units are deg/2
-    // need to convert -180->180 to 0->360/2
+    // 返回单位为度/2
+    // 需要将-180->180转换为0->360/2
     return wrap_360(degrees(atan2f(-wind.y, -wind.x))) / 2;
 }
 #endif // HAL_HIGH_LATENCY2_ENABLED
 
+// 返回VTOL状态
 MAV_VTOL_STATE GCS_MAVLINK_Plane::vtol_state() const
 {
 #if !HAL_QUADPLANE_ENABLED
@@ -1531,13 +1562,13 @@ MAV_VTOL_STATE GCS_MAVLINK_Plane::vtol_state() const
 #endif
 };
 
+// 返回着陆状态
 MAV_LANDED_STATE GCS_MAVLINK_Plane::landed_state() const
 {
     if (plane.is_flying()) {
-        // note that Q-modes almost always consider themselves as flying
+        // 注意Q模式几乎总是认为自己在飞行
         return MAV_LANDED_STATE_IN_AIR;
     }
 
     return MAV_LANDED_STATE_ON_GROUND;
 }
-

@@ -1,37 +1,38 @@
-# hw definition file for processing by chibios_pins.py
-# for airbotf4 bootloader
+# 这是airbotf4飞控板的bootloader硬件定义文件
+# 该文件由chibios_pins.py脚本处理,用于配置硬件引脚和外设
 
-# MCU class and specific type
+# 定义MCU类型为STM32F4系列,具体型号为STM32F405
 MCU STM32F4xx STM32F405xx
 
-# board ID for firmware load
+# 开发板ID为128,用于固件校验和加载
 APJ_BOARD_ID 128
 
-# crystal frequency
+# 外部晶振频率为8MHz
 OSCILLATOR_HZ 8000000
 
+# Flash总容量为1024KB
 FLASH_SIZE_KB 1024
 
-# don't allow bootloader to use more than 16k
+# 限制bootloader最大使用16KB Flash空间
 FLASH_USE_MAX_KB 16
 
-# bootloader is installed at zero offset
+# bootloader从Flash起始位置(0偏移)安装
 FLASH_RESERVE_START_KB 0
 
-# LEDs
+# 配置bootloader指示LED,使用PB5引脚,低电平点亮
 PB5 LED_BOOTLOADER OUTPUT LOW
 define HAL_LED_ON 0
 
-# the location where the bootloader will put the firmware
+# 设置固件加载位置在Flash 64KB处
 FLASH_BOOTLOADER_LOAD_KB 64
 
-
-# order of UARTs
+# 配置串口顺序,仅使用USB OTG1接口
 SERIAL_ORDER OTG1
 
-PA11 OTG_FS_DM OTG1
-PA12 OTG_FS_DP OTG1
+# 配置USB OTG接口引脚
+PA11 OTG_FS_DM OTG1    # USB D-引脚
+PA12 OTG_FS_DP OTG1    # USB D+引脚
 
-# Add CS pins to ensure they are high in bootloader
-PA4 MPU6000_CS CS
-PB3 FLASH_CS CS
+# 配置片选(CS)引脚,确保在bootloader中保持高电平
+PA4 MPU6000_CS CS      # MPU6000陀螺仪片选
+PB3 FLASH_CS CS        # 外置Flash存储器片选

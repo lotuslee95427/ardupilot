@@ -1,16 +1,21 @@
+# 包含通用硬件定义文件,其中包含了MCU型号、晶振频率等基本配置
 include common.inc
 
 
-# bootloader starts at zero offset
+# bootloader从Flash起始位置(0偏移)开始安装
+# 这意味着bootloader将占用Flash的最开始部分
 FLASH_RESERVE_START_KB 0
 
-# the location where the bootloader will put the firmware
-# the H743 has 128k sectors
+# 设置固件加载位置为Flash 128KB处
+# STM32H743的Flash扇区大小为128KB
+# bootloader将把固件写入这个位置
 FLASH_BOOTLOADER_LOAD_KB 128
 
-# order of UARTs (and USB). Allow bootloading on USB and telem1
+# 配置串口顺序,仅启用USB OTG1接口用于固件下载
+# 这样可以通过USB接口进行bootloader操作
 SERIAL_ORDER OTG1
 
-# Add CS pins to ensure they are high in bootloader
-PC4 IMU1_CS CS
-PE11 FLASH_SPI_CS CS
+# 配置片选(CS)引脚,确保在bootloader中保持高电平
+# 这可以防止在bootloader运行时意外访问外设
+PC4 IMU1_CS CS              # IMU传感器片选引脚
+PE11 FLASH_SPI_CS CS        # 外部Flash存储器片选引脚

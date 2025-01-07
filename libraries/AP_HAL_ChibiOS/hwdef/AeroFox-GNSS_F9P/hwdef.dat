@@ -1,103 +1,108 @@
-# MCU class and specific type
+# 定义MCU类型为STM32L431系列
 MCU STM32L431 STM32L431xx
 
-# bootloader starts firmware at 36k + 4k (STORAGE_FLASH)
+# bootloader从36k + 4k(STORAGE_FLASH)处开始固件
 FLASH_RESERVE_START_KB 40
 FLASH_SIZE_KB 256
 
-# store parameters in pages 18 and 19
+# 在第18和19页存储参数
 STORAGE_FLASH_PAGE 18
 define HAL_STORAGE_SIZE 800
 
-# ChibiOS system timer
+# ChibiOS系统定时器配置
 STM32_ST_USE_TIMER 15
 define CH_CFG_ST_RESOLUTION 16
 
-# board ID for firmware load
+# 开发板ID,用于固件校验和加载
 APJ_BOARD_ID 1109
 
-# crystal frequency
+# 外部晶振频率为8MHz
 OSCILLATOR_HZ 8000000
+# 设置为外设模式
 env AP_PERIPH 1
+# 设置串口输出为SD1,波特率57600
 STDOUT_SERIAL SD1
 STDOUT_BAUDRATE 57600
 
+# 禁用GPIO中断
 define HAL_NO_GPIO_IRQ
+# 设置串口缓冲区大小为512字节
 define SERIAL_BUFFERS_SIZE 512
+# 设置中断所需栈空间
 define PORT_INT_REQUIRED_STACK 64
+# 不预留DMA空间
 define DMA_RESERVE_SIZE 0
 
-# MAIN_STACK is stack for ISR handlers
+# 设置中断服务程序处理程序栈大小
 MAIN_STACK 0x300
 
-# PROCESS_STACK controls stack for main thread
+# 设置主线程栈大小
 PROCESS_STACK 0xA00
 
-# we setup a small defaults.parm
+# 设置一个小的默认参数文件
 define AP_PARAM_MAX_EMBEDDED_PARAM 512
 
-# blue LED0 marked as ACT
+# 配置蓝色LED0作为活动指示灯,高电平点亮
 PB3 LED OUTPUT HIGH
 define HAL_LED_ON 1
 
-# debugger support
+# 配置SWD调试接口引脚
 PA13 JTMS-SWDIO SWD
 PA14 JTCK-SWCLK SWD
 
-# I2C bus
+# 配置I2C总线
 I2C_ORDER I2C2
 PB13 I2C2_SCL I2C2
 PB14 I2C2_SDA I2C2
 define HAL_I2C_CLEAR_ON_TIMEOUT 0
 define HAL_I2C_INTERNAL_MASK 1
 
-# CAN bus
+# 配置CAN总线
 CAN_ORDER 1
 PB8 CAN1_RX CAN1
 PB9 CAN1_TX CAN1
 # PC13 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW
 define HAL_CAN_POOL_SIZE 12000
 
-# UARTs
+# 配置串口顺序
 SERIAL_ORDER USART1 EMPTY EMPTY
 
-# USART1
+# 配置USART1引脚
 PB6  USART1_TX USART1 SPEED_HIGH
 PB7  USART1_RX USART1 SPEED_HIGH
 
-# allow for reboot command for faster development
+# 允许通过串口0发送重启命令,用于快速开发
 define HAL_PERIPH_LISTEN_FOR_SERIAL_UART_REBOOT_CMD_PORT 0
 
-# keep ROMFS uncompressed as we don't have enough RAM
-# to uncompress the bootloader at runtime
+# 保持ROMFS不压缩,因为RAM不足以在运行时解压bootloader
 env ROMFS_UNCOMPRESSED True
 
-# enable GPS and compass
+# 启用GPS和罗盘功能
 define HAL_PERIPH_ENABLE_GPS
 define GPS_MAX_RATE_MS 200
 define GPS_MAX_RECEIVERS 1
 define GPS_MAX_INSTANCES 1
 define HAL_PERIPH_GPS_PORT_DEFAULT 0
 
-# allow for F9P GPS modules with moving baseline
+# 允许F9P GPS模块使用移动基线
 define GPS_MOVING_BASELINE 1
 define HAL_PERIPH_ENABLE_MAG
 define HAL_COMPASS_MAX_SENSORS 1
 
-# QMC5883L for different board varients
+# 为不同板型配置QMC5883L磁力计,I2C地址0xd,需要180度偏航旋转校准
 COMPASS QMC5883L I2C:0:0xd false ROTATION_YAW_180
 
-# no ADC pins
+# 禁用ADC引脚
 define HAL_USE_ADC FALSE
 
-# disable unnecessary threads
+# 禁用不必要的线程
 define HAL_NO_TIMER_THREAD
 
-# enable LED
+# 启用LED和通知功能
 define HAL_PERIPH_ENABLE_RC_OUT
 define HAL_PERIPH_ENABLE_NOTIFY
 
-#GPIO LED
+# 配置GPIO RGB LED
 define AP_NOTIFY_GPIO_LED_RGB_ENABLED 1 
 PB2 LED_RED OUTPUT OPENDRAIN HIGH GPIO(0) 
 PB4 LED_GREEN OUTPUT OPENDRAIN LOW GPIO(1) 

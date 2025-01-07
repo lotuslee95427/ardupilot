@@ -7,218 +7,216 @@
 #include <AP_Common/AP_Common.h>
 #include <AP_Param/AP_Param.h>
 #include <AP_Math/AP_Math.h>
-#include <AC_AttitudeControl/AC_AttitudeControl.h> // Attitude controller library for sqrt controller
+#include <AC_AttitudeControl/AC_AttitudeControl.h> // 用于sqrt控制器的姿态控制器库
 
-#define AC_AVOID_ACCEL_CMSS_MAX         100.0f  // maximum acceleration/deceleration in cm/s/s used to avoid hitting fence
+#define AC_AVOID_ACCEL_CMSS_MAX         100.0f  // 用于避免撞击围栏的最大加速度/减速度(厘米/秒/秒)
 
-// bit masks for enabled fence types.
-#define AC_AVOID_DISABLED               0       // avoidance disabled
-#define AC_AVOID_STOP_AT_FENCE          1       // stop at fence
-#define AC_AVOID_USE_PROXIMITY_SENSOR   2       // stop based on proximity sensor output
-#define AC_AVOID_STOP_AT_BEACON_FENCE   4       // stop based on beacon perimeter
+// 启用围栏类型的位掩码
+#define AC_AVOID_DISABLED               0       // 避障禁用
+#define AC_AVOID_STOP_AT_FENCE          1       // 在围栏处停止
+#define AC_AVOID_USE_PROXIMITY_SENSOR   2       // 基于近距离传感器输出停止
+#define AC_AVOID_STOP_AT_BEACON_FENCE   4       // 基于信标周边停止
 #define AC_AVOID_DEFAULT                (AC_AVOID_STOP_AT_FENCE | AC_AVOID_USE_PROXIMITY_SENSOR)
 
-// definitions for non-GPS avoidance
-#define AC_AVOID_NONGPS_DIST_MAX_DEFAULT    5.0f    // objects over 5m away are ignored (default value for DIST_MAX parameter)
-#define AC_AVOID_ANGLE_MAX_PERCENT          0.75f   // object avoidance max lean angle as a percentage (expressed in 0 ~ 1 range) of total vehicle max lean angle
+// 非GPS避障的定义
+#define AC_AVOID_NONGPS_DIST_MAX_DEFAULT    5.0f    // 超过5米的物体将被忽略(DIST_MAX参数的默认值)
+#define AC_AVOID_ANGLE_MAX_PERCENT          0.75f   // 物体避障最大倾斜角度占总车辆最大倾斜角度的百分比(以0~1范围表示)
 
-#define AC_AVOID_ACTIVE_LIMIT_TIMEOUT_MS    500     // if limiting is active if last limit is happened in the last x ms
-#define AC_AVOID_ACCEL_TIMEOUT_MS           200     // stored velocity used to calculate acceleration will be reset if avoidance is active after this many ms
+#define AC_AVOID_ACTIVE_LIMIT_TIMEOUT_MS    500     // 如果在最后x毫秒内发生限制,则限制处于活动状态
+#define AC_AVOID_ACCEL_TIMEOUT_MS           200     // 如果避障在此毫秒数后仍处于活动状态,用于计算加速度的存储速度将被重置
 
 /*
- * This class prevents the vehicle from leaving a polygon fence or hitting proximity-based obstacles
- * Additionally the vehicle may back up if the margin to obstacle is breached
+ * 此类防止车辆离开多边形围栏或撞击基于近距离的障碍物
+ * 此外,如果超出与障碍物的边距,车辆可能会后退
  */
 class AC_Avoid {
 public:
     AC_Avoid();
 
-    /* Do not allow copies */
+    /* 不允许复制 */
     CLASS_NO_COPY(AC_Avoid);
 
-    // get singleton instance
+    // 获取单例实例
     static AC_Avoid *get_singleton() {
         return _singleton;
     }
 
-    // return true if any avoidance feature is enabled
+    // 如果启用了任何避障功能,则返回true
     bool enabled() const { return _enabled != AC_AVOID_DISABLED; }
 
-    // Adjusts the desired velocity so that the vehicle can stop
-    // before the fence/object.
-    // kP, accel_cmss are for the horizontal axis
-    // kP_z, accel_cmss_z are for vertical axis
+    // 调整期望速度,使车辆能够在围栏/物体前停止
+    // kP, accel_cmss用于水平轴
+    // kP_z, accel_cmss_z用于垂直轴
     void adjust_velocity(Vector3f &desired_vel_cms, bool &backing_up, float kP, float accel_cmss, float kP_z, float accel_cmss_z, float dt);
     void adjust_velocity(Vector3f &desired_vel_cms, float kP, float accel_cmss, float kP_z, float accel_cmss_z, float dt) {
         bool backing_up = false;
         adjust_velocity(desired_vel_cms, backing_up, kP, accel_cmss, kP_z, accel_cmss_z, dt);
     }
 
-    // This method limits velocity and calculates backaway velocity from various supported fences
-    // Also limits vertical velocity using adjust_velocity_z method
+    // 此方法限制速度并计算来自各种支持的围栏的后退速度
+    // 还使用adjust_velocity_z方法限制垂直速度
     void adjust_velocity_fence(float kP, float accel_cmss, Vector3f &desired_vel_cms, Vector3f &backup_vel, float kP_z, float accel_cmss_z, float dt);
 
-    // adjust desired horizontal speed so that the vehicle stops before the fence or object
-    // accel (maximum acceleration/deceleration) is in m/s/s
-    // heading is in radians
-    // speed is in m/s
-    // kP should be zero for linear response, non-zero for non-linear response
-    // dt is the time since the last call in seconds
+    // 调整期望的水平速度,使车辆在围栏或物体前停止
+    // accel(最大加速度/减速度)单位为米/秒/秒
+    // heading单位为弧度
+    // speed单位为米/秒
+    // kP应为零以获得线性响应,非零以获得非线性响应
+    // dt是自上次调用以来的时间(秒)
     void adjust_speed(float kP, float accel, float heading, float &speed, float dt);
 
-    // adjust vertical climb rate so vehicle does not break the vertical fence
+    // 调整垂直爬升率,使车辆不会突破垂直围栏
     void adjust_velocity_z(float kP, float accel_cmss, float& climb_rate_cms, float& backup_speed, float dt);
     void adjust_velocity_z(float kP, float accel_cmss, float& climb_rate_cms, float dt);
 
-    // adjust roll-pitch to push vehicle away from objects
-    // roll and pitch value are in centi-degrees
-    // angle_max is the user defined maximum lean angle for the vehicle in centi-degrees
+    // 调整横滚-俯仰以推动车辆远离物体
+    // 横滚和俯仰值以厘度为单位
+    // angle_max是用户定义的车辆最大倾斜角度(以厘度为单位)
     void adjust_roll_pitch(float &roll, float &pitch, float angle_max);
 
-    // enable/disable proximity based avoidance
+    // 启用/禁用基于近距离的避障
     void proximity_avoidance_enable(bool on_off) { _proximity_enabled = on_off; }
     bool proximity_avoidance_enabled() const { return (_proximity_enabled && (_enabled & AC_AVOID_USE_PROXIMITY_SENSOR) > 0); }
     void proximity_alt_avoidance_enable(bool on_off) { _proximity_alt_enabled = on_off; }
 
-    // helper functions
+    // 辅助函数
 
-    // Limits the component of desired_vel_cms in the direction of the unit vector
-    // limit_direction to be at most the maximum speed permitted by the limit_distance_cm.
-    // uses velocity adjustment idea from Randy's second email on this thread:
+    // 限制desired_vel_cms在单位向量limit_direction方向上的分量
+    // 使其最多为limit_distance_cm允许的最大速度
+    // 使用Randy在此线程中第二封电子邮件中的速度调整想法:
     //   https://groups.google.com/forum/#!searchin/drones-discuss/obstacle/drones-discuss/QwUXz__WuqY/qo3G8iTLSJAJ
     void limit_velocity_2D(float kP, float accel_cmss, Vector2f &desired_vel_cms, const Vector2f& limit_direction, float limit_distance_cm, float dt);
     
-    // Note: This method is used to limit velocity horizontally and vertically given a 3D desired velocity vector 
-    // Limits the component of desired_vel_cms in the direction of the obstacle_vector based on the passed value of "margin"
+    // 注意:此方法用于根据3D期望速度向量限制水平和垂直速度
+    // 基于传入的"margin"值限制desired_vel_cms在obstacle_vector方向上的分量
     void limit_velocity_3D(float kP, float accel_cmss, Vector3f &desired_vel_cms, const Vector3f& limit_direction, float limit_distance_cm, float kP_z, float accel_cmss_z ,float dt);
     
-     // compute the speed such that the stopping distance of the vehicle will
-     // be exactly the input distance.
-     // kP should be non-zero for Copter which has a non-linear response
+     // 计算使车辆停止距离恰好等于输入距离的速度
+     // 对于具有非线性响应的Copter,kP应为非零
     float get_max_speed(float kP, float accel_cmss, float distance_cm, float dt) const;
 
-    // return margin (in meters) that the vehicle should stay from objects
+    // 返回车辆应与物体保持的边距(以米为单位)
     float get_margin() const { return _margin; }
 
-    // return minimum alt (in meters) above which avoidance will be active
+    // 返回避障将处于活动状态的最小高度(以米为单位)
     float get_min_alt() const { return _alt_min; }
 
-    // return true if limiting is active
+    // 如果限制处于活动状态则返回true
     bool limits_active() const {return (AP_HAL::millis() - _last_limit_time) < AC_AVOID_ACTIVE_LIMIT_TIMEOUT_MS;};
 
     static const struct AP_Param::GroupInfo var_info[];
 
 private:
-    // behaviour types (see BEHAVE parameter)
+    // 行为类型(参见BEHAVE参数)
     enum BehaviourType {
-        BEHAVIOR_SLIDE = 0,
-        BEHAVIOR_STOP = 1
+        BEHAVIOR_SLIDE = 0,  // 滑动
+        BEHAVIOR_STOP = 1    // 停止
     };
 
     /*
-     * Limit acceleration so that change of velocity output by avoidance library is controlled
-     * This helps reduce jerks and sudden movements in the vehicle
+     * 限制加速度,以控制避障库输出的速度变化
+     * 这有助于减少车辆的抖动和突然移动
      */
     void limit_accel(const Vector3f &original_vel, Vector3f &modified_vel, float dt);
 
     /*
-     * Adjusts the desired velocity for the circular fence.
+     * 调整圆形围栏的期望速度
      */
     void adjust_velocity_circle_fence(float kP, float accel_cmss, Vector2f &desired_vel_cms, Vector2f &backup_vel, float dt);
 
     /*
-     * Adjusts the desired velocity for inclusion and exclusion polygon fences
+     * 调整包含和排除多边形围栏的期望速度
      */
     void adjust_velocity_inclusion_and_exclusion_polygons(float kP, float accel_cmss, Vector2f &desired_vel_cms, Vector2f &backup_vel, float dt);
 
     /*
-     * Adjusts the desired velocity for the inclusion and exclusion circles
+     * 调整包含和排除圆的期望速度
      */
     void adjust_velocity_inclusion_circles(float kP, float accel_cmss, Vector2f &desired_vel_cms, Vector2f &backup_vel, float dt);
     void adjust_velocity_exclusion_circles(float kP, float accel_cmss, Vector2f &desired_vel_cms, Vector2f &backup_vel, float dt);
 
     /*
-     * Adjusts the desired velocity for the beacon fence.
+     * 调整信标围栏的期望速度
      */
     void adjust_velocity_beacon_fence(float kP, float accel_cmss, Vector2f &desired_vel_cms, Vector2f &backup_vel, float dt);
 
     /*
-     * Adjusts the desired velocity based on output from the proximity sensor
+     * 基于近距离传感器输出调整期望速度
      */
     void adjust_velocity_proximity(float kP, float accel_cmss, Vector3f &desired_vel_cms, Vector3f &backup_vel, float kP_z, float accel_cmss_z, float dt);
 
     /*
-     * Adjusts the desired velocity given an array of boundary points
-     * The boundary must be in Earth Frame
-     * margin is the distance (in meters) that the vehicle should stop short of the polygon
-     * stay_inside should be true for fences, false for exclusion polygons
+     * 根据边界点数组调整期望速度
+     * 边界必须在地球坐标系中
+     * margin是车辆应在多边形前停止的距离(以米为单位)
+     * stay_inside对于围栏应为true,对于排除多边形应为false
      */
     void adjust_velocity_polygon(float kP, float accel_cmss, Vector2f &desired_vel_cms, Vector2f &backup_vel, const Vector2f* boundary, uint16_t num_points, float margin, float dt, bool stay_inside);
 
     /*
-     * Computes distance required to stop, given current speed.
+     * 计算给定当前速度所需的停止距离
      */
     float get_stopping_distance(float kP, float accel_cmss, float speed_cms) const;
 
    /*
-    * Compute the back away velocity required to avoid breaching margin
-    * INPUT: This method requires the breach in margin distance (back_distance_cm), direction towards the breach (limit_direction)
-    *        It then calculates the desired backup velocity and passes it on to "find_max_quadrant_velocity" method to distribute the velocity vector into respective quadrants
-    * OUTPUT: The method then outputs four velocities (quad1/2/3/4_back_vel_cms), which correspond to the final desired backup velocity in each quadrant
+    * 计算避免超出边距所需的后退速度
+    * 输入:此方法需要边距超出距离(back_distance_cm)、朝向超出的方向(limit_direction)
+    *      然后计算所需的后退速度并将其传递给"find_max_quadrant_velocity"方法以将速度向量分配到相应象限
+    * 输出:该方法然后输出四个速度(quad1/2/3/4_back_vel_cms),对应于每个象限中的最终所需后退速度
     */
     void calc_backup_velocity_2D(float kP, float accel_cmss, Vector2f &quad1_back_vel_cms, Vector2f &qua2_back_vel_cms, Vector2f &quad3_back_vel_cms, Vector2f &quad4_back_vel_cms, float back_distance_cm, Vector2f limit_direction, float dt);
     
     /*
-    * Compute the back away velocity required to avoid breaching margin, including vertical component
-    * min_z_vel is <= 0, and stores the greatest velocity in the downwards direction
-    * max_z_vel is >= 0, and stores the greatest velocity in the upwards direction
-    * eventually max_z_vel + min_z_vel will give the final desired Z backaway velocity
+    * 计算避免超出边距所需的后退速度,包括垂直分量
+    * min_z_vel <= 0,存储向下方向的最大速度
+    * max_z_vel >= 0,存储向上方向的最大速度
+    * 最终max_z_vel + min_z_vel将给出最终所需的Z后退速度
     */
     void calc_backup_velocity_3D(float kP, float accel_cmss, Vector2f &quad1_back_vel_cms, Vector2f &quad2_back_vel_cms, Vector2f &quad3_back_vel_cms, Vector2f &quad4_back_vel_cms, float back_distance_cms, Vector3f limit_direction, float kp_z, float accel_cmss_z, float back_distance_z, float& min_z_vel, float& max_z_vel, float dt);
    
    /*
-    * Calculate maximum velocity vector that can be formed in each quadrant 
-    * This method takes the desired backup velocity, and four other velocities corresponding to each quadrant
-    * The desired velocity is then fit into one of the 4 quadrant velocities as per the sign of its components
-    * This ensures that we have multiple backup velocities, we can get the maximum of all of those velocities in each quadrant
+    * 计算可以在每个象限形成的最大速度向量
+    * 此方法接受所需的后退速度和对应于每个象限的其他四个速度
+    * 然后根据其分量的符号将所需速度拟合到4个象限速度之一中
+    * 这确保我们有多个后退速度,我们可以在每个象限中获得所有这些速度的最大值
     */
     void find_max_quadrant_velocity(Vector2f &desired_vel, Vector2f &quad1_vel, Vector2f &quad2_vel, Vector2f &quad3_vel, Vector2f &quad4_vel);
 
     /*
-    * Calculate maximum velocity vector that can be formed in each quadrant and separately store max & min of vertical components
+    * 计算可以在每个象限形成的最大速度向量,并分别存储垂直分量的最大值和最小值
     */
     void find_max_quadrant_velocity_3D(Vector3f &desired_vel, Vector2f &quad1_vel, Vector2f &quad2_vel, Vector2f &quad3_vel, Vector2f &quad4_vel, float &max_z_vel, float &min_z_vel);
 
     /*
-     * methods for avoidance in non-GPS flight modes
+     * 非GPS飞行模式下的避障方法
      */
 
-    // convert distance (in meters) to a lean percentage (in 0~1 range) for use in manual flight modes
+    // 将距离(以米为单位)转换为倾斜百分比(0~1范围)以用于手动飞行模式
     float distance_to_lean_pct(float dist_m);
 
-    // returns the maximum positive and negative roll and pitch percentages (in -1 ~ +1 range) based on the proximity sensor
+    // 根据近距离传感器返回最大正负横滚和俯仰百分比(-1~+1范围)
     void get_proximity_roll_pitch_pct(float &roll_positive, float &roll_negative, float &pitch_positive, float &pitch_negative);
 
-    // Logging function
+    // 日志记录函数
     void Write_SimpleAvoidance(const uint8_t state, const Vector3f& desired_vel, const Vector3f& modified_vel, const bool back_up) const;
 
-    // parameters
-    AP_Int8 _enabled;
-    AP_Int16 _angle_max;           // maximum lean angle to avoid obstacles (only used in non-GPS flight modes)
-    AP_Float _dist_max;            // distance (in meters) from object at which obstacle avoidance will begin in non-GPS modes
-    AP_Float _margin;              // vehicle will attempt to stay this distance (in meters) from objects while in GPS modes
-    AP_Int8 _behavior;             // avoidance behaviour (slide or stop)
-    AP_Float _backup_speed_xy_max; // Maximum speed that will be used to back away horizontally (in m/s)
-    AP_Float _backup_speed_z_max;  // Maximum speed that will be used to back away verticality (in m/s)
-    AP_Float _alt_min;             // alt below which Proximity based avoidance is turned off
-    AP_Float _accel_max;           // maximum acceleration while simple avoidance is active
-    AP_Float _backup_deadzone;     // distance beyond AVOID_MARGIN parameter, after which vehicle will backaway from obstacles
+    // 参数
+    AP_Int8 _enabled;                // 启用状态
+    AP_Int16 _angle_max;            // 避障的最大倾斜角度(仅在非GPS飞行模式下使用)
+    AP_Float _dist_max;             // 在非GPS模式下开始避障的与物体的距离(以米为单位)
+    AP_Float _margin;               // 车辆在GPS模式下将尝试与物体保持此距离(以米为单位)
+    AP_Int8 _behavior;              // 避障行为(滑动或停止)
+    AP_Float _backup_speed_xy_max;  // 用于水平后退的最大速度(以米/秒为单位)
+    AP_Float _backup_speed_z_max;   // 用于垂直后退的最大速度(以米/秒为单位)
+    AP_Float _alt_min;              // 低于此高度时关闭基于近距离的避障
+    AP_Float _accel_max;            // 简单避障活动时的最大加速度
+    AP_Float _backup_deadzone;      // AVOID_MARGIN参数之外的距离,超过此距离后车辆将远离障碍物
 
-    bool _proximity_enabled = true; // true if proximity sensor based avoidance is enabled (used to allow pilot to enable/disable)
-    bool _proximity_alt_enabled = true; // true if proximity sensor based avoidance is enabled based on altitude
-    uint32_t _last_limit_time;      // the last time a limit was active
-    uint32_t _last_log_ms;          // the last time simple avoidance was logged
-    Vector3f _prev_avoid_vel;       // copy of avoidance adjusted velocity
+    bool _proximity_enabled = true;  // 如果启用基于近距离传感器的避障则为true(用于允许飞行员启用/禁用)
+    bool _proximity_alt_enabled = true; // 如果基于高度启用基于近距离传感器的避障则为true
+    uint32_t _last_limit_time;       // 限制处于活动状态的最后时间
+    uint32_t _last_log_ms;           // 上次记录简单避障的时间
+    Vector3f _prev_avoid_vel;        // 避障调整速度的副本
 
     static AC_Avoid *_singleton;
 };

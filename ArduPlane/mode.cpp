@@ -1,5 +1,6 @@
 #include "Plane.h"
 
+// 构造函数
 Mode::Mode() :
     ahrs(plane.ahrs)
 #if HAL_QUADPLANE_ENABLED
@@ -12,125 +13,129 @@ Mode::Mode() :
 {
 }
 
+// 退出模式时的处理
 void Mode::exit()
 {
-    // call sub-classes exit
+    // 调用子类的退出函数
     _exit();
-    // stop autotuning if not AUTOTUNE mode
+    // 如果不是自动调谐模式，停止自动调谐
     if (plane.control_mode != &plane.mode_autotune){
         plane.autotune_restore();
     }
-
 }
 
+// 进入模式时的处理
 bool Mode::enter()
 {
 #if AP_SCRIPTING_ENABLED
-    // reset nav_scripting.enabled
+    // 重置导航脚本使能标志
     plane.nav_scripting.enabled = false;
 #endif
 
-    // cancel inverted flight
+    // 取消倒飞状态
     plane.auto_state.inverted_flight = false;
     
-    // cancel waiting for rudder neutral
+    // 取消等待方向舵中立
     plane.takeoff_state.waiting_for_rudder_neutral = false;
 
-    // don't cross-track when starting a mission
+    // 开始任务时不进行交叉跟踪
     plane.auto_state.next_wp_crosstrack = false;
 
-    // reset landing check
+    // 重置着陆检查
     plane.auto_state.checked_for_autoland = false;
 
-    // zero locked course
+    // 清零锁定航向
     plane.steer_state.locked_course_err = 0;
     plane.steer_state.locked_course = false;
 
-    // reset crash detection
+    // 重置坠机检测
     plane.crash_state.is_crashed = false;
     plane.crash_state.impact_detected = false;
 
-    // reset external attitude guidance
+    // 重置外部姿态引导
     plane.guided_state.last_forced_rpy_ms.zero();
     plane.guided_state.last_forced_throttle_ms = 0;
 
 #if AP_PLANE_OFFBOARD_GUIDED_SLEW_ENABLED
-    plane.guided_state.target_heading = -4; // radians here are in range -3.14 to 3.14, so a default value needs to be outside that range
+    // 重置引导模式相关参数
+    plane.guided_state.target_heading = -4;
     plane.guided_state.target_heading_type = GUIDED_HEADING_NONE;
-    plane.guided_state.target_airspeed_cm = -1; // same as above, although an airspeed of -1 is rare on plane.
+    plane.guided_state.target_airspeed_cm = -1;
     plane.guided_state.target_alt_time_ms = 0;
     plane.guided_state.target_location.set_alt_cm(-1, Location::AltFrame::ABSOLUTE); 
 #endif
 
 #if AP_CAMERA_ENABLED
+    // 设置相机自动模式
     plane.camera.set_is_auto_mode(this == &plane.mode_auto);
 #endif
 
-    // zero initial pitch and highest airspeed on mode change
+    // 重置初始俯仰角和最高空速
     plane.auto_state.highest_airspeed = 0;
     plane.auto_state.initial_pitch_cd = ahrs.pitch_sensor;
 
-    // disable taildrag takeoff on mode change
+    // 禁用尾拖起飞模式
     plane.auto_state.fbwa_tdrag_takeoff_mode = false;
 
-    // start with previous WP at current location
+    // 将上一个航点设为当前位置
     plane.prev_WP_loc = plane.current_loc;
 
-    // new mode means new loiter
+    // 重置盘旋开始时间
     plane.loiter.start_time_ms = 0;
 
-    // record time of mode change
+    // 记录模式改变时间
     plane.last_mode_change_ms = AP_HAL::millis();
 
-    // set VTOL auto state
+    // 设置VTOL自动状态
     plane.auto_state.vtol_mode = is_vtol_mode();
     plane.auto_state.vtol_loiter = false;
 
-    // initialize speed variable used in AUTO and GUIDED for DO_CHANGE_SPEED commands
+    // 初始化AUTO和GUIDED模式中用于DO_CHANGE_SPEED命令的速度变量
     plane.new_airspeed_cm = -1;
     
-    // clear postponed long failsafe if mode change (from GCS) occurs before recall of long failsafe
+    // 如果在长故障安全触发前发生模式改变（来自GCS），清除延迟的长故障安全
     plane.long_failsafe_pending = false;
 
 #if HAL_QUADPLANE_ENABLED
+    // 进入四旋翼模式
     quadplane.mode_enter();
 #endif
 
 #if AP_TERRAIN_AVAILABLE
+    // 重置地形跟随标志
     plane.target_altitude.terrain_following_pending = false;
 #endif
 
-    // disable auto mode servo idle during altitude wait command
+    // 禁用自动模式下高度等待命令期间的伺服怠速
     plane.auto_state.idle_mode = false;
 
+    // 调用子类的进入函数
     bool enter_result = _enter();
 
     if (enter_result) {
-        // -------------------
-        // these must be done AFTER _enter() because they use the results to set more flags
+        // 以下操作必须在_enter()之后执行，因为它们使用结果来设置更多标志
 
-        // start with throttle suppressed in auto_throttle modes
+        // 在自动油门模式下开始时抑制油门
         plane.throttle_suppressed = does_auto_throttle();
 #if HAL_ADSB_ENABLED
+        // 设置ADSB自动模式
         plane.adsb.set_is_auto_mode(does_auto_navigation());
 #endif
 
-        // set the nav controller stale AFTER _enter() so that we can check if we're currently in a loiter during the mode change
+        // 设置导航控制器数据为过时状态
         plane.nav_controller->set_data_is_stale();
 
-        // reset steering integrator on mode change
+        // 重置转向积分器
         plane.steerController.reset_I();
 
-        // update RC failsafe, as mode change may have necessitated changing the failsafe throttle
+        // 更新遥控器故障保护
         plane.control_failsafe();
 
 #if AP_FENCE_ENABLED
-        // pilot requested flight mode change during a fence breach indicates pilot is attempting to manually recover
-        // this flight mode change could be automatic (i.e. fence, battery, GPS or GCS failsafe)
-        // but it should be harmless to disable the fence temporarily in these situations as well
+        // 启动手动恢复围栏突破
         plane.fence.manual_recovery_start();
 #endif
-        //reset mission if in landing sequence, disarmed, not flying, and have changed to a non-autothrottle mode to clear prearm
+        // 在某些情况下重置任务
         if (plane.mission.get_in_landing_sequence_flag() &&
             !plane.is_flying() && !plane.arming.is_armed_and_safety_off() &&
             !plane.control_mode->does_auto_navigation()) {
@@ -138,71 +143,72 @@ bool Mode::enter()
            plane.mission.reset();
         }
 
-        // Make sure the flight stage is correct for the new mode
+        // 更新飞行阶段
         plane.update_flight_stage();
     }
 
     return enter_result;
 }
 
+// 检查是否为VTOL手动油门模式
 bool Mode::is_vtol_man_throttle() const
 {
 #if HAL_QUADPLANE_ENABLED
     if (plane.quadplane.tailsitter.is_in_fw_flight() &&
         plane.quadplane.assisted_flight) {
-        // We are a tailsitter that has fully transitioned to Q-assisted forward flight.
-        // In this case the forward throttle directly drives the vertical throttle so
-        // set vertical throttle state to match the forward throttle state. Confusingly the booleans are inverted,
-        // forward throttle uses 'does_auto_throttle' whereas vertical uses 'is_vtol_man_throttle'.
+        // 尾坐式飞机完全过渡到Q辅助前向飞行
         return !does_auto_throttle();
     }
 #endif
     return false;
 }
 
+// 更新目标高度
 void Mode::update_target_altitude()
 {
     Location target_location;
 
     if (plane.landing.is_flaring()) {
-        // during a landing flare, use TECS_LAND_SINK as a target sink
-        // rate, and ignores the target altitude
+        // 着陆调平阶段，使用TECS_LAND_SINK作为目标下降率
         plane.set_target_altitude_location(plane.next_WP_loc);
     } else if (plane.landing.is_on_approach()) {
+        // 着陆进近阶段，设置着陆滑行坡度
         plane.landing.setup_landing_glide_slope(plane.prev_WP_loc, plane.next_WP_loc, plane.current_loc, plane.target_altitude.offset_cm);
 #if AP_RANGEFINDER_ENABLED
+        // 根据测距仪数据调整着陆坡度
         plane.landing.adjust_landing_slope_for_rangefinder_bump(plane.rangefinder_state, plane.prev_WP_loc, plane.next_WP_loc, plane.current_loc, plane.auto_state.wp_distance, plane.target_altitude.offset_cm);
 #endif
     } else if (plane.landing.get_target_altitude_location(target_location)) {
+        // 设置目标高度位置
         plane.set_target_altitude_location(target_location);
 #if HAL_SOARING_ENABLED
     } else if (plane.g2.soaring_controller.is_active() && plane.g2.soaring_controller.get_throttle_suppressed()) {
-        // Reset target alt to current alt, to prevent large altitude errors when gliding.
+        // 滑翔模式下重置目标高度为当前高度
         plane.set_target_altitude_location(plane.current_loc);
         plane.reset_offset_altitude();
 #endif
     } else if (plane.reached_loiter_target()) {
-        // once we reach a loiter target then lock to the final
-        // altitude target
+        // 到达盘旋目标后锁定最终目标高度
         plane.set_target_altitude_location(plane.next_WP_loc);
     } else if (plane.target_altitude.offset_cm != 0 && 
                !plane.current_loc.past_interval_finish_line(plane.prev_WP_loc, plane.next_WP_loc)) {
-        // control climb/descent rate
+        // 控制爬升/下降率
         plane.set_target_altitude_proportion(plane.next_WP_loc, 1.0f-plane.auto_state.wp_proportion);
 
-        // stay within the range of the start and end locations in altitude
+        // 保持在起始和结束位置的高度范围内
         plane.constrain_target_altitude_location(plane.next_WP_loc, plane.prev_WP_loc);
     } else {
+        // 设置下一个航点的目标高度
         plane.set_target_altitude_location(plane.next_WP_loc);
     }
 }
 
-// returns true if the vehicle can be armed in this mode
+// 检查是否可以在此模式下解锁
 bool Mode::pre_arm_checks(size_t buflen, char *buffer) const
 {
     if (!_pre_arm_checks(buflen, buffer)) {
         if (strlen(buffer) == 0) {
-            // If no message is provided add a generic one
+            // 如果没有提供消息，添加一个通用消息
             hal.util->snprintf(buffer, buflen, "mode not armable");
         }
         return false;
@@ -211,7 +217,7 @@ bool Mode::pre_arm_checks(size_t buflen, char *buffer) const
     return true;
 }
 
-// Auto and Guided do not call this to bypass the q-mode check.
+// 自动和引导模式不调用此函数以绕过四旋翼模式检查
 bool Mode::_pre_arm_checks(size_t buflen, char *buffer) const
 {
 #if HAL_QUADPLANE_ENABLED
@@ -224,59 +230,59 @@ bool Mode::_pre_arm_checks(size_t buflen, char *buffer) const
     return true;
 }
 
+// 运行模式
 void Mode::run()
 {
-    // Direct stick mixing functionality has been removed, so as not to remove all stick mixing from the user completely
-    // the old direct option is now used to enable fbw mixing, this is easier than doing a param conversion.
+    // 执行摇杆混合
     if ((plane.g.stick_mixing == StickMixing::FBW) || (plane.g.stick_mixing == StickMixing::DIRECT_REMOVED)) {
         plane.stabilize_stick_mixing_fbw();
     }
+    // 稳定滚转、俯仰和偏航
     plane.stabilize_roll();
     plane.stabilize_pitch();
     plane.stabilize_yaw();
 }
 
-// Reset rate and steering controllers
+// 重置速率和转向控制器
 void Mode::reset_controllers()
 {
-    // reset integrators
+    // 重置积分器
     plane.rollController.reset_I();
     plane.pitchController.reset_I();
     plane.yawController.reset_I();
 
-    // reset steering controls
+    // 重置转向控制
     plane.steer_state.locked_course = false;
     plane.steer_state.locked_course_err = 0;
 }
 
+// 检查是否正在起飞
 bool Mode::is_taking_off() const
 {
     return (plane.flight_stage == AP_FixedWing::FlightStage::TAKEOFF);
 }
 
-// Helper to output to both k_rudder and k_steering servo functions
+// 输出到方向舵和转向伺服通道
 void Mode::output_rudder_and_steering(float val)
 {
     SRV_Channels::set_output_scaled(SRV_Channel::k_rudder, val);
     SRV_Channels::set_output_scaled(SRV_Channel::k_steering, val);
 }
 
-// Output pilot throttle, this is used in stabilized modes without auto throttle control
-// Direct mapping if THR_PASS_STAB is set
-// Otherwise apply curve for trim correction if configured
+// 输出飞行员油门，用于没有自动油门控制的稳定模式
 void Mode::output_pilot_throttle()
 {
     if (plane.g.throttle_passthru_stabilize) {
-        // THR_PASS_STAB set, direct mapping
+        // THR_PASS_STAB设置，直接映射
         SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, plane.get_throttle_input(true));
         return;
     }
 
-    // get throttle, but adjust center to output TRIM_THROTTLE if flight option set
+    // 获取油门，但如果设置了飞行选项，则调整中心以输出TRIM_THROTTLE
     SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, plane.get_adjusted_throttle_input(true));
 }
 
-// true if throttle min/max limits should be applied
+// 检查是否应用油门最小/最大限制
 bool Mode::use_throttle_limits() const
 {
 #if AP_SCRIPTING_ENABLED
@@ -290,12 +296,12 @@ bool Mode::use_throttle_limits() const
         this == &plane.mode_acro ||
         this == &plane.mode_fbwa ||
         this == &plane.mode_autotune) {
-        // a manual throttle mode
+        // 手动油门模式
         return !plane.g.throttle_passthru_stabilize;
     }
 
     if (is_guided_mode() && plane.guided_throttle_passthru) {
-        // manual pass through of throttle while in GUIDED
+        // GUIDED模式下手动传递油门
         return false;
     }
 
@@ -308,7 +314,7 @@ bool Mode::use_throttle_limits() const
     return true;
 }
 
-// true if voltage correction should be applied to throttle
+// 检查是否应用电池补偿到油门
 bool Mode::use_battery_compensation() const
 {
 #if AP_SCRIPTING_ENABLED
@@ -322,12 +328,12 @@ bool Mode::use_battery_compensation() const
         this == &plane.mode_acro ||
         this == &plane.mode_fbwa ||
         this == &plane.mode_autotune) {
-        // a manual throttle mode
+        // 手动油门模式
         return false;
     }
 
     if (is_guided_mode() && plane.guided_throttle_passthru) {
-        // manual pass through of throttle while in GUIDED
+        // GUIDED模式下手动传递油门
         return false;
     }
 

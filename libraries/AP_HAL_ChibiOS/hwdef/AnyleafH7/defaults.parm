@@ -1,23 +1,22 @@
-# CAN
-CAN_P1_DRIVER 1  # Enables the use of CAN
+# 这是AnyleafH7飞控板的默认参数配置文件
 
-# Onboard ELRS
-SERIAL5_PROTOCOL 23 # RCIN
-RC_OPTIONS 8192  # Set 420k baud for ELRS
-# RC2_REVERSED 1 # Prevent inverse pitch controls
-RSSI_TYPE 3 # RC provided RSSI
-# ARMING_RUDDER 0  # Disable rudder arming
+# CAN总线配置
+CAN_P1_DRIVER 1  # 启用CAN总线驱动,用于与电调等设备通信
 
+# 板载ELRS遥控接收机配置 
+SERIAL5_PROTOCOL 23 # 设置串口5为遥控输入(RCIN)协议
+RC_OPTIONS 8192  # 设置ELRS波特率为420k
+# RC2_REVERSED 1 # 取消反转俯仰通道控制(默认注释)
+RSSI_TYPE 3 # 使用遥控器提供的RSSI信号强度值
+# ARMING_RUDDER 0  # 禁用方向舵解锁功能(默认注释)
 
-# Onboard OSD
-OSD_TYPE 5 # MSP
-SERIAL2_PROTOCOL 42 # DisplayPort
-OSD_CELL_COUNT 0 # auto based on voltage at start
+# 板载OSD(屏幕显示)配置
+OSD_TYPE 5 # 使用MSP协议的OSD
+SERIAL2_PROTOCOL 42 # 设置串口2为DisplayPort协议,用于OSD显示
+OSD_CELL_COUNT 0 # 电池节数自动检测,基于启动时的电压
 
+# 电调遥测配置
+SERIAL3_PROTOCOL 16 # 设置串口3为电调遥测协议,用于获取电调数据
 
-# ESC telemetry
-SERIAL3_PROTOCOL 16 # ESC telemetry
-
-
-# Remove default serial protocols; set to None.
-SERIAL6_PROTOCOL -1
+# 禁用默认串口协议
+SERIAL6_PROTOCOL -1 # 将串口6设置为无协议(-1)

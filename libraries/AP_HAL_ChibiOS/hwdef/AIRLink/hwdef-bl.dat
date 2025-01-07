@@ -1,57 +1,60 @@
-# hw definition file for processing by chibios_hwdef.py
-# for F765 bootloader
+# 这是AIRLink飞控板的bootloader硬件定义文件
+# 该文件由chibios_hwdef.py脚本处理,用于配置STM32F767芯片的硬件引脚和外设
 
-# MCU class and specific type
+# 定义MCU类型为STM32F7系列,具体型号为STM32F767
 MCU STM32F7xx STM32F767xx
 
-# crystal frequency
+# 外部晶振频率为16MHz
 OSCILLATOR_HZ 16000000
 
-# board ID for firmware load
+# 开发板ID为55,用于固件校验和加载
 APJ_BOARD_ID 55
 
+# Flash总容量为2048KB
 FLASH_SIZE_KB 2048
 
-# bootloader is installed at zero offset
+# bootloader从Flash起始位置(0偏移)安装
 FLASH_RESERVE_START_KB 0
 
-# the location where the bootloader will put the firmware
+# 固件加载位置在Flash 32KB处
 FLASH_BOOTLOADER_LOAD_KB 32
 
+# 配置bootloader指示LED和活动LED,使用PE4和PE5引脚,低电平点亮
 PE4 LED_BOOTLOADER OUTPUT HIGH
 PE5 LED_ACTIVITY OUTPUT HIGH
 define HAL_LED_ON 0
 
-
-# order of UARTs (and USB)
+# 配置串口顺序:USB OTG1和UART5
 SERIAL_ORDER OTG1 UART5
 
-# UART5
-PD2 UART5_RX UART5
-PB9 UART5_TX UART5
+# UART5串口配置
+PD2 UART5_RX UART5    # UART5接收引脚
+PB9 UART5_TX UART5    # UART5发送引脚
 
-# USB
-PA11 OTG_FS_DM OTG1
-PA12 OTG_FS_DP OTG1
+# USB OTG接口配置
+PA11 OTG_FS_DM OTG1   # USB D-引脚
+PA12 OTG_FS_DP OTG1   # USB D+引脚
 
-PA13 JTMS-SWDIO SWD
-PA14 JTCK-SWCLK SWD
+# SWD调试接口配置
+PA13 JTMS-SWDIO SWD   # SWDIO数据线
+PA14 JTCK-SWCLK SWD   # SWCLK时钟线
 
+# 使用空存储,大小为16KB
 define HAL_USE_EMPTY_STORAGE 1
 define HAL_STORAGE_SIZE 16384
 
-# Add CS pins to ensure they are high in bootloader
-# PF10 MS5611_CS CS
-# PF2  ICM20689_CS CS SPEED_VERYLOW
-# PF3  ICM20602_CS CS SPEED_VERYLOW
-# PF4  BMI055_G_CS CS
-# PG10 BMI055_A_CS CS
-# PF5  FRAM_CS CS SPEED_VERYLOW
-# PF11 SPARE_CS CS
-# PH5  AUXMEM_CS CS
-# PI4  EXTERNAL1_CS1 CS
-# PI10 EXTERNAL1_CS2 CS
-# PI11 EXTERNAL1_CS3 CS
-# PI6  EXTERNAL2_CS1 CS
-# PI7  EXTERNAL2_CS2 CS
-# PI8  EXTERNAL2_CS3 CS
+# 配置各传感器和外设的片选(CS)引脚,确保在bootloader中保持高电平
+# PF10 MS5611_CS CS            # MS5611气压计片选
+# PF2  ICM20689_CS CS SPEED_VERYLOW  # ICM20689 IMU片选
+# PF3  ICM20602_CS CS SPEED_VERYLOW  # ICM20602 IMU片选
+# PF4  BMI055_G_CS CS          # BMI055陀螺仪片选
+# PG10 BMI055_A_CS CS          # BMI055加速度计片选
+# PF5  FRAM_CS CS SPEED_VERYLOW # FRAM存储器片选
+# PF11 SPARE_CS CS             # 备用片选
+# PH5  AUXMEM_CS CS            # 辅助存储器片选
+# PI4  EXTERNAL1_CS1 CS        # 外部设备1片选1
+# PI10 EXTERNAL1_CS2 CS        # 外部设备1片选2
+# PI11 EXTERNAL1_CS3 CS        # 外部设备1片选3
+# PI6  EXTERNAL2_CS1 CS        # 外部设备2片选1
+# PI7  EXTERNAL2_CS2 CS        # 外部设备2片选2
+# PI8  EXTERNAL2_CS3 CS        # 外部设备2片选3

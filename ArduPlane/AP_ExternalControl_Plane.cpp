@@ -1,5 +1,5 @@
 /*
-  external control library for plane
+  飞机外部控制库
  */
 
 
@@ -9,13 +9,13 @@
 #include "Plane.h"
 
 /*
-  Sets the target global position for a loiter point.
+  设置盘旋点的目标全球位置。
 */
 bool AP_ExternalControl_Plane::set_global_position(const Location& loc)
 {
 
-    // set_target_location already checks if plane is ready for external control.
-    // It doesn't check if flying or armed, just that it's in guided mode.
+    // set_target_location 已经检查飞机是否准备好进行外部控制。
+    // 它不检查是否正在飞行或已解锁，只检查是否处于引导模式。
     return plane.set_target_location(loc);
 }
 

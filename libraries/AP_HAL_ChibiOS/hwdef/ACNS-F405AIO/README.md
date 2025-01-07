@@ -1,61 +1,69 @@
-# ACNS-F405AIO Integrated Flight Controller
+# ACNS-F405AIO 集成飞控板
 
-The ACNS-F405AIO is a low-cost compact flight controller for multi-rotor UAVs which integrated 4 BLheli_s ESCs on board.
+# 简介
+ACNS-F405AIO是一款低成本、小巧的多旋翼飞控板,板载集成了4个BLheli_s电调。
 
-## Features
+## 主要特性
 
- - STM32F405RET microcontroller
- - IMU: BMI160, ICM42688
- - Mag: LIS3MDLTR
- - Baro: BMP280
- - 1 microSD card slot port
- - 6 UARTs and USB ports
- - 1 I2C port
- - 1 CAN port
- - 1 SBUS input and 8 PWM output (4 Internal ESCs,4 External PWM ports )
- - 1 External SPI port
- - 1 RGB LED on board
- - 128M flash on board
- - 4 BLheli_s ESCs, 3-4s, 30A, The motor order matches the Arducotper X frame type config
- - Small footprint and lightweight, 39mm X 39mm X 10mm, 9g(without shell)
+# 硬件架构特点
+ - STM32F405RET微控制器
+ - IMU: BMI160、ICM42688惯性测量单元
+ - Mag: LIS3MDLTR磁力计
+ - Baro: BMP280气压计
+ - 1个microSD卡槽
+ - 6个UART串口和USB接口
+ - 1个I2C接口
+ - 1个CAN接口
+ - 1个SBUS输入和8路PWM输出(4个内置电调,4个外部PWM接口)
+ - 1个外部SPI接口
+ - 板载RGB LED
+ - 板载128M Flash存储
+ - 4个BLheli_s电调,支持3-4S,30A,电机顺序匹配Ardupilot X型机架配置
+ - 小巧轻便,尺寸39mm X 39mm X 10mm,重量9g(不含外壳)
    
-## UART Mapping
+## UART串口映射
 
- - SERIAL0 -> USB (OTG1)
- - SERIAL1 -> USART1(Telem1) (DMA)
- - SERIAL2 -> USART3(Telem2) (DMA)
- - SERIAL3 -> UART4(GPS) (DMA)
- - SERIAL4 -> UART6(GPS2) (DMA)
- - SERIAL5 -> USART2(SBUS) (RC input, NO DMA)
+# 串口功能分配
+ - SERIAL0 -> USB(OTG1)
+ - SERIAL1 -> USART1(数传1)(支持DMA)
+ - SERIAL2 -> USART3(数传2)(支持DMA)
+ - SERIAL3 -> UART4(GPS)(支持DMA)
+ - SERIAL4 -> UART6(GPS2)(支持DMA)
+ - SERIAL5 -> USART2(SBUS)(遥控输入,不支持DMA)
 
-## RC Input
+## 遥控器输入
 
-RC input is configured on the SBUS pin (UART2_RX). It supports all RC protocols except serial protocols
+# RC输入配置在SBUS引脚(UART2_RX),支持除串行协议外的所有RC协议
 
-## PWM Output
+## PWM输出
 
-The ACNS-F405AIO supports up to 8  PWM outputs. All outputs support DShot (No BDshot).
-The PWM is in 3 groups:
+# PWM输出能力说明
+ACNS-F405AIO支持最多8路PWM输出。所有输出都支持DShot(不支持BDshot)。
+PWM分为3组:
 
- - PWM 1~4 in group1 (4 Motors)
- - PWM 5,6 in group2 (External PWM)
- - PWM 7,8 in group3 (External PWM)
+# PWM分组说明
+ - PWM 1~4 在第1组(4个电机)
+ - PWM 5,6 在第2组(外部PWM)
+ - PWM 7,8 在第3组(外部PWM)
 
-## GPIOs
+## GPIO功能
 
-4 External PWM channels can be used for GPIO functions.
-The pin numbers for these PWM channels in ArduPilot are shown below:
+# GPIO功能说明
+4个外部PWM通道可用作GPIO功能。
+下面显示了这些PWM通道在ArduPilot中的引脚编号:
 
-| PWM Channels | Pin  |
+# PWM通道对应的GPIO引脚编号表
+| PWM通道 | 引脚编号 |
 | ------------ | ---- | 
 | PWM5         | 54   |
 | PWM6         | 55   | 
 | PWM7         | 56   | 
 | PWM8         | 57   | 
 
-## Battery Monitoring
+## 电池监测
 
-The correct battery setting parameters are set by default and are:
+# 默认电池监测参数配置
+正确的电池设置参数默认为:
  
  - BATT_MONITOR 4
  - BATT_VOLT_PIN 11
@@ -63,23 +71,24 @@ The correct battery setting parameters are set by default and are:
  - BATT_VOLT_SCALE 9.2
  - BATT_CURR_SCALE 50.0
 
-## Compass
+## 指南针
 
-The ACNS-F405AIO has one built-in compass LIS3MDLTR, you can also attach an external compass using I2C on the SDA and SCL pads.
+# 指南针配置说明
+ACNS-F405AIO有一个内置的LIS3MDLTR指南针,也可以通过I2C接口的SDA和SCL引脚连接外部指南针。
 
-## Loading Firmware
+## 固件加载
 
-Firmware for these boards can be found at https://firmware.ardupilot.org in sub-folders labeled “ACNS-F405AIO”.
+# 固件获取说明
+这些板子的固件可以在 https://firmware.ardupilot.org 的"ACNS-F405AIO"子文件夹中找到。
 
-Initial firmware load can be done with DFU by plugging in USB with the
-boot button pressed. Then you should load the "xxx_bl.hex"
-firmware, using your favorite DFU loading tool.
+# 初始固件加载说明
+初始固件加载可以通过DFU方式完成,按住boot按钮插入USB。然后使用你喜欢的DFU工具加载"xxx_bl.hex"固件。
 
-Subsequently, you can update the firmware with Mission Planner.
+# 后续更新说明
+之后,你可以使用Mission Planner更新固件。
 
-## Pinout<div align=center>
+## 引脚定义和尺寸图
+<div align=center>
 <img width="500" src=F405AIO_top.jpg/>
 
 <img width="500" src=F405AIO_bottom.jpg/>
-
-

@@ -26,10 +26,12 @@
 #include <AP_Logger/AP_Logger.h>
 #include <GCS_MAVLink/GCS.h>
 
+// 自动调参测试步骤超时时间
 #define AUTOTUNE_TESTING_STEP_TIMEOUT_MS   5000U     // timeout for tuning mode's testing step
 
+// 各种调参步长和限制值的定义
 #define AUTOTUNE_RD_STEP                  0.0005f     // minimum increment when increasing/decreasing Rate D term
-#define AUTOTUNE_RP_STEP                  0.005f     // minimum increment when increasing/decreasing Rate P term
+#define AUTOTUNE_RP_STEP                  0.005f     // minimum increment when increasing/decreasing Rate P term 
 #define AUTOTUNE_SP_STEP                  0.05f     // minimum increment when increasing/decreasing Stab P term
 #define AUTOTUNE_PI_RATIO_FOR_TESTING      0.1f     // I is set 10x smaller than P during testing
 #define AUTOTUNE_PI_RATIO_FINAL            1.0f     // I is set 1x P after testing
@@ -47,6 +49,7 @@
 #define AUTOTUNE_ACCEL_RP_BACKOFF          1.0f     // back off from maximum acceleration
 #define AUTOTUNE_ACCEL_Y_BACKOFF           1.0f     // back off from maximum acceleration
 
+// 直升机自动调参的目标角度和速率定义
 #define AUTOTUNE_HELI_TARGET_ANGLE_RLLPIT_CD     1500   // target roll/pitch angle during AUTOTUNE FeedForward rate test
 #define AUTOTUNE_HELI_TARGET_RATE_RLLPIT_CDS     5000   // target roll/pitch rate during AUTOTUNE FeedForward rate test
 #define AUTOTUNE_FFI_RATIO_FOR_TESTING     0.5f     // I is set 2x smaller than VFF during testing
@@ -54,13 +57,14 @@
 #define AUTOTUNE_RP_ACCEL_MIN           20000.0f     // Minimum acceleration for Roll and Pitch
 #define AUTOTUNE_Y_ACCEL_MIN            10000.0f     // Minimum acceleration for Yaw
 
+// 自动调参序列的位掩码定义
 #define AUTOTUNE_SEQ_BITMASK_VFF             1
 #define AUTOTUNE_SEQ_BITMASK_RATE_D          2
 #define AUTOTUNE_SEQ_BITMASK_ANGLE_P         4
 #define AUTOTUNE_SEQ_BITMASK_MAX_GAIN        8
 #define AUTOTUNE_SEQ_BITMASK_TUNE_CHECK      16
 
-// angle limits preserved from previous behaviour as Multi changed:
+// 角度限制值定义
 #define AUTOTUNE_ANGLE_TARGET_MAX_RP_CD     2000    // target angle during TESTING_RATE step that will cause us to move to next step
 #define AUTOTUNE_ANGLE_TARGET_MIN_RP_CD     1000    // minimum target angle during TESTING_RATE step that will cause us to move to next step
 #define AUTOTUNE_ANGLE_TARGET_MAX_Y_CD      3000    // target angle during TESTING_RATE step that will cause us to move to next step
@@ -68,6 +72,7 @@
 #define AUTOTUNE_ANGLE_MAX_RP_CD            3000    // maximum allowable angle in degrees during testing
 #define AUTOTUNE_ANGLE_NEG_RPY_CD           1000    // maximum allowable angle in degrees during testing
 
+// 参数表定义
 const AP_Param::GroupInfo AC_AutoTune_Heli::var_info[] = {
 
     // @Param: AXES
@@ -129,23 +134,31 @@ const AP_Param::GroupInfo AC_AutoTune_Heli::var_info[] = {
     AP_GROUPEND
 };
 
-// constructor
+// 构造函数
 AC_AutoTune_Heli::AC_AutoTune_Heli()
 {
     tune_seq[0] = TUNE_COMPLETE;
     AP_Param::setup_object_defaults(this, var_info);
 }
 
-// initialize tests for each tune type
+// 初始化每种调参类型的测试
 void AC_AutoTune_Heli::test_init()
 {
+    // 根据不同调参类型设置响应类型
     AC_AutoTune_FreqResp::ResponseType resp_type = AC_AutoTune_FreqResp::ResponseType::RATE;
+    // 设置频率响应计算类型
     FreqRespCalcType calc_type = RATE;
+    // 设置频率响应输入类型
     FreqRespInput freq_resp_input = TARGET;
+    // 设置频率响应幅值(角度)
     float freq_resp_amplitude = 5.0f;  // amplitude in deg
+    // 设置滤波器频率
     float filter_freq = 10.0f;
+
+    // 根据不同调参类型进行初始化
     switch (tune_type) {
-    case RFF_UP:
+    case RFF_UP:  // 前馈增益调参
+        // 如果下一个测试频率未设置,使用默认起始频率
         if (!is_positive(next_test_freq)) {
             start_freq = 0.25f * M_2PI;
         } else {
@@ -154,17 +167,19 @@ void AC_AutoTune_Heli::test_init()
         stop_freq = start_freq;
         filter_freq = start_freq;
         
+        // 关闭姿态控制器前馈
         attitude_control->bf_feedforward(false);
 
-        // variables needed to initialize frequency response object and test method
+        // 设置频率响应对象和测试方法所需变量
         resp_type = AC_AutoTune_FreqResp::ResponseType::RATE;
         calc_type = RATE;
         freq_resp_input = TARGET;
         pre_calc_cycles = 1.0f;
         num_dwell_cycles = 3;
         break;
-    case MAX_GAINS:
-        // initialize start frequency for sweep
+
+    case MAX_GAINS:  // 最大增益调参
+        // 初始化扫频起始频率
         if (!is_positive(next_test_freq)) {
             start_freq = min_sweep_freq;
             stop_freq = max_sweep_freq;
@@ -178,24 +193,25 @@ void AC_AutoTune_Heli::test_init()
 
         attitude_control->bf_feedforward(false);
 
-        // variables needed to initialize frequency response object and test method
+        // 设置频率响应对象和测试方法所需变量
         resp_type = AC_AutoTune_FreqResp::ResponseType::RATE;
         calc_type = RATE;
         freq_resp_input = MOTOR;
         pre_calc_cycles = 6.25f;
         num_dwell_cycles = 6;
         break;
-    case RP_UP:
-    case RD_UP:
-        // initialize start frequency
+
+    case RP_UP:  // 角速度P增益调参
+    case RD_UP:  // 角速度D增益调参
+        // 初始化起始频率
         if (!is_positive(next_test_freq)) {
-            // continue using frequency where testing left off with RD_UP completed
+            // 如果相位在150-180度之间且为RP_UP,继续使用当前频率
             if (curr_data.phase > 150.0f && curr_data.phase < 180.0f && tune_type == RP_UP) {
                 start_freq = curr_data.freq;
-            // start with freq found for sweep where phase was 180 deg
+            // 如果找到相位180度对应的频率,使用该频率
             } else if (!is_zero(sweep_tgt.ph180.freq)) {
                 start_freq = sweep_tgt.ph180.freq;
-            // otherwise start at min freq to step up in dwell frequency until phase > 160 deg
+            // 否则从最小频率开始,直到相位大于160度
             } else {
                 start_freq = min_sweep_freq;
             }
@@ -207,15 +223,16 @@ void AC_AutoTune_Heli::test_init()
 
         attitude_control->bf_feedforward(false);
 
-        // variables needed to initialize frequency response object and test method
+        // 设置频率响应对象和测试方法所需变量
         resp_type = AC_AutoTune_FreqResp::ResponseType::RATE;
         calc_type = RATE;
         freq_resp_input = TARGET;
         pre_calc_cycles = 6.25f;
         num_dwell_cycles = 6;
         break;
-    case SP_UP:
-        // initialize start frequency for sweep
+
+    case SP_UP:  // 角度P增益调参
+        // 初始化扫频起始频率
         if (!is_positive(next_test_freq)) {
             start_freq = min_sweep_freq;
             stop_freq = max_sweep_freq;
@@ -228,39 +245,42 @@ void AC_AutoTune_Heli::test_init()
         filter_freq = start_freq;
         attitude_control->bf_feedforward(false);
 
-        // variables needed to initialize frequency response object and test method
+        // 设置频率响应对象和测试方法所需变量
         resp_type = AC_AutoTune_FreqResp::ResponseType::ANGLE;
         calc_type = DRB;
         freq_resp_input = TARGET;
         pre_calc_cycles = 6.25f;
         num_dwell_cycles = 6;
         break;
-    case TUNE_CHECK:
-        // initialize start frequency
+
+    case TUNE_CHECK:  // 调参检查
+        // 初始化扫频频率范围
         start_freq = min_sweep_freq;
         stop_freq = max_sweep_freq;
         test_accel_max = 0.0f;
         filter_freq = start_freq;
 
-        // variables needed to initialize frequency response object and test method
+        // 设置频率响应对象和测试方法所需变量
         resp_type = AC_AutoTune_FreqResp::ResponseType::ANGLE;
         calc_type = ANGLE;
         freq_resp_input = TARGET;
         break;
+
     default:
         break;
     }
 
+    // 根据起始和结束频率确定输入类型(扫频或驻留)
     if (!is_equal(start_freq,stop_freq)) {
         input_type = AC_AutoTune_FreqResp::InputType::SWEEP;
     } else {
         input_type = AC_AutoTune_FreqResp::InputType::DWELL;
     }
 
-
-    // initialize dwell test method
+    // 初始化驻留测试方法
     dwell_test_init(start_freq, stop_freq, freq_resp_amplitude, filter_freq, freq_resp_input, calc_type, resp_type, input_type);
 
+    // 记录直升机特定的初始角度
     start_angles = Vector3f(roll_cd, pitch_cd, desired_yaw_cd);  // heli specific
 }
 

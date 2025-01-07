@@ -1,125 +1,130 @@
+# 包含通用硬件定义文件
 include common.inc
 
+# 设置编译优化等级为-Os(优化大小)
 env OPTIMIZE -Os
 
-# bootloader takes first sector
+# bootloader占用前128KB Flash空间
 FLASH_RESERVE_START_KB 128
 
-# use last 2 pages for flash storage
-# H743 has 16 pages of 128k each
+# 使用最后2页Flash用于存储参数
+# H743有16页,每页128KB
 define HAL_STORAGE_SIZE 32768
 STORAGE_FLASH_PAGE 14
 
-# ChibiOS system timer
+# ChibiOS系统定时器配置
 STM32_ST_USE_TIMER 12
 define CH_CFG_ST_RESOLUTION 16
 
-# SPI1 for IMU1 (ICM42688)
-PA5 SPI1_SCK SPI1
-PA6 SPI1_MISO SPI1
-PA7 SPI1_MOSI SPI1
-PC4 IMU1_CS CS
+# SPI1总线配置,用于IMU1(ICM42688)
+PA5 SPI1_SCK SPI1     # SPI1时钟线
+PA6 SPI1_MISO SPI1    # SPI1 MISO数据线
+PA7 SPI1_MOSI SPI1    # SPI1 MOSI数据线
+PC4 IMU1_CS CS        # IMU1片选线
 
-# SPI2 for flash (W25Q64JVZPIQ (64Mbit))
-PA9 SPI2_SCK SPI2
-PB14 SPI2_MISO SPI2
-PB15 SPI2_MOSI SPI2
-PE11 FLASH_CS CS
+# SPI2总线配置,用于Flash存储器(W25Q64JVZPIQ,64Mbit)
+PA9 SPI2_SCK SPI2     # SPI2时钟线
+PB14 SPI2_MISO SPI2   # SPI2 MISO数据线
+PB15 SPI2_MOSI SPI2   # SPI2 MOSI数据线
+PE11 FLASH_CS CS      # Flash片选线
 
-# two I2C buses
+# 定义两路I2C总线顺序
 I2C_ORDER I2C2 I2C1
 
-# I2C1
-PB8 I2C1_SCL I2C1 PULLUP
-PB9 I2C1_SDA I2C1 PULLUP
+# I2C1总线配置
+PB8 I2C1_SCL I2C1 PULLUP    # I2C1时钟线,上拉
+PB9 I2C1_SDA I2C1 PULLUP    # I2C1数据线,上拉
 
-# I2C2
-PB10 I2C2_SCL I2C2 PULLUP
-PB11 I2C2_SDA I2C2 PULLUP
+# I2C2总线配置
+PB10 I2C2_SCL I2C2 PULLUP   # I2C2时钟线,上拉
+PB11 I2C2_SDA I2C2 PULLUP   # I2C2数据线,上拉
 
-# ADC
-PA4 BATT_VOLTAGE_SENS ADC1 SCALE(1)
-PA0 BATT_CURRENT_SENS ADC1 SCALE(1)
+# ADC模拟量采集配置
+PA4 BATT_VOLTAGE_SENS ADC1 SCALE(1)    # 电池电压采样
+PA0 BATT_CURRENT_SENS ADC1 SCALE(1)    # 电池电流采样
 
-define HAL_BATT_MONITOR_DEFAULT 4  # Analog voltage and current
-define HAL_BATT_VOLT_PIN 18  # ADC channel
-define HAL_BATT_CURR_PIN 16
-define HAL_BATT_VOLT_SCALE 11.44  # Nominally a 11x divider. 11.44 is based on experimenting.
-define HAL_BATT_CURR_SCALE 40.0  # This depends on the ESC's V/mA output ratio.
+# 电池监测相关配置
+define HAL_BATT_MONITOR_DEFAULT 4  # 使用模拟电压和电流监测
+define HAL_BATT_VOLT_PIN 18       # 电压ADC通道
+define HAL_BATT_CURR_PIN 16       # 电流ADC通道
+define HAL_BATT_VOLT_SCALE 11.44  # 电压分压比例,基于实验校准
+define HAL_BATT_CURR_SCALE 40.0   # 电流比例,取决于ESC的电流输出比
 
-# LED
-PC13 LED0 OUTPUT LOW GPIO(90) # Amber; System status.
-PC0 LED1 OUTPUT LOW GPIO(91) # Not connected; GPS Status. (Required, or the system status LED won't work.)
+# LED指示灯配置
+PC13 LED0 OUTPUT LOW GPIO(90) # 琥珀色LED,用于系统状态指示
+PC0 LED1 OUTPUT LOW GPIO(91)  # 未连接,GPS状态指示(系统状态LED需要此定义)
 define AP_NOTIFY_GPIO_LED_2_ENABLED 1
 define HAL_GPIO_A_LED_PIN 90
 define HAL_GPIO_B_LED_PIN 91
 
-# order of UARTs (and USB) OTG2 may be required for SLCAN.
+# 串口顺序配置(包括USB),OTG2可用于SLCAN
 SERIAL_ORDER OTG1 USART1 USART2 USART3 UART4 UART7 UART8 #OTG2
 
-# USART1
-PB6 USART1_TX USART1
-PB7 USART1_RX USART1
+# USART1串口配置
+PB6 USART1_TX USART1    # USART1发送引脚
+PB7 USART1_RX USART1    # USART1接收引脚
 
-# USART2 (MSP Displayport OSD)
-PA2 USART2_TX USART2
-PA3 USART2_RX USART2
+# USART2串口配置(用于MSP Displayport OSD)
+PA2 USART2_TX USART2    # USART2发送引脚
+PA3 USART2_RX USART2    # USART2接收引脚
 
-# USART3
-PD8 USART3_TX USART3
-PD9 USART3_RX USART3
+# USART3串口配置
+PD8 USART3_TX USART3    # USART3发送引脚
+PD9 USART3_RX USART3    # USART3接收引脚
 
-# UART4
-PC10 UART4_TX UART4
-PC11 UART4_RX UART4
+# UART4串口配置
+PC10 UART4_TX UART4     # UART4发送引脚
+PC11 UART4_RX UART4     # UART4接收引脚
 
-# UART7 (ELRS receiver)
-PB4 UART7_TX UART7
-PB3 UART7_RX UART7
+# UART7串口配置(用于ELRS接收机)
+PB4 UART7_TX UART7      # UART7发送引脚
+PB3 UART7_RX UART7      # UART7接收引脚
 
-PE1 UART8_TX UART8
-PE0 UART8_RX UART8
+# UART8串口配置
+PE1 UART8_TX UART8      # UART8发送引脚
+PE0 UART8_RX UART8      # UART8接收引脚
 
-# CAN bus
-PD0 CAN1_RX CAN1
-PD1 CAN1_TX CAN1
+# CAN总线配置
+PD0 CAN1_RX CAN1        # CAN1接收引脚
+PD1 CAN1_TX CAN1        # CAN1发送引脚
 
-# Motors
-PC6  TIM3_CH1 TIM3  PWM(1)  GPIO(50)  BIDIR
-PC7  TIM3_CH2 TIM3  PWM(2)  GPIO(51)  
-PC8  TIM3_CH3  TIM3  PWM(3)  GPIO(52)  BIDIR
-PC9  TIM3_CH4  TIM3  PWM(4)  GPIO(53)  
-PE5  TIM15_CH1  TIM15  PWM(5)  GPIO(54)  BIDIR
-PE6  TIM15_CH2  TIM15  PWM(6)  GPIO(55)
-PE13 TIM1_CH3 TIM1 PWM(7) GPIO(56)  BIDIR
-PE14 TIM1_CH4 TIM1 PWM(8) GPIO(57)
+# 电机输出配置
+PC6  TIM3_CH1 TIM3  PWM(1)  GPIO(50)  BIDIR   # 电机1输出,支持双向
+PC7  TIM3_CH2 TIM3  PWM(2)  GPIO(51)          # 电机2输出
+PC8  TIM3_CH3  TIM3  PWM(3)  GPIO(52)  BIDIR  # 电机3输出,支持双向
+PC9  TIM3_CH4  TIM3  PWM(4)  GPIO(53)         # 电机4输出
+PE5  TIM15_CH1  TIM15  PWM(5)  GPIO(54)  BIDIR # 电机5输出,支持双向
+PE6  TIM15_CH2  TIM15  PWM(6)  GPIO(55)       # 电机6输出
+PE13 TIM1_CH3 TIM1 PWM(7) GPIO(56)  BIDIR     # 电机7输出,支持双向
+PE14 TIM1_CH4 TIM1 PWM(8) GPIO(57)            # 电机8输出
 
-# Beeper
+# 蜂鸣器配置
 PE9 TIM1_CH1 TIM1 GPIO(58) ALARM
 
+# DMA优先级配置
 DMA_PRIORITY S*
 
+# DMA独占配置
 DMA_NOSHARE SPI1* TIM3* TIM15* TIM1*
 
-# SPI devices
-SPIDEV icm42688  SPI1 DEVID1 IMU1_CS      MODE3  2*MHZ 16*MHZ
-SPIDEV dataflash SPI2 DEVID1 FLASH_CS     MODE3 104*MHZ 104*MHZ 
+# SPI设备配置
+SPIDEV icm42688  SPI1 DEVID1 IMU1_CS      MODE3  2*MHZ 16*MHZ    # ICM42688 IMU
+SPIDEV dataflash SPI2 DEVID1 FLASH_CS     MODE3 104*MHZ 104*MHZ   # Flash存储器
 
-# IMU
-IMU Invensensev3 SPI:icm42688 ROTATION_PITCH_180_YAW_270
-define HAL_DEFAULT_INS_FAST_SAMPLE 1
+# IMU配置
+IMU Invensensev3 SPI:icm42688 ROTATION_PITCH_180_YAW_270  # IMU安装方向补偿
+define HAL_DEFAULT_INS_FAST_SAMPLE 1                       # 启用快速采样
 
-# DPS310 integrated on I2C2 bus, multiple possible choices for external barometer
-BARO DPS310 I2C:0:0x77
+# 气压计配置
+BARO DPS310 I2C:0:0x77    # I2C2总线上的DPS310气压计
 
-# no built-in compass, but probe the i2c bus for all possible
-# external compass types
-define ALLOW_ARM_NO_COMPASS
-define HAL_PROBE_EXTERNAL_I2C_COMPASSES
+# 指南针配置
+define ALLOW_ARM_NO_COMPASS              # 允许无指南针解锁
+define HAL_PROBE_EXTERNAL_I2C_COMPASSES  # 启用外置I2C指南针探测
 define HAL_I2C_INTERNAL_MASK 0
 define HAL_COMPASS_AUTO_ROT_DEFAULT 2
 
-# setup for OSD
-define OSD_ENABLED 1
-define HAL_OSD_TYPE_DEFAULT 5 # MSP Displayport
-define HAL_LOGGING_DATAFLASH_ENABLED 1
+# OSD配置
+define OSD_ENABLED 1                     # 启用OSD
+define HAL_OSD_TYPE_DEFAULT 5           # 使用MSP Displayport OSD
+define HAL_LOGGING_DATAFLASH_ENABLED 1  # 启用数据闪存日志记录

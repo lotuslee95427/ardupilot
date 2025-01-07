@@ -14,11 +14,13 @@
  * You should have received a copy of the GNU General Public License along
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+// 包含所需的头文件
 #include <AP_gtest.h>
 
 #include <utility>
 #include <AP_HAL/utility/OwnPtr.h>
 
+// 测试指针是否指向同一个对象
 TEST(OwnPtrTest, SamePointer)
 {
     int *a = new int{42};
@@ -33,6 +35,7 @@ TEST(OwnPtrTest, SamePointer)
     EXPECT_EQ(a, own.get());
 }
 
+// 测试所有权转移
 TEST(OwnPtrTest, MoveOwnership)
 {
     int *a = new int{42};
@@ -43,6 +46,7 @@ TEST(OwnPtrTest, MoveOwnership)
     EXPECT_EQ(own.get(), nullptr);
 }
 
+// 用于测试析构的类
 class TestDeleted {
 public:
     TestDeleted(unsigned int &d) : deleted(d) { }
@@ -51,6 +55,7 @@ public:
     unsigned int &deleted;
 };
 
+// 测试超出作用域时的析构
 TEST(OwnPtrTest, DeleteOutOfScope)
 {
     unsigned int deleted = 0;
@@ -62,6 +67,7 @@ TEST(OwnPtrTest, DeleteOutOfScope)
     EXPECT_EQ(deleted, 1U);
 }
 
+// 测试移动后超出作用域的析构
 TEST(OwnPtrTest, DeleteOutOfScopeAfterMove)
 {
     unsigned int deleted = 0;
@@ -81,11 +87,13 @@ TEST(OwnPtrTest, DeleteOutOfScopeAfterMove)
     EXPECT_EQ(deleted, 1U);
 }
 
+// 用于测试方法调用的类
 class TestCall {
 public:
     int foo() { return 42; }
 };
 
+// 测试通过智能指针调用方法
 TEST(OwnPtrTest, CallMethod)
 {
     AP_HAL::OwnPtr<TestCall> own(new TestCall{});
@@ -93,6 +101,7 @@ TEST(OwnPtrTest, CallMethod)
     EXPECT_EQ((*own).foo(), 42);
 }
 
+// 用于测试析构函数的类
 class TestDestructor {
 public:
     TestDestructor(AP_HAL::OwnPtr<TestDeleted> v) : _v(std::move(v)) { }
@@ -100,6 +109,7 @@ public:
     AP_HAL::OwnPtr<TestDeleted> _v;
 };
 
+// 测试移动构造
 TEST(OwnPtrTest, MoveToConstructor)
 {
     unsigned int deleted = 0;
@@ -113,11 +123,13 @@ TEST(OwnPtrTest, MoveToConstructor)
     EXPECT_EQ(1U, deleted);
 }
 
+// 创建测试对象的辅助函数
 static AP_HAL::OwnPtr<TestDeleted> create_test_deleted(unsigned int &deleted)
 {
     return AP_HAL::OwnPtr<TestDeleted>(new TestDeleted(deleted));
 }
 
+// 测试返回值类型
 TEST(OwnPtrTest, ReturnType)
 {
     unsigned int deleted = 0;
@@ -133,6 +145,7 @@ TEST(OwnPtrTest, ReturnType)
     EXPECT_EQ(2U, deleted);
 }
 
+// 测试替换指针
 TEST(OwnPtrTest, ReplacePointer)
 {
     unsigned int deleted1 = 0;
@@ -149,6 +162,7 @@ TEST(OwnPtrTest, ReplacePointer)
     EXPECT_EQ(1U, deleted2);
 }
 
+// 测试用原始指针替换
 TEST(OwnPtrTest, ReplaceWithRawPointer)
 {
     unsigned int deleted1 = 0;
@@ -161,6 +175,7 @@ TEST(OwnPtrTest, ReplaceWithRawPointer)
     }
 }
 
+// 测试空指针
 TEST(OwnPtrTest, Empty)
 {
     int *a = new int{42};
@@ -172,17 +187,20 @@ TEST(OwnPtrTest, Empty)
     EXPECT_TRUE((bool) own1);
 }
 
+// 基类
 class A {
 public:
     A(int a) : _a(a) { }
     int _a;
 };
 
+// 派生类
 class B : public A {
 public:
     B() : A(42) { }
 };
 
+// 测试继承关系
 TEST(OwnPtrTest, Inheritance)
 {
     A *a = new A(21);

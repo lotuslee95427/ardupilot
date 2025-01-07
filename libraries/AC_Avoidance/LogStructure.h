@@ -2,6 +2,7 @@
 
 #include <AP_Logger/LogStructure.h>
 
+// 避障相关的日志ID定义
 #define LOG_IDS_FROM_AVOIDANCE \
     LOG_OA_BENDYRULER_MSG, \
     LOG_OA_DIJKSTRA_MSG, \
@@ -24,22 +25,24 @@
 // @Field: OLt: Intermediate location chosen for avoidance
 // @Field: OLg: Intermediate location chosen for avoidance
 // @Field: OAlt: Intermediate alt chosen for avoidance above EKF origin
+
+// 弯曲标尺避障日志结构体
 struct PACKED log_OABendyRuler {
     LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint8_t type;
-    uint8_t active;
-    uint16_t target_yaw;
-    uint16_t yaw;
-    uint16_t target_pitch;
-    bool resist_chg;
-    float margin;
-    int32_t final_lat;
-    int32_t final_lng;
-    int32_t final_alt;
-    int32_t oa_lat;
-    int32_t oa_lng;
-    int32_t oa_alt;
+    uint64_t time_us;          // 系统启动后的时间(微秒)
+    uint8_t type;             // 当前激活的弯曲标尺类型
+    uint8_t active;           // 弯曲标尺避障是否激活
+    uint16_t target_yaw;      // 避障选择的最佳偏航角
+    uint16_t yaw;             // 当前车辆偏航角
+    uint16_t target_pitch;    // 避障选择的目标俯仰角
+    bool resist_chg;          // 弯曲标尺是否抵抗改变方向并继续使用上次计算的方向
+    float margin;             // 最佳偏航角下路径到障碍物的边距
+    int32_t final_lat;        // 目标纬度
+    int32_t final_lng;        // 目标经度
+    int32_t final_alt;        // EKF原点以上的目标高度
+    int32_t oa_lat;          // 避障选择的中间位置纬度
+    int32_t oa_lng;          // 避障选择的中间位置经度
+    int32_t oa_alt;          // EKF原点以上避障选择的中间高度
 };
 
 // @LoggerMessage: OADJ
@@ -53,17 +56,19 @@ struct PACKED log_OABendyRuler {
 // @Field: DLng: Destination longitude
 // @Field: OALat: Object Avoidance chosen destination point latitude
 // @Field: OALng: Object Avoidance chosen destination point longitude
+
+// Dijkstra避障日志结构体
 struct PACKED log_OADijkstra {
     LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint8_t state;
-    uint8_t error_id;
-    uint8_t curr_point;
-    uint8_t tot_points;
-    int32_t final_lat;
-    int32_t final_lng;
-    int32_t oa_lat;
-    int32_t oa_lng;
+    uint64_t time_us;         // 系统启动后的时间(微秒)
+    uint8_t state;            // Dijkstra避障库状态
+    uint8_t error_id;         // Dijkstra库错误条件
+    uint8_t curr_point;       // 计算路径中的当前目标点
+    uint8_t tot_points;       // 到目标路径的总点数
+    int32_t final_lat;        // 目标纬度
+    int32_t final_lng;        // 目标经度
+    int32_t oa_lat;          // 避障选择的目标点纬度
+    int32_t oa_lng;          // 避障选择的目标点经度
 };
 
 // @LoggerMessage: SA
@@ -77,17 +82,19 @@ struct PACKED log_OADijkstra {
 // @Field: MVelY: Modified velocity, Y-Axis (Velocity after Avoidance)
 // @Field: MVelZ: Modified velocity, Z-Axis (Velocity after Avoidance)
 // @Field: Back: True if vehicle is backing away
+
+// 简单避障日志结构体
 struct PACKED log_SimpleAvoid {
   LOG_PACKET_HEADER;
-  uint64_t time_us;
-  uint8_t state;
-  float desired_vel_x;
-  float desired_vel_y;
-  float desired_vel_z;
-  float modified_vel_x;
-  float modified_vel_y;
-  float modified_vel_z;
-  uint8_t backing_up;
+  uint64_t time_us;          // 系统启动后的时间(微秒)
+  uint8_t state;             // 简单避障是否激活
+  float desired_vel_x;       // 期望X轴速度(避障前)
+  float desired_vel_y;       // 期望Y轴速度(避障前)
+  float desired_vel_z;       // 期望Z轴速度(避障前)
+  float modified_vel_x;      // 修改后X轴速度(避障后)
+  float modified_vel_y;      // 修改后Y轴速度(避障后)
+  float modified_vel_z;      // 修改后Z轴速度(避障后)
+  uint8_t backing_up;        // 车辆是否在后退
 };
 
 // @LoggerMessage: OAVG
@@ -97,15 +104,18 @@ struct PACKED log_SimpleAvoid {
 // @Field: point_num: point number in visgraph
 // @Field: Lat: Latitude
 // @Field: Lon: longitude
+
+// 避障路径规划可见性图点日志结构体
 struct PACKED log_OD_Visgraph {
   LOG_PACKET_HEADER;
-  uint64_t time_us;
-  uint8_t version;
-  uint8_t point_num;
-  int32_t Lat;
-  int32_t Lon;
+  uint64_t time_us;          // 系统启动后的时间(微秒)
+  uint8_t version;           // 可见性图版本,每次重新生成时递增
+  uint8_t point_num;         // 可见性图中的点编号
+  int32_t Lat;              // 纬度
+  int32_t Lon;              // 经度
 };
 
+// 避障相关的日志结构定义
 #define LOG_STRUCTURE_FROM_AVOIDANCE \
     { LOG_OA_BENDYRULER_MSG, sizeof(log_OABendyRuler), \
       "OABR","QBBHHHBfLLiLLi","TimeUS,Type,Act,DYaw,Yaw,DP,RChg,Mar,DLt,DLg,DAlt,OLt,OLg,OAlt", "s--ddd-mDUmDUm", "F-------GGBGGB" , true }, \

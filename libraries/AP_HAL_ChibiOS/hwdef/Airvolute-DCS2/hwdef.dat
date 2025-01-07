@@ -1,174 +1,174 @@
-# hw definition file for processing by chibios_hwdef.py
-#following exapmle: 
-#https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_HAL_ChibiOS/hwdef/mRoControlZeroH7/hwdef.dat#L105
-# for H743 bootloader
+# 这是Airvolute-DCS2飞控板的硬件定义文件
+# 该文件由chibios_hwdef.py脚本处理,用于配置STM32H743芯片的硬件引脚和外设
 
-# MCU class and specific type
+# 定义MCU类型为STM32H7系列,具体型号为STM32H743
 MCU STM32H7xx STM32H743xx
 
-# crystal frequency
+# 外部晶振频率为16MHz
 OSCILLATOR_HZ 16000000
 
-# board ID for firmware load
+# 开发板ID为5200,用于固件校验和加载
 APJ_BOARD_ID 5200
 
-# the nucleo seems to have trouble with flashing the last sector?
+# Flash总容量为2048KB(Nucleo开发板在刷写最后一个扇区时可能有问题)
 FLASH_SIZE_KB 2048
 
-# This is the STM32 timer that ChibiOS will use for the low level
-# driver. This must be a 32 bit timer. We currently only support
-# timers 2, 3, 4, 5 and 21. See hal_st_lld.c in ChibiOS for details.
-
-# ChibiOS system timer
+# 配置ChibiOS系统定时器
+# 必须使用32位定时器,目前仅支持定时器2、3、4、5和21
+# 详见ChibiOS的hal_st_lld.c文件
 STM32_ST_USE_TIMER 5
 
-#optimize for space
+# 编译优化等级为Os(优化空间)
 env OPTIMIZE -Os
 
+# bootloader预留128KB起始空间
 FLASH_RESERVE_START_KB 128
 
+# 设置存储区大小为32KB
 define HAL_STORAGE_SIZE 32768
 
-# use last 2 pages for flash storage
-# H743 has 16 pages of 128k each
+# 使用最后2页Flash作为存储区
+# H743有16页Flash,每页128KB
 STORAGE_FLASH_PAGE 14
 
-# (---FUTURE REVISION---): PA0 AS VDD_SENSE_PIN
+# 5V电压检测引脚(未来版本)
 PA0 VDD_5V_SENS ADC1 SCALE(2)
 
-# order of I2C buses
+# I2C总线顺序配置
 I2C_ORDER I2C1
 
-# I2C1 (SE_CONNECTOR)
-PB8 I2C1_SCL I2C1 PULLUP
-PB7 I2C1_SDA I2C1 PULLUP
+# I2C1总线配置(SE连接器)
+PB8 I2C1_SCL I2C1 PULLUP    # I2C1时钟线,上拉
+PB7 I2C1_SDA I2C1 PULLUP    # I2C1数据线,上拉
 
-# USB setup
+# USB设备制造商名称设置
 USB_STRING_MANUFACTURER "Airvolute"
 
-# This is the pin that senses USB being connected. It is an input pin
-# setup as OPENDRAIN.
+# USB连接检测引脚配置
+# PA9配置为漏极开路输入,用于检测USB连接状态
 PA9 VBUS INPUT OPENDRAIN
 
-# order of UARTs (and USB)
+# 配置串口顺序:USB OTG1、USART1、USART2、USART3
 SERIAL_ORDER OTG1 USART1 USART2 USART3
 
-PA11 OTG_FS_DM OTG1
-PA12 OTG_FS_DP OTG1
+# USB OTG接口配置
+PA11 OTG_FS_DM OTG1    # USB D-引脚
+PA12 OTG_FS_DP OTG1    # USB D+引脚
 
-PA13 JTMS-SWDIO SWD
-PA14 JTCK-SWCLK SWD
+# SWD调试接口配置
+PA13 JTMS-SWDIO SWD    # SWDIO数据线
+PA14 JTCK-SWCLK SWD    # SWCLK时钟线
 
-# (---FUTURE REVISION---): PWM output for buzzer 
+# 蜂鸣器PWM输出配置(未来版本)
 PB15 TIM12_CH2 TIM12 GPIO(80) ALARM
 
-# (---FUTURE REVISION---): RC Input set for Interrupt not DMA
+# RC输入配置,使用中断而非DMA(未来版本)
 PA6 TIM3_CH1 TIM3 RCININT PULLDOWN LOW
 
-# UART SETUP
-# USART1 (SE_CONNECTOR)
-PB14 USART1_TX USART1
-PA10 USART1_RX USART1
+# UART1串口配置(SE连接器)
+PB14 USART1_TX USART1    # UART1发送引脚
+PA10 USART1_RX USART1    # UART1接收引脚
 
-# USART2 (SE_CONNECTOR)
-PD5 USART2_TX USART2
-PD6 USART2_RX USART2
+# UART2串口配置(SE连接器)
+PD5 USART2_TX USART2     # UART2发送引脚
+PD6 USART2_RX USART2     # UART2接收引脚
 
-# USART3 (RC INPUT)
-PD9 USART3_RX USART3
+# UART3串口配置(RC输入)
+PD9 USART3_RX USART3     # UART3接收引脚
 
-#LED RED
-PB1 LED1 OUTPUT HIGH
-#LED GREEN
-PA3 FMU_LED_AMBER OUTPUT LOW GPIO(0)
+# LED指示灯配置
+PB1 LED1 OUTPUT HIGH           # 红色LED
+PA3 FMU_LED_AMBER OUTPUT LOW GPIO(0)  # 绿色LED
 
-# microSD card
-PC8 SDMMC1_D0 SDMMC1
-PC9 SDMMC1_D1 SDMMC1
-PC10 SDMMC1_D2 SDMMC1
-PC11 SDMMC1_D3 SDMMC1
-PC12 SDMMC1_CK SDMMC1
-PD2 SDMMC1_CMD SDMMC1
+# microSD卡接口配置(SDMMC1)
+PC8 SDMMC1_D0 SDMMC1     # SDMMC1数据线0
+PC9 SDMMC1_D1 SDMMC1     # SDMMC1数据线1
+PC10 SDMMC1_D2 SDMMC1    # SDMMC1数据线2
+PC11 SDMMC1_D3 SDMMC1    # SDMMC1数据线3
+PC12 SDMMC1_CK SDMMC1    # SDMMC1时钟线
+PD2 SDMMC1_CMD SDMMC1    # SDMMC1命令线
 
-# CS pins for SPI sensors. The labels for all CS pins need to
-# match the SPI device table later in this file.
-PD12 BMI088_ACC_CS CS
-PE13 BMI088_GYRO_CS CS
-PD13 BMP390_CS CS
-PD15 EXT_0_CS CS
-PD14 EXT_1_CS CS
-PD11 EXT_2_CS CS
-PD10 EXT_3_CS CS
+# SPI传感器片选(CS)引脚配置
+PD12 BMI088_ACC_CS CS     # BMI088加速度计片选
+PE13 BMI088_GYRO_CS CS    # BMI088陀螺仪片选
+PD13 BMP390_CS CS         # BMP390气压计片选
+PD15 EXT_0_CS CS          # 外部设备0片选
+PD14 EXT_1_CS CS          # 外部设备1片选
+PD11 EXT_2_CS CS          # 外部设备2片选
+PD10 EXT_3_CS CS          # 外部设备3片选
 
-# CAN Busses
-PD0 CAN1_RX CAN1
-PB9 CAN1_TX CAN1
+# CAN总线配置
+PD0 CAN1_RX CAN1         # CAN1接收引脚
+PB9 CAN1_TX CAN1         # CAN1发送引脚
 
-# CAN1 Silent Pin LOW Enable
+# CAN1静音引脚配置(低电平使能)
 PC7 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW GPIO(70)
 
-PB5 CAN2_RX CAN2
-PB6 CAN2_TX CAN2
+PB5 CAN2_RX CAN2         # CAN2接收引脚
+PB6 CAN2_TX CAN2         # CAN2发送引脚
 
-# CAN2 Silent Pin LOW Enable
+# CAN2静音引脚配置(低电平使能)
 PC6 GPIO_CAN2_SILENT OUTPUT PUSHPULL SPEED_LOW LOW GPIO(71)
 
-# Ethernet
-PC1  ETH_MDC            ETH1
-PA2  ETH_MDIO           ETH1
-PC4  ETH_RMII_RXD0      ETH1
-PC5  ETH_RMII_RXD1      ETH1
-PB12 ETH_RMII_TXD0      ETH1
-PB13 ETH_RMII_TXD1      ETH1
-PB11 ETH_RMII_TX_EN     ETH1
-PA7  ETH_RMII_CRS_DV    ETH1
-PA1  ETH_RMII_REF_CLK   ETH1
+# 以太网接口配置
+PC1  ETH_MDC            ETH1    # 管理数据时钟
+PA2  ETH_MDIO           ETH1    # 管理数据输入输出
+PC4  ETH_RMII_RXD0      ETH1    # 接收数据0
+PC5  ETH_RMII_RXD1      ETH1    # 接收数据1
+PB12 ETH_RMII_TXD0      ETH1    # 发送数据0
+PB13 ETH_RMII_TXD1      ETH1    # 发送数据1
+PB11 ETH_RMII_TX_EN     ETH1    # 发送使能
+PA7  ETH_RMII_CRS_DV    ETH1    # 载波检测/数据有效
+PA1  ETH_RMII_REF_CLK   ETH1    # 参考时钟
 
+# 以太网PHY配置
 define BOARD_PHY_RMII
 define BOARD_PHY_ADDRESS 0x0000
 define STM32_MAC_PHY_LINK_TYPE MAC_LINK_100_FULLDUPLEX
 define HAL_PERIPH_ENABLE_NETWORKING
 
-#PWM outputs
-PB3  TIM2_CH2 TIM2 PWM(1) GPIO(50) BIDIR
-PB10 TIM2_CH3 TIM2 PWM(2) GPIO(51)
-PE11 TIM1_CH2 TIM1 PWM(3) GPIO(52) BIDIR
-PE14 TIM1_CH4 TIM1 PWM(4) GPIO(53)
+# PWM输出配置
+PB3  TIM2_CH2 TIM2 PWM(1) GPIO(50) BIDIR   # PWM通道1,双向
+PB10 TIM2_CH3 TIM2 PWM(2) GPIO(51)         # PWM通道2
+PE11 TIM1_CH2 TIM1 PWM(3) GPIO(52) BIDIR   # PWM通道3,双向
+PE14 TIM1_CH4 TIM1 PWM(4) GPIO(53)         # PWM通道4
 
-# BMI088_DRDY
+# BMI088数据就绪引脚
 PE12 BMI088_DRDY INPUT
 
-# (---FUTURE REVISION---) EXT IMU DRDY
+# 外部IMU数据就绪引脚(未来版本)
 PD1 EXT_IMU_DRDY INPUT
 
-# SPI1 (ONBOARD SENSORS)
-PA5 SPI1_SCK SPI1
-PB4 SPI1_MISO SPI1
-PD7 SPI1_MOSI SPI1
+# SPI1总线配置(板载传感器)
+PA5 SPI1_SCK SPI1     # SPI1时钟线
+PB4 SPI1_MISO SPI1    # SPI1 MISO数据线
+PD7 SPI1_MOSI SPI1    # SPI1 MOSI数据线
 
-# SPI4 (EXTERNAL SENSORS)
-PE2 SPI4_SCK SPI4
-PE5 SPI4_MISO SPI4
-PE6 SPI4_MOSI SPI4
+# SPI4总线配置(外部传感器)
+PE2 SPI4_SCK SPI4     # SPI4时钟线
+PE5 SPI4_MISO SPI4    # SPI4 MISO数据线
+PE6 SPI4_MOSI SPI4    # SPI4 MOSI数据线
 
-# SPI devices
+# SPI设备配置
 SPIDEV bmi088_g    SPI1 DEVID1  BMI088_GYRO_CS    MODE3  10*MHZ  10*MHZ
 SPIDEV bmi088_a    SPI1 DEVID2  BMI088_ACC_CS     MODE3  10*MHZ  10*MHZ
 SPIDEV bmp390      SPI1 DEVID3  BMP390_CS         MODE3  5*MHZ  5*MHZ
 SPIDEV icm42688_ext  SPI4 DEVID4  EXT_0_CS        MODE3  5*MHZ  5*MHZ
 SPIDEV lis3mdl       SPI4 DEVID5  EXT_1_CS        MODE3  5*MHZ  5*MHZ
 
-# Enable FAT filesystem support (needs a microSD defined via SDMMC).
+# 启用FAT文件系统支持(需要SDMMC定义的microSD)
 define HAL_OS_FATFS_IO 1
 
-# IMUs
+# IMU传感器配置
 IMU BMI088       SPI:bmi088_a SPI:bmi088_g ROTATION_NONE
 IMU Invensense   SPI:icm42688_ext ROTATION_NONE
 
-# 1 baro
+# 气压计配置
 define HAL_BARO_ALLOW_INIT_NO_BARO 1
 BARO BMP388      SPI:bmp390
 
+# 允许在没有指南针的情况下解锁
 define ALLOW_ARM_NO_COMPASS
 
+# 启用外置I2C指南针探测
 define HAL_PROBE_EXTERNAL_I2C_COMPASSES

@@ -13,32 +13,34 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// 包含避障配置头文件
 #include "AC_Avoidance_config.h"
 
 #if AP_OAPATHPLANNER_ENABLED
 
+// 包含可见性图头文件
 #include "AP_OAVisGraph.h"
 
-// constructor initialises expanding array to use 20 elements per chunk
+// 构造函数初始化扩展数组,每个块使用20个元素
 AP_OAVisGraph::AP_OAVisGraph() :
     _items(20)
 {
 }
 
-// add item to visiblity graph, returns true on success, false if graph is full
+// 向可见性图添加项目,成功返回true,图满时返回false
 bool AP_OAVisGraph::add_item(const OAItemID &id1, const OAItemID &id2, float distance_cm)
 {
-    // no more than 65k items
+    // 不超过65k个项目
     if (_num_items == UINT16_MAX) {
         return false;
     }
 
-    // ensure there is space in the array
+    // 确保数组中有空间
     if (!_items.expand_to_hold(_num_items+1)) {
         return false;
     }
 
-    // add item
+    // 添加项目
     _items[_num_items] = {id1, id2, distance_cm};
     _num_items++;
     return true;
