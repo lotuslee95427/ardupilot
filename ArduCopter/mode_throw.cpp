@@ -258,14 +258,14 @@ bool ModeThrow::throw_detected()
     }
 
     // Check for high speed (>500 cm/s)
-    bool high_speed = inertial_nav.get_velocity_neu_cms().length_squared() > (THROW_HIGH_SPEED * THROW_HIGH_SPEED);
+    bool high_speed = true; //inertial_nav.get_velocity_neu_cms().length_squared() > (THROW_HIGH_SPEED * THROW_HIGH_SPEED);
 
     // check for upwards or downwards trajectory (airdrop) of 50cm/s
     bool changing_height;
     if (g2.throw_type == ThrowType::Drop) {
-        changing_height = inertial_nav.get_velocity_z_up_cms() < -THROW_VERTICAL_SPEED;
+        changing_height = true;// inertial_nav.get_velocity_z_up_cms() < -THROW_VERTICAL_SPEED;
     } else {
-        changing_height = inertial_nav.get_velocity_z_up_cms() > THROW_VERTICAL_SPEED;
+        changing_height = true;// inertial_nav.get_velocity_z_up_cms() > THROW_VERTICAL_SPEED;
     }
 
     // Check the vertical acceleraton is greater than 0.25g
