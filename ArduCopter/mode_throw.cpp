@@ -252,10 +252,10 @@ void ModeThrow::run()
 bool ModeThrow::throw_detected()
 {
     // Check that we have a valid navigation solution
-    nav_filter_status filt_status = inertial_nav.get_filter_status();
-    if (!filt_status.flags.attitude || !filt_status.flags.horiz_pos_abs || !filt_status.flags.vert_pos) {
-        return false;
-    }
+    //nav_filter_status filt_status = inertial_nav.get_filter_status();
+    // if (!filt_status.flags.attitude || !filt_status.flags.horiz_pos_abs || !filt_status.flags.vert_pos) {
+    //    return false;
+    // }
 
     // Check for high speed (>500 cm/s)
     bool high_speed = true; //inertial_nav.get_velocity_neu_cms().length_squared() > (THROW_HIGH_SPEED * THROW_HIGH_SPEED);
@@ -299,8 +299,12 @@ bool ModeThrow::throw_detected()
     // Once a possible throw condition has been detected, we check for 2.5 m/s of downwards velocity change in less than 0.5 seconds to confirm
     bool throw_condition_confirmed = ((AP_HAL::millis() - free_fall_start_ms < 500) && ((inertial_nav.get_velocity_z_up_cms() - free_fall_start_velz) < -250.0f));
 
+    if(throw_condition_confirmed){
+        possible_throw_detected=possible_throw_detected;
+    }//额外不需要的
+
+    return possible_throw_detected;//throw_condition_confirmed
     // start motors and enter the control mode if we are in continuous freefall
-    return throw_condition_confirmed;
 }
 
 bool ModeThrow::throw_attitude_good() const
