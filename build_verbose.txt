@@ -1,0 +1,35 @@
+Waf: Entering directory `/home/lotus/my-apm-git/ardupilot/build/CUAVv5Nano'
+Checking for env.py
+env added OPTIMIZE=-O2
+env added ENABLE_DFU_BOOT=0
+env added WITH_FATFS=1
+env added PROCESS_STACK=0x1C00
+env added MAIN_STACK=0x600
+env added IOMCU_FW=0
+env added PERIPH_FW=0
+env added HAL_NUM_CAN_IFACES=2
+env added HAL_CANFD_SUPPORTED=0
+env added BOARD_FLASH_SIZE=2048
+env added EXT_FLASH_SIZE_MB=0
+env added INT_FLASH_PRIMARY=False
+env added ENABLE_CRASHDUMP=True
+env appended CPU_FLAGS=['-mcpu=cortex-m7', '-mfpu=fpv5-d16', '-mfloat-abi=hard', '-DARM_MATH_CM7', '-u_printf_float']
+env added CORTEX=cortex-m7
+env added APJ_BOARD_ID=50
+env added APJ_BOARD_TYPE=STM32F767xx
+env added USBID=0x1209/0x5740
+env added FLASH_RESERVE_START_KB=32
+env added EXT_FLASH_RESERVE_START_KB=0
+env added FLASH_TOTAL=2064384
+env added HAS_EXTERNAL_FLASH_SECTIONS=0
+env added CHIBIOS_BUILD_FLAGS=USE_FATFS=yes CHIBIOS_STARTUP_MK=os/common/startup/ARMCMx/compilers/GCC/mk/startup_stm32f7xx.mk CHIBIOS_PLATFORM_MK=os/hal/ports/STM32/STM32F7xx/platform.mk MCU=cortex-m7 ENV_UDEFS=-DCHPRINTF_USE_FLOAT=1
+Padded 24 bytes for bootloader.bin to 16480
+Embedding file bootloader.bin:/home/lotus/my-apm-git/ardupilot/Tools/bootloaders/CUAVv5Nano_bl.bin
+Embedding file hwdef.dat:/home/lotus/my-apm-git/ardupilot/build/CUAVv5Nano/hw.dat
+Embedding file io_firmware.bin:Tools/IO_Firmware/iofirmware_lowpolh.bin
+Embedding file io_firmware_dshot.bin:Tools/IO_Firmware/iofirmware_dshot_lowpolh.bin
+10:27:32 runner ['/usr/bin/git', 'rev-parse', '--short=8', 'HEAD']
+10:27:32 runner ['/usr/bin/git', 'rev-parse', '--short=8', 'HEAD']
+10:27:32 runner ['/usr/bin/git', 'rev-parse', '--short=8', 'HEAD']
+Waf: Leaving directory `/home/lotus/my-apm-git/ardupilot/build/CUAVv5Nano'
+Could not find a task generator for the name 'copter'

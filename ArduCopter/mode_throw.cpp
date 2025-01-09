@@ -291,7 +291,7 @@ bool ModeThrow::throw_detected()
     }
 
     // 检查高度是否在用户定义的限制范围内
-    const bool height_within_params = (g.throw_altitude_min == 0 || altitude_above_home > g.throw_altitude_min) && (g.throw_altitude_max == 0 || (altitude_above_home < g.throw_altitude_max));
+    const bool height_within_params =  (g.throw_altitude_min == 0 || altitude_above_home > g.throw_altitude_min) && (g.throw_altitude_max == 0 || (altitude_above_home < g.throw_altitude_max));
 
     // 高速或自由落体与高度增加相结合表明可能存在空投或抛投释放  
     bool possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
