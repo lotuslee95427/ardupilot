@@ -264,10 +264,10 @@ bool ModeThrow::throw_detected()
         return false;
     }
 
-    // 检查高速（>500 cm/s）
+    // 检查高速（>500 cm/s） 需要gps
     bool high_speed = inertial_nav.get_velocity_neu_cms().length_squared() > (THROW_HIGH_SPEED * THROW_HIGH_SPEED);
 
-    // 检查向上或向下的轨迹（空投）是否为50cm/s
+    // 检查向上或向下的轨迹（空投）是否为50cm/s  不需要gps
     bool changing_height;
     if (g2.throw_type == ThrowType::Drop) {
         changing_height = inertial_nav.get_velocity_z_up_cms() < -THROW_VERTICAL_SPEED;
@@ -275,13 +275,13 @@ bool ModeThrow::throw_detected()
         changing_height = inertial_nav.get_velocity_z_up_cms() > THROW_VERTICAL_SPEED;
     }
 
-    // 检查垂直加速度是否大于0.25g
+    // 检查垂直加速度是否大于0.25g 不需要gps
     bool free_falling = ahrs.get_accel_ef().z > -0.25 * GRAVITY_MSS;
 
     // 检查加速度长度是否<1.0g，表明任何抛投动作已完成，飞行器已被释放
     bool no_throw_action = copter.ins.get_accel().length() < 1.0f * GRAVITY_MSS;
 
-    // 获取相对于家的高度
+    // 获取相对于家的高度 //不需要gps
     float altitude_above_home;  // 如果设置了家的位置，则使用相对于家的高度，否则使用相对于EKF原点的高度
     if (ahrs.home_is_set()) {
         ahrs.get_relative_position_D_home(altitude_above_home);
