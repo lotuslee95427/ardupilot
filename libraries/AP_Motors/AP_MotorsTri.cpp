@@ -12,6 +12,29 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+   AP_MotorsTri.cpp - 三轴飞行器电机控制类实现文件
+
+   该类实现了三轴飞行器的电机和尾舵机控制功能:
+
+   主要功能:
+   - 初始化3个主电机和1个尾舵机
+   - 设置电机更新频率
+   - 输出控制信号到电机和舵机
+   - 支持正向和反向三轴飞行器配置
+   - 支持倾转旋翼和尾座式飞行器的差动推力控制
+
+   电机配置:
+   - 电机1: 前方电机
+   - 电机2: 右后电机 
+   - 电机4: 左后电机
+   - 通道7: 尾舵机用于偏航控制
+
+   关键参数:
+   - 尾舵机最大角度:80度
+   - 默认电机更新频率:490Hz
+   - 支持正向和反向三轴配置
+*/
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>

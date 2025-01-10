@@ -1,6 +1,30 @@
 /// @file	AP_MotorsTailsitter.h
 /// @brief	Motor control class for tailsitters and bicopters
 #pragma once
+/*
+   AP_MotorsTailsitter.h - 尾座式飞行器电机控制类头文件
+
+   该类继承自AP_MotorsMulticopter,用于控制尾座式飞行器和双轴飞行器的电机。
+   
+   主要功能:
+   - 初始化电机配置
+   - 设置电机更新频率 
+   - 输出控制信号到电机
+   - 支持差动推力控制
+   - 支持倾转电机控制
+   - 支持基于盘载荷的最小出流速度限制
+
+   关键参数:
+   - 油门范围:0-1
+   - 左右倾转范围:-1到1
+   - 左右推力范围:0-1
+   - 支持外部设置最小油门值
+   
+   电机配置:
+   - 支持尾座式和双轴飞行器配置
+   - 支持差动推力控制
+   - 支持倾转电机控制
+*/
 
 #include <AP_Common/AP_Common.h>
 #include <AP_Math/AP_Math.h>

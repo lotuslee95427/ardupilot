@@ -12,6 +12,31 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+   AP_Motors_Class.cpp - 电机控制基类实现文件
+
+   该类是所有电机控制类的基类,提供了电机控制的基本功能:
+
+   主要功能:
+   - 初始化电机配置和参数
+   - 设置电机更新频率
+   - 油门控制和限制
+   - 电机状态管理(启动、停止、运行等)
+   - 电机输出限制检查
+   - 电机故障保护
+   
+   关键参数:
+   - 默认电机更新频率:490Hz
+   - 油门滤波截止频率:50Hz
+   - 支持油门斜坡控制
+   - 支持推力增强和平衡控制
+   
+   主要成员:
+   - _speed_hz: 电机更新频率
+   - _throttle_filter: 油门滤波器
+   - _spool_state: 电机运行状态
+   - limit: 电机输出限制标志
+*/
 
 #include "AP_Motors_Class.h"
 #include <AP_HAL/AP_HAL.h>

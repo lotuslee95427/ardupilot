@@ -13,10 +13,12 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// 包含配置头文件
 #include "AP_Arming_config.h"
 
 #if AP_ARMING_ENABLED
 
+// 包含所需的头文件
 #include "AP_Arming.h"
 #include <AP_HAL/AP_HAL.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
@@ -60,6 +62,7 @@
 #include <AP_KDECAN/AP_KDECAN.h>
 #include <AP_Vehicle/AP_Vehicle.h>
 
+// 如果启用了CAN协议驱动
 #if HAL_MAX_CAN_PROTOCOL_DRIVERS
   #include <AP_CANManager/AP_CANManager.h>
   #include <AP_Common/AP_Common.h>
@@ -71,14 +74,16 @@
 
 #include <AP_Logger/AP_Logger.h>
 
-#define AP_ARMING_COMPASS_MAGFIELD_EXPECTED 530
-#define AP_ARMING_COMPASS_MAGFIELD_MIN  185     // 0.35 * 530 milligauss
-#define AP_ARMING_COMPASS_MAGFIELD_MAX  875     // 1.65 * 530 milligauss
-#define AP_ARMING_BOARD_VOLTAGE_MAX     5.8f
-#define AP_ARMING_ACCEL_ERROR_THRESHOLD 0.75f
-#define AP_ARMING_MAGFIELD_ERROR_THRESHOLD 100
-#define AP_ARMING_AHRS_GPS_ERROR_MAX    10      // accept up to 10m difference between AHRS and GPS
+// 定义一些常量
+#define AP_ARMING_COMPASS_MAGFIELD_EXPECTED 530  // 预期的罗盘磁场强度
+#define AP_ARMING_COMPASS_MAGFIELD_MIN  185     // 最小磁场强度 (0.35 * 530 毫高斯)
+#define AP_ARMING_COMPASS_MAGFIELD_MAX  875     // 最大磁场强度 (1.65 * 530 毫高斯)
+#define AP_ARMING_BOARD_VOLTAGE_MAX     5.8f    // 最大板载电压
+#define AP_ARMING_ACCEL_ERROR_THRESHOLD 0.75f   // 加速度计误差阈值
+#define AP_ARMING_MAGFIELD_ERROR_THRESHOLD 100  // 磁场误差阈值
+#define AP_ARMING_AHRS_GPS_ERROR_MAX    10      // AHRS和GPS之间允许的最大差异(10米)
 
+// 根据不同的飞行器类型设置默认的方向舵解锁模式
 #if APM_BUILD_TYPE(APM_BUILD_ArduPlane)
   #define ARMING_RUDDER_DEFAULT         (uint8_t)RudderArming::ARMONLY
 #else
@@ -86,17 +91,18 @@
 #endif
 
 #ifndef PREARM_DISPLAY_PERIOD
-# define PREARM_DISPLAY_PERIOD 30
+# define PREARM_DISPLAY_PERIOD 30  // 预解锁显示周期(秒)
 #endif
 
 extern const AP_HAL::HAL& hal;
 
+// 参数定义
 const AP_Param::GroupInfo AP_Arming::var_info[] = {
 
     // @Param{Plane, Rover}: REQUIRE
     // @DisplayName: Require Arming Motors 
-    // @Description: Arming disabled until some requirements are met. If 0, there are no requirements (arm immediately).  If 1, sends the minimum throttle PWM value to the throttle channel when disarmed. If 2, send 0 PWM (no signal) to throttle channel when disarmed. On planes with ICE enabled and the throttle while disarmed option set in ICE_OPTIONS, the motor will always get THR_MIN when disarmed. Arming will occur using either rudder stick arming (if enabled) or GCS command when all mandatory and ARMING_CHECK items are satisfied. Note, when setting this parameter to 0, a reboot is required to immediately arm the plane.
-    // @Values: 0:Disabled,1:minimum PWM when disarmed,2:0 PWM when disarmed
+    // @Description: 解锁电机的要求。0:无要求(立即解锁)。1:解锁时向油门通道发送最小PWM值。2:解锁时向油门通道发送0 PWM(无信号)。
+    // @Values: 0:禁用,1:解锁时最小PWM,2:解锁时0 PWM
     // @User: Advanced
     AP_GROUPINFO_FLAGS_FRAME("REQUIRE",     0,      AP_Arming,  require, float(Required::YES_MIN_PWM),
                              AP_PARAM_FLAG_NO_SHIFT,
@@ -105,8 +111,8 @@ const AP_Param::GroupInfo AP_Arming::var_info[] = {
     // 2 was the CHECK paramter stored in a AP_Int16
 
     // @Param: ACCTHRESH
-    // @DisplayName: Accelerometer error threshold
-    // @Description: Accelerometer error threshold used to determine inconsistent accelerometers. Compares this error range to other accelerometers to detect a hardware or calibration error. Lower value means tighter check and harder to pass arming check. Not all accelerometers are created equal.
+    // @DisplayName: 加速度计误差阈值
+    // @Description: 用于判断加速度计不一致的误差阈值。将此误差范围与其他加速度计进行比较以检测硬件或校准错误。
     // @Units: m/s/s
     // @Range: 0.25 3.0
     // @User: Advanced
@@ -116,9 +122,9 @@ const AP_Param::GroupInfo AP_Arming::var_info[] = {
     // index 5 was VOLT2_MIN, moved to AP_BattMonitor
 
     // @Param{Plane,Rover,Copter,Blimp}: RUDDER
-    // @DisplayName: Arming with Rudder enable/disable
-    // @Description: Allow arm/disarm by rudder input. When enabled arming can be done with right rudder, disarming with left rudder. Rudder arming only works with throttle at zero +- deadzone (RCx_DZ). Depending on vehicle type, arming in certain modes is prevented. See the wiki for each vehicle. Caution is recommended when arming if it is allowed in an auto-throttle mode!
-    // @Values: 0:Disabled,1:ArmingOnly,2:ArmOrDisarm
+    // @DisplayName: 方向舵解锁使能/禁用
+    // @Description: 允许通过方向舵输入解锁/锁定。启用时,右方向舵解锁,左方向舵锁定。
+    // @Values: 0:禁用,1:仅解锁,2:解锁和锁定
     // @User: Advanced
     AP_GROUPINFO_FRAME("RUDDER",  6,     AP_Arming, _rudder_arming, ARMING_RUDDER_DEFAULT, AP_PARAM_FRAME_PLANE |
                                                                                            AP_PARAM_FRAME_ROVER |
@@ -128,30 +134,29 @@ const AP_Param::GroupInfo AP_Arming::var_info[] = {
                                                                                            AP_PARAM_FRAME_BLIMP),
 
     // @Param: MIS_ITEMS
-    // @DisplayName: Required mission items
-    // @Description: Bitmask of mission items that are required to be planned in order to arm the aircraft
-    // @Bitmask: 0:Land,1:VTOL Land,2:DO_LAND_START,3:Takeoff,4:VTOL Takeoff,5:Rallypoint,6:RTL
+    // @DisplayName: 必需的任务项
+    // @Description: 解锁飞行器所需的任务项位掩码
+    // @Bitmask: 0:着陆,1:VTOL着陆,2:DO_LAND_START,3:起飞,4:VTOL起飞,5:集结点,6:返航
     // @User: Advanced
     AP_GROUPINFO("MIS_ITEMS",    7,     AP_Arming, _required_mission_items, 0),
 
     // @Param: CHECK
-    // @DisplayName: Arm Checks to Perform (bitmask)
-    // @Description: Checks prior to arming motor. This is a bitmask of checks that will be performed before allowing arming. For most users it is recommended to leave this at the default of 1 (all checks enabled). You can select whatever checks you prefer by adding together the values of each check type to set this parameter. For example, to only allow arming when you have GPS lock and no RC failsafe you would set ARMING_CHECK to 72.
-    // @Bitmask: 0:All,1:Barometer,2:Compass,3:GPS lock,4:INS,5:Parameters,6:RC Channels,7:Board voltage,8:Battery Level,10:Logging Available,11:Hardware safety switch,12:GPS Configuration,13:System,14:Mission,15:Rangefinder,16:Camera,17:AuxAuth,18:VisualOdometry,19:FFT
-    // @Bitmask{Plane}: 0:All,1:Barometer,2:Compass,3:GPS lock,4:INS,5:Parameters,6:RC Channels,7:Board voltage,8:Battery Level,9:Airspeed,10:Logging Available,11:Hardware safety switch,12:GPS Configuration,13:System,14:Mission,15:Rangefinder,16:Camera,17:AuxAuth,19:FFT
+    // @DisplayName: 执行解锁检查(位掩码)
+    // @Description: 解锁前的检查项。这是一个位掩码,表示在允许解锁前将执行的检查。
+    // @Bitmask: 0:全部,1:气压计,2:罗盘,3:GPS锁定,4:INS,5:参数,6:RC通道,7:板载电压,8:电池电量,10:日志可用,11:硬件安全开关,12:GPS配置,13:系统,14:任务,15:测距仪,16:相机,17:辅助认证,18:视觉里程计,19:FFT
     // @User: Standard
     AP_GROUPINFO("CHECK",        8,     AP_Arming,  checks_to_perform,       ARMING_CHECK_ALL),
 
     // @Param: OPTIONS
-    // @DisplayName: Arming options
-    // @Description: Options that can be applied to change arming behaviour
-    // @Bitmask: 0:Disable prearm display,1:Do not send status text on state change
+    // @DisplayName: 解锁选项
+    // @Description: 可以应用以改变解锁行为的选项
+    // @Bitmask: 0:禁用预解锁显示,1:状态改变时不发送状态文本
     // @User: Advanced
     AP_GROUPINFO("OPTIONS", 9,   AP_Arming, _arming_options, 0),
 
     // @Param: MAGTHRESH
-    // @DisplayName: Compass magnetic field strength error threshold vs earth magnetic model
-    // @Description: Compass magnetic field strength error threshold vs earth magnetic model.  X and y axis are compared using this threhold, Z axis uses 2x this threshold.  0 to disable check
+    // @DisplayName: 罗盘磁场强度误差阈值与地球磁场模型
+    // @Description: 罗盘磁场强度误差阈值与地球磁场模型。X和Y轴使用此阈值进行比较,Z轴使用2倍此阈值。0表示禁用检查
     // @Units: mGauss
     // @Range: 0 500
     // @User: Advanced
@@ -159,9 +164,9 @@ const AP_Param::GroupInfo AP_Arming::var_info[] = {
 
 #if AP_ARMING_CRASHDUMP_ACK_ENABLED
     // @Param: CRSDP_IGN
-    // @DisplayName: Disable CrashDump Arming check
-    // @Description: Must have value "1" if crashdump data is present on the system, or a prearm failure will be raised.  Do not set this parameter unless the risks of doing so are fully understood.  The presence of a crash dump means that the firmware currently installed has suffered a critical software failure which resulted in the autopilot immediately rebooting.  The crashdump file gives diagnostic information which can help in finding the issue, please contact the ArduPIlot support team.  If this crashdump data is present, the vehicle is likely unsafe to fly.  Check the ArduPilot documentation for more details.
-    // @Values: 0:Crash Dump arming check active, 1:Crash Dump arming check deactivated
+    // @DisplayName: 禁用崩溃转储解锁检查
+    // @Description: 如果系统存在崩溃转储数据,必须将此值设为"1",否则会引发预解锁失败。
+    // @Values: 0:崩溃转储解锁检查激活, 1:崩溃转储解锁检查停用
     // @User: Advanced
     AP_GROUPINFO("CRSDP_IGN", 11, AP_Arming, crashdump_ack.acked, 0),
 #endif  // AP_ARMING_CRASHDUMP_ACK_ENABLED
@@ -179,6 +184,7 @@ extern AP_IOMCU iomcu;
 #pragma GCC diagnostic ignored "-Wbitwise-instead-of-logical"
 #endif
 
+// 构造函数
 AP_Arming::AP_Arming()
 {
     if (_singleton) {
@@ -189,26 +195,30 @@ AP_Arming::AP_Arming()
     AP_Param::setup_object_defaults(this, var_info);
 }
 
-// performs pre-arm checks. expects to be called at 1hz.
+// 执行预解锁检查。预期以1Hz的频率调用。
 void AP_Arming::update(void)
 {
 #if AP_ARMING_CRASHDUMP_ACK_ENABLED
-    // if we boot with no crashdump data present, reset the "ignore"
-    // parameter so the user will need to acknowledge future crashes
-    // too:
+    // 如果启动时没有崩溃转储数据,重置"忽略"参数,
+    // 这样用户在将来出现崩溃时需要重新确认
     crashdump_ack.check_reset();
 #endif
 
     const uint32_t now_ms = AP_HAL::millis();
-    // perform pre-arm checks & display failures every 30 seconds
+    // 每30秒执行预解锁检查并显示失败
+    // 是否显示预解锁检查失败信息的标志
     bool display_fail = false;
+    // 如果需要立即报告且距离上次显示超过4秒,或者距离上次显示超过PREARM_DISPLAY_PERIOD秒
     if ((report_immediately && (now_ms - last_prearm_display_ms > 4000)) ||
         (now_ms - last_prearm_display_ms > PREARM_DISPLAY_PERIOD*1000)) {
+        // 清除立即报告标志
         report_immediately = false;
+        // 设置显示失败标志
         display_fail = true;
+        // 更新上次显示时间
         last_prearm_display_ms = now_ms;
     }
-    // OTOH, the user may never want to display them:
+    // 另一方面,用户可能永远不想显示它们:
     if (option_enabled(Option::DISABLE_PREARM_DISPLAY)) {
         display_fail = false;
     }
@@ -219,39 +229,46 @@ void AP_Arming::update(void)
 #if AP_ARMING_CRASHDUMP_ACK_ENABLED
 void AP_Arming::CrashDump::check_reset()
 {
-    // if there is no crash dump data then clear the crash dump ack.
-    // This means on subsequent crash-dumps appearing the user must
-    // re-acknowledge.
+    // 如果没有崩溃转储数据则清除崩溃转储确认。
+    // 这意味着在后续出现崩溃转储时用户必须重新确认。
     if (hal.util->last_crash_dump_size() == 0) {
-        // no crash dump data
+        // 无崩溃转储数据
         acked.set_and_save_ifchanged(0);
     }
 }
 #endif  // AP_ARMING_CRASHDUMP_ACK_ENABLED
 
+// 返回预期的罗盘磁场强度
 uint16_t AP_Arming::compass_magfield_expected() const
 {
     return AP_ARMING_COMPASS_MAGFIELD_EXPECTED;
 }
 
+// 检查是否已解锁
 bool AP_Arming::is_armed() const
 {
     return armed || arming_required() == Required::NO;
 }
 
 /*
-  true if armed and safety is off
+  检查是否已解锁且安全开关已关闭
  */
 bool AP_Arming::is_armed_and_safety_off() const
 {
     return is_armed() && hal.util->safety_switch_state() != AP_HAL::Util::SAFETY_DISARMED;
 }
 
+/*
+  获取已启用的检查项
+ */
 uint32_t AP_Arming::get_enabled_checks() const
 {
     return checks_to_perform;
 }
 
+/*
+  检查指定的检查项是否已启用
+ */
 bool AP_Arming::check_enabled(const enum AP_Arming::ArmingChecks check) const
 {
     if (checks_to_perform & ARMING_CHECK_ALL) {
@@ -260,6 +277,9 @@ bool AP_Arming::check_enabled(const enum AP_Arming::ArmingChecks check) const
     return (checks_to_perform & check);
 }
 
+/*
+  检查失败时的处理,带检查项参数
+ */
 void AP_Arming::check_failed(const enum AP_Arming::ArmingChecks check, bool report, const char *fmt, ...) const
 {
     if (!report) {
@@ -267,10 +287,8 @@ void AP_Arming::check_failed(const enum AP_Arming::ArmingChecks check, bool repo
     }
     char taggedfmt[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
 
-    // metafmt is wrapped around the passed-in format string to
-    // prepend "PreArm" or "Arm", depending on what sorts of checks
-    // we're currently doing.
-    const char *metafmt = "PreArm: %s";  // it's formats all the way down
+    // metafmt 包装传入的格式字符串,根据当前检查类型添加"PreArm"或"Arm"前缀
+    const char *metafmt = "PreArm: %s";  // 格式化一直向下传递
     if (running_arming_checks) {
         metafmt = "Arm: %s";
     }
@@ -279,7 +297,7 @@ void AP_Arming::check_failed(const enum AP_Arming::ArmingChecks check, bool repo
 #if HAL_GCS_ENABLED
     MAV_SEVERITY severity = MAV_SEVERITY_CRITICAL;
     if (!check_enabled(check)) {
-        // technically should be NOTICE, but will annoy users at that level:
+        // 技术上应该是 NOTICE,但在该级别会打扰用户
         severity = MAV_SEVERITY_DEBUG;
     }
     va_list arg_list;
@@ -289,6 +307,9 @@ void AP_Arming::check_failed(const enum AP_Arming::ArmingChecks check, bool repo
 #endif  // HAL_GCS_ENABLED
 }
 
+/*
+  检查失败时的处理,不带检查项参数
+ */
 void AP_Arming::check_failed(bool report, const char *fmt, ...) const
 {
 #if HAL_GCS_ENABLED
@@ -297,10 +318,8 @@ void AP_Arming::check_failed(bool report, const char *fmt, ...) const
     }
     char taggedfmt[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
 
-    // metafmt is wrapped around the passed-in format string to
-    // prepend "PreArm" or "Arm", depending on what sorts of checks
-    // we're currently doing.
-    const char *metafmt = "PreArm: %s";  // it's formats all the way down
+    // metafmt 包装传入的格式字符串,根据当前检查类型添加"PreArm"或"Arm"前缀
+    const char *metafmt = "PreArm: %s";  // 格式化一直向下传递
     if (running_arming_checks) {
         metafmt = "Arm: %s";
     }
@@ -313,6 +332,9 @@ void AP_Arming::check_failed(bool report, const char *fmt, ...) const
 #endif  // HAL_GCS_ENABLED
 }
 
+/*
+  执行气压计检查
+ */
 bool AP_Arming::barometer_checks(bool report)
 {
 #ifdef HAL_BARO_ALLOW_INIT_NO_BARO
@@ -320,7 +342,7 @@ bool AP_Arming::barometer_checks(bool report)
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     if (AP::sitl()->baro_count == 0) {
-        // simulate no baro boards
+        // 模拟没有气压计板
         return true;
     }
 #endif
@@ -336,12 +358,15 @@ bool AP_Arming::barometer_checks(bool report)
 }
 
 #if AP_AIRSPEED_ENABLED
+/*
+  执行空速计检查
+ */
 bool AP_Arming::airspeed_checks(bool report)
 {
     if (check_enabled(ARMING_CHECK_AIRSPEED)) {
         const AP_Airspeed *airspeed = AP_Airspeed::get_singleton();
         if (airspeed == nullptr) {
-            // not an airspeed capable vehicle
+            // 不是具有空速计功能的飞行器
             return true;
         }
         for (uint8_t i=0; i<AIRSPEED_MAX_SENSORS; i++) {
@@ -357,11 +382,14 @@ bool AP_Arming::airspeed_checks(bool report)
 #endif  // AP_AIRSPEED_ENABLED
 
 #if HAL_LOGGING_ENABLED
+/*
+  执行日志记录检查
+ */
 bool AP_Arming::logging_checks(bool report)
 {
     if (check_enabled(ARMING_CHECK_LOGGING)) {
         if (!AP::logger().logging_present()) {
-            // Logging is disabled, so nothing to check.
+            // 日志记录已禁用,无需检查
             return true;
         }
         if (AP::logger().logging_failed()) {
@@ -382,23 +410,25 @@ bool AP_Arming::logging_checks(bool report)
 #endif  // HAL_LOGGING_ENABLED
 
 #if AP_INERTIALSENSOR_ENABLED
+/*
+  检查加速度计数据是否一致
+ */
 bool AP_Arming::ins_accels_consistent(const AP_InertialSensor &ins)
 {
     const uint32_t now = AP_HAL::millis();
     if (!ins.accels_consistent(accel_error_threshold)) {
-        // accels are inconsistent:
+        // 加速度计数据不一致
         last_accel_pass_ms = 0;
         return false;
     }
 
     if (last_accel_pass_ms == 0) {
-        // we didn't return false above, so sensors are
-        // consistent right now:
+        // 上面没有返回 false,说明传感器当前是一致的
         last_accel_pass_ms = now;
     }
 
-    // if accels can in theory be inconsistent,
-    // must pass for at least 10 seconds before we're considered consistent:
+    // 如果加速度计理论上可能不一致,
+    // 必须连续通过至少10秒才能被认为是一致的:
     if (ins.get_accel_count() > 1 && now - last_accel_pass_ms < 10000) {
         return false;
     }
@@ -406,24 +436,24 @@ bool AP_Arming::ins_accels_consistent(const AP_InertialSensor &ins)
     return true;
 }
 
+// 检查陀螺仪数据是否一致
 bool AP_Arming::ins_gyros_consistent(const AP_InertialSensor &ins)
 {
     const uint32_t now = AP_HAL::millis();
-    // allow for up to 5 degrees/s difference
+    // 允许最多5度/秒的差异
     if (!ins.gyros_consistent(5)) {
-        // gyros are inconsistent:
+        // 陀螺仪数据不一致:
         last_gyro_pass_ms = 0;
         return false;
     }
 
-    // we didn't return false above, so sensors are
-    // consistent right now:
+    // 上面没有返回false,说明传感器当前是一致的:
     if (last_gyro_pass_ms == 0) {
         last_gyro_pass_ms = now;
     }
 
-    // if gyros can in theory be inconsistent,
-    // must pass for at least 10 seconds before we're considered consistent:
+    // 如果陀螺仪理论上可能不一致,
+    // 必须连续通过至少10秒才能被认为是一致的:
     if (ins.get_gyro_count() > 1 && now - last_gyro_pass_ms < 10000) {
         return false;
     }
@@ -431,6 +461,7 @@ bool AP_Arming::ins_gyros_consistent(const AP_InertialSensor &ins)
     return true;
 }
 
+// 执行IMU检查
 bool AP_Arming::ins_checks(bool report)
 {
     if (check_enabled(ARMING_CHECK_INS)) {
@@ -452,32 +483,32 @@ bool AP_Arming::ins_checks(bool report)
             return false;
         }
         
-        //check if accelerometers have calibrated and require reboot
+        // 检查加速度计是否已校准并需要重启
         if (ins.accel_cal_requires_reboot()) {
             check_failed(ARMING_CHECK_INS, report, "Accels calibrated requires reboot");
             return false;
         }
 
-        // check all accelerometers point in roughly same direction
+        // 检查所有加速度计是否指向大致相同的方向
         if (!ins_accels_consistent(ins)) {
             check_failed(ARMING_CHECK_INS, report, "Accels inconsistent");
             return false;
         }
 
-        // check all gyros are giving consistent readings
+        // 检查所有陀螺仪是否给出一致的读数
         if (!ins_gyros_consistent(ins)) {
             check_failed(ARMING_CHECK_INS, report, "Gyros inconsistent");
             return false;
         }
 
-        // no arming while doing temp cal
+        // 温度校准运行时不允许解锁
         if (ins.temperature_cal_running()) {
             check_failed(ARMING_CHECK_INS, report, "temperature cal running");
             return false;
         }
 
 #if AP_INERTIALSENSOR_BATCHSAMPLER_ENABLED
-        // If Batch sampling enabled it must be initialized
+        // 如果启用了批量采样,必须先初始化
         if (ins.batchsampler.enabled() && !ins.batchsampler.is_initialised()) {
             check_failed(ARMING_CHECK_INS, report, "Batch sampling requires reboot");
             return false;
@@ -487,9 +518,9 @@ bool AP_Arming::ins_checks(bool report)
     }
 
 #if HAL_GYROFFT_ENABLED
-    // gyros are healthy so check the FFT
+    // 陀螺仪正常后检查FFT
     if (check_enabled(ARMING_CHECK_FFT)) {
-        // Check that the noise analyser works
+        // 检查噪声分析器是否工作正常
         AP_GyroFFT *fft = AP::fft();
 
         char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
@@ -504,18 +535,19 @@ bool AP_Arming::ins_checks(bool report)
 }
 #endif // AP_INERTIALSENSOR_ENABLED
 
+// 执行罗盘检查
 bool AP_Arming::compass_checks(bool report)
 {
     Compass &_compass = AP::compass();
 
 #if COMPASS_CAL_ENABLED
-    // check if compass is calibrating
+    // 检查罗盘是否正在校准
     if (_compass.is_calibrating()) {
         check_failed(report, "Compass calibration running");
         return false;
     }
 
-    // check if compass has calibrated and requires reboot
+    // 检查罗盘是否已校准并需要重启
     if (_compass.compass_cal_requires_reboot()) {
         check_failed(report, "Compass calibrated requires reboot");
         return false;
@@ -524,10 +556,10 @@ bool AP_Arming::compass_checks(bool report)
 
     if (check_enabled(ARMING_CHECK_COMPASS)) {
 
-        // avoid Compass::use_for_yaw(void) as it implicitly calls healthy() which can
-        // incorrectly skip the remaining checks, pass the primary instance directly
+        // 避免使用Compass::use_for_yaw(void),因为它会隐式调用healthy()
+        // 这可能会错误地跳过剩余检查,直接传递主实例
         if (!_compass.use_for_yaw(0)) {
-            // compass use is disabled
+            // 罗盘使用已禁用
             return true;
         }
 
@@ -535,10 +567,10 @@ bool AP_Arming::compass_checks(bool report)
             check_failed(ARMING_CHECK_COMPASS, report, "Compass not healthy");
             return false;
         }
-        // check compass learning is on or offsets have been set
+        // 检查罗盘学习是否开启或偏移量已设置
 #if !APM_BUILD_COPTER_OR_HELI && !APM_BUILD_TYPE(APM_BUILD_Blimp)
-        // check compass offsets have been set if learning is off
-        // copter and blimp always require configured compasses
+        // 如果学习关闭则检查罗盘偏移量是否已设置
+        // 直升机和飞艇始终需要配置罗盘
         if (!_compass.learn_offsets_enabled())
 #endif
         {
@@ -549,28 +581,28 @@ bool AP_Arming::compass_checks(bool report)
             }
         }
 
-        // check for unreasonable compass offsets
+        // 检查罗盘偏移量是否不合理
         const Vector3f offsets = _compass.get_offsets();
         if (offsets.length() > _compass.get_offsets_max()) {
             check_failed(ARMING_CHECK_COMPASS, report, "Compass offsets too high");
             return false;
         }
 
-        // check for unreasonable mag field length
+        // 检查磁场强度是否不合理
         const float mag_field = _compass.get_field().length();
         if (mag_field > AP_ARMING_COMPASS_MAGFIELD_MAX || mag_field < AP_ARMING_COMPASS_MAGFIELD_MIN) {
             check_failed(ARMING_CHECK_COMPASS, report, "Check mag field: %4.0f, max %d, min %d", (double)mag_field, AP_ARMING_COMPASS_MAGFIELD_MAX, AP_ARMING_COMPASS_MAGFIELD_MIN);
             return false;
         }
 
-        // check all compasses point in roughly same direction
+        // 检查所有罗盘是否指向大致相同的方向
         if (!_compass.consistent()) {
             check_failed(ARMING_CHECK_COMPASS, report, "Compasses inconsistent");
             return false;
         }
 
 #if AP_AHRS_ENABLED
-        // if ahrs is using compass and we have location, check mag field versus expected earth magnetic model
+        // 如果AHRS使用罗盘且我们有位置,检查磁场与预期的地球磁场模型是否一致
         Location ahrs_loc;
         AP_AHRS &ahrs = AP::ahrs();
         if ((magfield_error_threshold > 0) && ahrs.use_compass() && ahrs.get_location(ahrs_loc)) {
@@ -595,12 +627,13 @@ bool AP_Arming::compass_checks(bool report)
 }
 
 #if AP_GPS_ENABLED
+// 执行GPS检查
 bool AP_Arming::gps_checks(bool report)
 {
     const AP_GPS &gps = AP::gps();
     if (check_enabled(ARMING_CHECK_GPS)) {
 
-        // Any failure messages from GPS backends
+        // GPS后端的任何失败消息
         char failure_msg[100] = {};
         if (!AP::gps().pre_arm_checks(failure_msg, ARRAY_SIZE(failure_msg))) {
             if (failure_msg[0] != '\0') {
@@ -623,13 +656,13 @@ bool AP_Arming::gps_checks(bool report)
                 continue;
             }
 
-            //GPS OK?
+            // GPS状态正常?
             if (gps.status(i) < AP_GPS::GPS_OK_FIX_3D) {
                 check_failed(ARMING_CHECK_GPS, report, "GPS %i: Bad fix", i+1);
                 return false;
             }
 
-            //GPS update rate acceptable
+            // GPS更新率可接受
             if (!gps.is_healthy(i)) {
                 check_failed(ARMING_CHECK_GPS, report, "GPS %i: not healthy", i+1);
                 return false;
@@ -641,7 +674,7 @@ bool AP_Arming::gps_checks(bool report)
             return false;
         }
 
-        // check GPSs are within 50m of each other and that blending is healthy
+        // 检查GPS之间的距离是否在50m以内,且混合状态正常
         float distance_m;
         if (!gps.all_consistent(distance_m)) {
             check_failed(ARMING_CHECK_GPS, report, "GPS positions differ by %4.1fm",
@@ -649,7 +682,7 @@ bool AP_Arming::gps_checks(bool report)
             return false;
         }
 
-        // check AHRS and GPS are within 10m of each other
+        // 检查AHRS和GPS之间的距离是否在10m以内
         if (gps.num_sensors() > 0) {
             const Location gps_loc = gps.location();
             Location ahrs_loc;
@@ -682,6 +715,7 @@ bool AP_Arming::gps_checks(bool report)
 #endif  // AP_GPS_ENABLED
 
 #if AP_BATTERY_ENABLED
+// 执行电池检查
 bool AP_Arming::battery_checks(bool report)
 {
     if (check_enabled(ARMING_CHECK_BATTERY)) {
@@ -696,11 +730,12 @@ bool AP_Arming::battery_checks(bool report)
 }
 #endif  // AP_BATTERY_ENABLED
 
+// 检查硬件安全开关状态
 bool AP_Arming::hardware_safety_check(bool report) 
 {
     if (check_enabled(ARMING_CHECK_SWITCH)) {
 
-      // check if safety switch has been pushed
+      // 检查安全开关是否已按下
       if (hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED) {
           check_failed(ARMING_CHECK_SWITCH, report, "Hardware safety switch");
           return false;
@@ -711,44 +746,48 @@ bool AP_Arming::hardware_safety_check(bool report)
 }
 
 #if AP_RC_CHANNEL_ENABLED
+// 执行遥控器解锁检查
 bool AP_Arming::rc_arm_checks(AP_Arming::Method method)
 {
-    // don't check the trims if we are in a failsafe
+    // 如果处于故障保护状态,不检查微调
     if (!rc().has_valid_input()) {
         return true;
     }
 
-    // only check if we've received some form of input within the last second
-    // this is a protection against a vehicle having never enabled an input
+    // 仅在最近1秒内收到输入时才检查
+    // 这是为了防止从未启用输入的车辆
     uint32_t last_input_ms = rc().last_input_ms();
     if ((last_input_ms == 0) || ((AP_HAL::millis() - last_input_ms) > 1000)) {
         return true;
     }
 
     bool check_passed = true;
-    // ensure all rc channels have different functions
+    // 确保所有遥控通道具有不同的功能
     if (rc().duplicate_options_exist()) {
         check_failed(ARMING_CHECK_PARAMETERS, true, "Duplicate Aux Switch Options");
         check_passed = false;
     }
+    // 检查飞行模式通道是否与RC选项冲突
     if (rc().flight_mode_channel_conflicts_with_rc_option()) {
         check_failed(ARMING_CHECK_PARAMETERS, true, "Mode channel and RC%d_OPTION conflict", rc().flight_mode_channel_number());
         check_passed = false;
     }
     {
+        // 如果未启用跳过RPY检查选项
         if (!rc().option_is_enabled(RC_Channels::Option::ARMING_SKIP_CHECK_RPY)) {
             const struct {
                 const char *name;
                 const RC_Channel *channel;
             } channels_to_check[] {
-                { "Roll", &rc().get_roll_channel(), },
-                { "Pitch", &rc().get_pitch_channel(), },
-                { "Yaw", &rc().get_yaw_channel(), },
+                { "Roll", &rc().get_roll_channel(), },    // 横滚通道
+                { "Pitch", &rc().get_pitch_channel(), },  // 俯仰通道
+                { "Yaw", &rc().get_yaw_channel(), },      // 偏航通道
             };
+            // 检查每个通道的中位值
             for (const auto &channel_to_check : channels_to_check) {
                 const auto *c = channel_to_check.channel;
                 if (c->get_control_in() != 0) {
-                    if ((method != Method::RUDDER) || (c != rc().get_arming_channel())) { // ignore the yaw input channel if rudder arming
+                    if ((method != Method::RUDDER) || (c != rc().get_arming_channel())) { // 如果是方向舵解锁则忽略偏航输入通道
                         check_failed(ARMING_CHECK_RC, true, "%s (RC%d) is not neutral", channel_to_check.name, c->ch());
                         check_passed = false;
                     }
@@ -756,17 +795,18 @@ bool AP_Arming::rc_arm_checks(AP_Arming::Method method)
             }
         }
 
-        // if throttle check is enabled, require zero input
+        // 如果启用了油门检查,要求输入为零
         if (rc().arming_check_throttle()) {
             const RC_Channel *c = &rc().get_throttle_channel();
                 if (c->get_control_in() != 0) {
                     check_failed(ARMING_CHECK_RC, true, "%s (RC%d) is not neutral", "Throttle", c->ch());
                     check_passed = false;
                 }
+            // 检查前向推力通道
             c = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FWD_THR);
             if (c != nullptr) {
                 uint8_t fwd_thr = c->percent_input();
-                // require channel input within 2% of minimum
+                // 要求通道输入在最小值2%范围内
                 if (fwd_thr > 2) {
                     check_failed(ARMING_CHECK_RC, true, "VTOL Fwd Throttle is not zero");
                     check_passed = false;
@@ -777,10 +817,12 @@ bool AP_Arming::rc_arm_checks(AP_Arming::Method method)
     return check_passed;
 }
 
+// 执行遥控器校准检查
 bool AP_Arming::rc_calibration_checks(bool report)
 {
     bool check_passed = true;
     const uint8_t num_channels = RC_Channels::get_valid_channel_count();
+    // 检查每个通道的校准值
     for (uint8_t i = 0; i < NUM_RC_CHANNELS; i++) {
         const RC_Channel *c = rc().channel(i);
         if (c == nullptr) {
@@ -790,10 +832,12 @@ bool AP_Arming::rc_calibration_checks(bool report)
             continue;
         }
         const uint16_t trim = c->get_radio_trim();
+        // 检查最小值是否小于中位值
         if (c->get_radio_min() > trim) {
             check_failed(ARMING_CHECK_RC, report, "RC%d_MIN is greater than RC%d_TRIM", i + 1, i + 1);
             check_passed = false;
         }
+        // 检查最大值是否大于中位值
         if (c->get_radio_max() < trim) {
             check_failed(ARMING_CHECK_RC, report, "RC%d_MAX is less than RC%d_TRIM", i + 1, i + 1);
             check_passed = false;
@@ -803,6 +847,7 @@ bool AP_Arming::rc_calibration_checks(bool report)
     return check_passed;
 }
 
+// 检查遥控器是否正在校准
 bool AP_Arming::rc_in_calibration_check(bool report)
 {
     if (rc().calibrating()) {
@@ -812,15 +857,18 @@ bool AP_Arming::rc_in_calibration_check(bool report)
     return true;
 }
 
+// 执行手动发射器检查
 bool AP_Arming::manual_transmitter_checks(bool report)
 {
     if (check_enabled(ARMING_CHECK_RC)) {
 
+        // 检查遥控器故障保护
         if (AP_Notify::flags.failsafe_radio) {
             check_failed(ARMING_CHECK_RC, report, "Radio failsafe on");
             return false;
         }
 
+        // 执行遥控器校准检查
         if (!rc_calibration_checks(report)) {
             return false;
         }
@@ -831,6 +879,7 @@ bool AP_Arming::manual_transmitter_checks(bool report)
 #endif  // AP_RC_CHANNEL_ENABLED
 
 #if AP_MISSION_ENABLED
+// 执行任务检查
 bool AP_Arming::mission_checks(bool report)
 {
     AP_Mission *mission = AP::mission();
@@ -840,18 +889,20 @@ bool AP_Arming::mission_checks(bool report)
             return false;
         }
 
+        // 定义需要检查的任务项类型
         const struct MisItemTable {
           MIS_ITEM_CHECK check;
           MAV_CMD mis_item_type;
           const char *type;
         } misChecks[] = {
-          {MIS_ITEM_CHECK_LAND,          MAV_CMD_NAV_LAND,           "land"},
-          {MIS_ITEM_CHECK_VTOL_LAND,     MAV_CMD_NAV_VTOL_LAND,      "vtol land"},
-          {MIS_ITEM_CHECK_DO_LAND_START, MAV_CMD_DO_LAND_START,      "do land start"},
-          {MIS_ITEM_CHECK_TAKEOFF,       MAV_CMD_NAV_TAKEOFF,        "takeoff"},
-          {MIS_ITEM_CHECK_VTOL_TAKEOFF,  MAV_CMD_NAV_VTOL_TAKEOFF,   "vtol takeoff"},
-          {MIS_ITEM_CHECK_RETURN_TO_LAUNCH,  MAV_CMD_NAV_RETURN_TO_LAUNCH,   "RTL"},
+          {MIS_ITEM_CHECK_LAND,          MAV_CMD_NAV_LAND,           "land"},           // 着陆
+          {MIS_ITEM_CHECK_VTOL_LAND,     MAV_CMD_NAV_VTOL_LAND,      "vtol land"},      // 垂直起降着陆
+          {MIS_ITEM_CHECK_DO_LAND_START, MAV_CMD_DO_LAND_START,      "do land start"},   // 开始着陆
+          {MIS_ITEM_CHECK_TAKEOFF,       MAV_CMD_NAV_TAKEOFF,        "takeoff"},         // 起飞
+          {MIS_ITEM_CHECK_VTOL_TAKEOFF,  MAV_CMD_NAV_VTOL_TAKEOFF,   "vtol takeoff"},    // 垂直起降起飞
+          {MIS_ITEM_CHECK_RETURN_TO_LAUNCH,  MAV_CMD_NAV_RETURN_TO_LAUNCH,   "RTL"},     // 返航
         };
+        // 检查每个必需的任务项
         for (uint8_t i = 0; i < ARRAY_SIZE(misChecks); i++) {
             if (_required_mission_items & misChecks[i].check) {
                 if (!mission->contains_item(misChecks[i].mis_item_type)) {
@@ -860,6 +911,7 @@ bool AP_Arming::mission_checks(bool report)
                 }
             }
         }
+        // 检查集结点
         if (_required_mission_items & MIS_ITEM_CHECK_RALLY) {
 #if HAL_RALLY_ENABLED
             AP_Rally *rally = AP::rally();
@@ -885,6 +937,7 @@ bool AP_Arming::mission_checks(bool report)
     }
 
 #if AP_SDCARD_STORAGE_ENABLED
+    // 检查SD卡存储
     if (check_enabled(ARMING_CHECK_MISSION) &&
         mission != nullptr &&
         (mission->failed_sdcard_storage() || StorageManager::storage_failed())) {
@@ -894,8 +947,7 @@ bool AP_Arming::mission_checks(bool report)
 #endif
 
 #if AP_VEHICLE_ENABLED
-    // do not allow arming if there are no mission items and we are in
-    // (e.g.) AUTO mode
+    // 如果当前模式需要任务但没有任务项,不允许解锁
     if (AP::vehicle()->current_mode_requires_mission() &&
         (mission == nullptr || mission->num_commands() <= 1)) {
         check_failed(ARMING_CHECK_MISSION, report, "Mode requires mission");
@@ -907,6 +959,7 @@ bool AP_Arming::mission_checks(bool report)
 }
 #endif  // AP_MISSION_ENABLED
 
+// 执行测距仪检查
 bool AP_Arming::rangefinder_checks(bool report)
 {
 #if AP_RANGEFINDER_ENABLED
@@ -927,39 +980,48 @@ bool AP_Arming::rangefinder_checks(bool report)
     return true;
 }
 
+// 执行舵机检查
 bool AP_Arming::servo_checks(bool report) const
 {
 #if NUM_SERVO_CHANNELS
     bool check_passed = true;
+    // 遍历所有舵机通道
     for (uint8_t i = 0; i < NUM_SERVO_CHANNELS; i++) {
         const SRV_Channel *c = SRV_Channels::srv_channel(i);
+        // 跳过未使用的通道
         if (c == nullptr || c->get_function() <= SRV_Channel::k_none) {
             continue;
         }
 
+        // 获取舵机中点值
         const uint16_t trim = c->get_trim();
+        // 检查最小值是否大于中点值
         if (c->get_output_min() > trim) {
             check_failed(report, "SERVO%d_MIN is greater than SERVO%d_TRIM", i + 1, i + 1);
             check_passed = false;
         }
+        // 检查最大值是否小于中点值
         if (c->get_output_max() < trim) {
             check_failed(report, "SERVO%d_MAX is less than SERVO%d_TRIM", i + 1, i + 1);
             check_passed = false;
         }
 
-        // check functions using PWM are enabled
+        // 检查使用PWM的功能是否启用
         if (SRV_Channels::get_disabled_channel_mask() & 1U<<i) {
             const SRV_Channel::Aux_servo_function_t ch_function = c->get_function();
 
-            // motors, e-stoppable functions, neopixels and ProfiLEDs may be digital outputs and thus can be disabled
-            // scripting can use its functions as labels for LED setup
+            // 以下功能可以使用数字输出,因此可以被禁用:
+            // - 电机
+            // - 可以紧急停止的功能
+            // - neopixel和ProfiLED
+            // - 脚本可以使用其功能作为LED设置的标签
             const bool disabled_ok = SRV_Channel::is_motor(ch_function) ||
                                      SRV_Channel::should_e_stop(ch_function) ||
                                      (ch_function >= SRV_Channel::k_LED_neopixel1 && ch_function <= SRV_Channel::k_LED_neopixel4) ||
                                      (ch_function >= SRV_Channel::k_ProfiLED_1 && ch_function <= SRV_Channel::k_ProfiLED_Clock) ||
                                      (ch_function >= SRV_Channel::k_scripting1 && ch_function <= SRV_Channel::k_scripting16);
 
-            // for all other functions raise a pre-arm failure
+            // 对于所有其他功能,报告预解锁检查失败
             if (!disabled_ok) {
                 check_failed(report, "SERVO%u_FUNCTION=%u on disabled channel", i + 1, (unsigned)ch_function);
                 check_passed = false;
@@ -968,6 +1030,7 @@ bool AP_Arming::servo_checks(bool report) const
     }
 
 #if HAL_WITH_IO_MCU
+    // 检查IO MCU是否正常
     if (!iomcu.healthy() && AP_BoardConfig::io_enabled()) {
         check_failed(report, "IOMCU is unhealthy");
         check_passed = false;
@@ -980,13 +1043,16 @@ bool AP_Arming::servo_checks(bool report) const
 #endif
 }
 
+// 执行板载电压检查
 bool AP_Arming::board_voltage_checks(bool report)
 {
-    // check board voltage
+    // 检查板载电压
     if (check_enabled(ARMING_CHECK_VOLTAGE)) {
 #if HAL_HAVE_BOARD_VOLTAGE
+        // 获取总线电压
         const float bus_voltage =  hal.analogin->board_voltage();
         const float vbus_min = AP_BoardConfig::get_minimum_board_voltage();
+        // 检查电压是否在允许范围内
         if(((bus_voltage < vbus_min) || (bus_voltage > AP_ARMING_BOARD_VOLTAGE_MAX))) {
             check_failed(ARMING_CHECK_VOLTAGE, report, "Board (%1.1fv) out of range %1.1f-%1.1fv", (double)bus_voltage, (double)vbus_min, (double)AP_ARMING_BOARD_VOLTAGE_MAX);
             return false;
@@ -994,9 +1060,12 @@ bool AP_Arming::board_voltage_checks(bool report)
 #endif // HAL_HAVE_BOARD_VOLTAGE
 
 #if HAL_HAVE_SERVO_VOLTAGE
+       // 获取舵机最小电压要求
        const float vservo_min = AP_BoardConfig::get_minimum_servo_voltage();
         if (is_positive(vservo_min)) {
+            // 获取舵机电压
             const float servo_voltage =  hal.analogin->servorail_voltage();
+            // 检查舵机电压是否过低
             if (servo_voltage < vservo_min) {
                 check_failed(ARMING_CHECK_VOLTAGE, report, "Servo voltage to low (%1.2fv < %1.2fv)", (double)servo_voltage, (double)vservo_min);
                 return false;
@@ -1009,6 +1078,7 @@ bool AP_Arming::board_voltage_checks(bool report)
 }
 
 #if HAL_HAVE_IMU_HEATER
+// 执行加热器最低温度检查
 bool AP_Arming::heater_min_temperature_checks(bool report)
 {
     if (checks_to_perform & ARMING_CHECK_ALL) {
@@ -1016,6 +1086,7 @@ bool AP_Arming::heater_min_temperature_checks(bool report)
         if (board) {
             float temperature;
             int8_t min_temperature;
+            // 获取当前温度和最低温度要求
             if (board->get_board_heater_temperature(temperature) &&
                 board->get_board_heater_arming_temperature(min_temperature) &&
                 (temperature < min_temperature)) {
@@ -1029,24 +1100,26 @@ bool AP_Arming::heater_min_temperature_checks(bool report)
 #endif // HAL_HAVE_IMU_HEATER
 
 /*
-  check base system operations
+  检查基本系统操作
  */
 bool AP_Arming::system_checks(bool report)
 {
     char buffer[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1] {};
 
     if (check_enabled(ARMING_CHECK_SYSTEM)) {
+        // 检查存储是否正常
         if (!hal.storage->healthy()) {
             check_failed(ARMING_CHECK_SYSTEM, report, "Param storage failed");
             return false;
         }
 
+        // 检查参数存储是否已满
         if (AP_Param::get_eeprom_full()) {
             check_failed(ARMING_CHECK_PARAMETERS, report, "parameter storage full");
             return false;
         }
         
-        // check main loop rate is at least 90% of expected value
+        // 检查主循环速率是否至少达到预期值的90%
         const float actual_loop_rate = AP::scheduler().get_filtered_loop_rate_hz();
         const uint16_t expected_loop_rate = AP::scheduler().get_loop_rate_hz();
         const float loop_rate_pct =  actual_loop_rate / expected_loop_rate;
@@ -1056,6 +1129,7 @@ bool AP_Arming::system_checks(bool report)
         }
 
 #if AP_TERRAIN_AVAILABLE
+        // 检查地形数据库是否内存不足
         const AP_Terrain *terrain = AP_Terrain::get_singleton();
         if ((terrain != nullptr) && terrain->init_failed()) {
             check_failed(ARMING_CHECK_SYSTEM, report, "Terrain out of memory");
@@ -1063,6 +1137,7 @@ bool AP_Arming::system_checks(bool report)
         }
 #endif
 #if AP_SCRIPTING_ENABLED
+        // 执行脚本预解锁检查
         const AP_Scripting *scripting = AP_Scripting::get_singleton();
         if ((scripting != nullptr) && !scripting->arming_checks(sizeof(buffer), buffer)) {
             check_failed(ARMING_CHECK_SYSTEM, report, "%s", buffer);
@@ -1070,6 +1145,7 @@ bool AP_Arming::system_checks(bool report)
         }
 #endif
 #if HAL_ADSB_ENABLED
+        // 检查ADS-B是否内存不足
         AP_ADSB *adsb = AP::ADSB();
         if ((adsb != nullptr) && adsb->enabled() && adsb->init_failed()) {
             check_failed(ARMING_CHECK_SYSTEM, report, "ADSB out of memory");
@@ -1077,12 +1153,14 @@ bool AP_Arming::system_checks(bool report)
         }
 #endif
     }
+    // 检查内部错误
     if (AP::internalerror().errors() != 0) {
         AP::internalerror().errors_as_string((uint8_t*)buffer, ARRAY_SIZE(buffer));
         check_failed(report, "Internal errors 0x%x l:%u %s", (unsigned int)AP::internalerror().errors(), AP::internalerror().last_error_line(), buffer);
         return false;
     }
 
+    // 执行GPIO预解锁检查
     if (!hal.gpio->arming_checks(sizeof(buffer), buffer)) {
         check_failed(report, "%s", buffer);
         return false;
@@ -1090,11 +1168,13 @@ bool AP_Arming::system_checks(bool report)
 
     if (check_enabled(ARMING_CHECK_PARAMETERS)) {
 #if !AP_GPS_BLENDED_ENABLED
+        // 执行GPS混合切换检查
         if (!blending_auto_switch_checks(report)) {
             return false;
         }
 #endif
 #if AP_RPM_ENABLED
+        // 执行RPM预解锁检查
         auto *rpm = AP::rpm();
         if (rpm && !rpm->arming_checks(sizeof(buffer), buffer)) {
             check_failed(ARMING_CHECK_PARAMETERS, report, "%s", buffer);
@@ -1102,6 +1182,7 @@ bool AP_Arming::system_checks(bool report)
         }
 #endif
 #if AP_RELAY_ENABLED
+        // 执行继电器预解锁检查
         auto *relay = AP::relay();
         if (relay && !relay->arming_checks(sizeof(buffer), buffer)) {
             check_failed(ARMING_CHECK_PARAMETERS, report, "%s", buffer);
@@ -1109,6 +1190,7 @@ bool AP_Arming::system_checks(bool report)
         }
 #endif
 #if HAL_PARACHUTE_ENABLED
+        // 执行降落伞预解锁检查
         auto *chute = AP::parachute();
         if (chute && !chute->arming_checks(sizeof(buffer), buffer)) {
             check_failed(ARMING_CHECK_PARAMETERS, report, "%s", buffer);
@@ -1116,6 +1198,7 @@ bool AP_Arming::system_checks(bool report)
         }
 #endif
 #if HAL_BUTTON_ENABLED
+        // 执行按钮预解锁检查
         const auto &button = AP::button();
         if (!button.arming_checks(sizeof(buffer), buffer)) {
             check_failed(ARMING_CHECK_PARAMETERS, report, "%s", buffer);
@@ -1127,14 +1210,16 @@ bool AP_Arming::system_checks(bool report)
     return true;
 }
 
+// 检查是否需要地形数据库
 bool AP_Arming::terrain_database_required() const
 {
 #if AP_MISSION_ENABLED
     AP_Mission *mission = AP::mission();
     if (mission == nullptr) {
-        // no mission support?
+        // 没有任务支持
         return false;
     }
+    // 检查任务中是否包含地形高度项
     if (mission->contains_terrain_alt_items()) {
         return true;
     }
@@ -1142,13 +1227,14 @@ bool AP_Arming::terrain_database_required() const
     return false;
 }
 
-// check terrain database is fit-for-purpose
+// 检查地形数据库是否可用
 bool AP_Arming::terrain_checks(bool report) const
 {
     if (!check_enabled(ARMING_CHECK_PARAMETERS)) {
         return true;
     }
 
+    // 如果不需要地形数据库则返回true
     if (!terrain_database_required()) {
         return true;
     }
@@ -1157,16 +1243,17 @@ bool AP_Arming::terrain_checks(bool report) const
 
     const AP_Terrain *terrain = AP_Terrain::get_singleton();
     if (terrain == nullptr) {
-        // this is also a system error, and it is already complaining
-        // about it.
+        // 这也是一个系统错误,已经报告过了
         return false;
     }
 
+    // 检查地形功能是否启用
     if (!terrain->enabled()) {
         check_failed(ARMING_CHECK_PARAMETERS, report, "terrain disabled");
         return false;
     }
 
+    // 执行地形预解锁检查
     char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
     if (!terrain->pre_arm_checks(fail_msg, sizeof(fail_msg))) {
         check_failed(ARMING_CHECK_PARAMETERS, report, "%s", fail_msg);
@@ -1183,14 +1270,15 @@ bool AP_Arming::terrain_checks(bool report) const
 
 
 #if HAL_PROXIMITY_ENABLED
-// check nothing is too close to vehicle
+// 检查是否有物体太靠近飞行器
 bool AP_Arming::proximity_checks(bool report) const
 {
     const AP_Proximity *proximity = AP::proximity();
-    // return true immediately if no sensor present
+    // 如果没有传感器则直接返回true
     if (proximity == nullptr) {
         return true;
     }
+    // 执行接近传感器预解锁检查
     char buffer[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
     if (!proximity->prearm_healthy(buffer, ARRAY_SIZE(buffer))) {
         check_failed(report, "%s", buffer);
@@ -1201,17 +1289,21 @@ bool AP_Arming::proximity_checks(bool report) const
 #endif  // HAL_PROXIMITY_ENABLED
 
 #if HAL_MAX_CAN_PROTOCOL_DRIVERS && HAL_CANMANAGER_ENABLED
+// 执行CAN总线检查
 bool AP_Arming::can_checks(bool report)
 {
     if (check_enabled(ARMING_CHECK_SYSTEM)) {
         char fail_msg[100] = {};
-        (void)fail_msg; // might be left unused
+        (void)fail_msg; // 可能未使用
+        // 获取CAN驱动数量
         uint8_t num_drivers = AP::can().get_num_drivers();
 
+        // 遍历所有CAN驱动
         for (uint8_t i = 0; i < num_drivers; i++) {
             switch (AP::can().get_driver_type(i)) {
                 case AP_CAN::Protocol::PiccoloCAN: {
 #if HAL_PICCOLO_CAN_ENABLE
+                    // 执行PiccoloCAN预解锁检查
                     AP_PiccoloCAN *ap_pcan = AP_PiccoloCAN::get_pcan(i);
 
                     if (ap_pcan != nullptr && !ap_pcan->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
@@ -1228,6 +1320,7 @@ bool AP_Arming::can_checks(bool report)
                 case AP_CAN::Protocol::DroneCAN:
                 {
 #if HAL_ENABLE_DRONECAN_DRIVERS
+                    // 执行DroneCAN预解锁检查
                     AP_DroneCAN *ap_dronecan = AP_DroneCAN::get_dronecan(i);
                     if (ap_dronecan != nullptr && !ap_dronecan->prearm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
                         check_failed(ARMING_CHECK_SYSTEM, report, "DroneCAN: %s", fail_msg);
@@ -1241,6 +1334,7 @@ bool AP_Arming::can_checks(bool report)
                 case AP_CAN::Protocol::NanoRadar:
                 case AP_CAN::Protocol::Benewake:
                 {
+                    // 检查相同的测距仪是否在不同的CAN端口上
                     for (uint8_t j = i; j; j--) {
                         if (AP::can().get_driver_type(i) == AP::can().get_driver_type(j-1)) {
                             check_failed(ARMING_CHECK_SYSTEM, report, "Same rfnd on different CAN ports");
@@ -1265,6 +1359,7 @@ bool AP_Arming::can_checks(bool report)
 
 
 #if AP_FENCE_ENABLED
+// 执行地理围栏检查
 bool AP_Arming::fence_checks(bool display_failure)
 {
     const AC_Fence *fence = AP::fence();
@@ -1272,7 +1367,7 @@ bool AP_Arming::fence_checks(bool display_failure)
         return true;
     }
 
-    // check fence is ready
+    // 检查围栏是否就绪
     char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
     if (fence->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
         return true;
@@ -1281,6 +1376,7 @@ bool AP_Arming::fence_checks(bool display_failure)
     check_failed(display_failure, "%s", fail_msg);
 
 #if AP_SDCARD_STORAGE_ENABLED
+    // 检查SD卡存储是否失败
     if (fence->failed_sdcard_storage() || StorageManager::storage_failed()) {
         check_failed(display_failure, "Failed to open fence storage");
         return false;
@@ -1292,15 +1388,18 @@ bool AP_Arming::fence_checks(bool display_failure)
 #endif  // AP_FENCE_ENABLED
 
 #if HAL_RUNCAM_ENABLED
+// 执行相机检查
 bool AP_Arming::camera_checks(bool display_failure)
 {
+    // 如果启用了相机检查
     if (check_enabled(ARMING_CHECK_CAMERA)) {
         AP_RunCam *runcam = AP::runcam();
+        // 如果没有RunCam对象则通过检查
         if (runcam == nullptr) {
             return true;
         }
 
-        // check camera is ready
+        // 检查相机是否就绪
         char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
         if (!runcam->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
             check_failed(ARMING_CHECK_CAMERA, display_failure, "%s", fail_msg);
@@ -1312,15 +1411,17 @@ bool AP_Arming::camera_checks(bool display_failure)
 #endif  // HAL_RUNCAM_ENABLED
 
 #if OSD_ENABLED
+// 执行OSD检查
 bool AP_Arming::osd_checks(bool display_failure) const
 {
+    // 如果启用了OSD检查
     if (check_enabled(ARMING_CHECK_OSD)) {
-        // if no OSD then pass
+        // 如果没有OSD对象则通过检查
         const AP_OSD *osd = AP::osd();
         if (osd == nullptr) {
             return true;
         }
-        // do osd checks for configuration
+        // 执行OSD配置检查
         char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
         if (!osd->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
             check_failed(ARMING_CHECK_OSD, display_failure, "%s", fail_msg);
@@ -1332,14 +1433,18 @@ bool AP_Arming::osd_checks(bool display_failure) const
 #endif  // OSD_ENABLED
 
 #if HAL_MOUNT_ENABLED
+// 执行云台检查
 bool AP_Arming::mount_checks(bool display_failure) const
 {
+    // 如果启用了相机检查
     if (check_enabled(ARMING_CHECK_CAMERA)) {
         AP_Mount *mount = AP::mount();
+        // 如果没有云台对象则通过检查
         if (mount == nullptr) {
             return true;
         }
         char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1] = {};
+        // 执行云台预解锁检查
         if (!mount->pre_arm_checks(fail_msg, sizeof(fail_msg))) {
             check_failed(ARMING_CHECK_CAMERA, display_failure, "Mount: %s", fail_msg);
             return false;
@@ -1350,14 +1455,16 @@ bool AP_Arming::mount_checks(bool display_failure) const
 #endif  // HAL_MOUNT_ENABLED
 
 #if AP_FETTEC_ONEWIRE_ENABLED
+// 执行FETtec电调检查
 bool AP_Arming::fettec_checks(bool display_failure) const
 {
     const AP_FETtecOneWire *f = AP_FETtecOneWire::get_singleton();
+    // 如果没有FETtec对象则通过检查
     if (f == nullptr) {
         return true;
     }
 
-    // check ESCs are ready
+    // 检查电调是否就绪
     char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
     if (!f->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
         check_failed(ARMING_CHECK_ALL, display_failure, "FETtec: %s", fail_msg);
@@ -1368,19 +1475,19 @@ bool AP_Arming::fettec_checks(bool display_failure) const
 #endif  // AP_FETTEC_ONEWIRE_ENABLED
 
 #if AP_ARMING_AUX_AUTH_ENABLED
-// request an auxiliary authorisation id.  This id should be used in subsequent calls to set_aux_auth_passed/failed
-// returns true on success
+// 请求一个辅助授权ID。此ID应在后续调用set_aux_auth_passed/failed时使用
+// 成功返回true
 bool AP_Arming::get_aux_auth_id(uint8_t& auth_id)
 {
     WITH_SEMAPHORE(aux_auth_sem);
 
-    // check we have enough room to allocate another id
+    // 检查是否有足够空间分配新ID
     if (aux_auth_count >= aux_auth_count_max) {
         aux_auth_error = true;
         return false;
     }
 
-    // allocate buffer for failure message
+    // 为失败消息分配缓冲区
     if (aux_auth_fail_msg == nullptr) {
         aux_auth_fail_msg = (char *)calloc(aux_auth_str_len, sizeof(char));
         if (aux_auth_fail_msg == nullptr) {
@@ -1393,12 +1500,12 @@ bool AP_Arming::get_aux_auth_id(uint8_t& auth_id)
     return true;
 }
 
-// set auxiliary authorisation passed
+// 设置辅助授权通过
 void AP_Arming::set_aux_auth_passed(uint8_t auth_id)
 {
     WITH_SEMAPHORE(aux_auth_sem);
 
-    // sanity check auth_id
+    // 检查auth_id是否有效
     if (auth_id >= aux_auth_count) {
         return;
     }
@@ -1406,20 +1513,20 @@ void AP_Arming::set_aux_auth_passed(uint8_t auth_id)
     aux_auth_state[auth_id] = AuxAuthStates::AUTH_PASSED;
 }
 
-// set auxiliary authorisation failed and provide failure message
+// 设置辅助授权失败并提供失败消息
 void AP_Arming::set_aux_auth_failed(uint8_t auth_id, const char* fail_msg)
 {
     WITH_SEMAPHORE(aux_auth_sem);
 
-    // sanity check auth_id
+    // 检查auth_id是否有效
     if (auth_id >= aux_auth_count) {
         return;
     }
 
-    // update state
+    // 更新状态
     aux_auth_state[auth_id] = AuxAuthStates::AUTH_FAILED;
 
-    // store failure message if this authoriser has the lowest auth_id
+    // 如果此授权者具有最低的auth_id,则存储失败消息
     for (uint8_t i = 0; i < auth_id; i++) {
         if (aux_auth_state[i] == AuxAuthStates::AUTH_FAILED) {
             return;
@@ -1435,9 +1542,10 @@ void AP_Arming::set_aux_auth_failed(uint8_t auth_id, const char* fail_msg)
     }
 }
 
+// 执行辅助授权检查
 bool AP_Arming::aux_auth_checks(bool display_failure)
 {
-    // handle error cases
+    // 处理错误情况
     if (aux_auth_error) {
         if (aux_auth_fail_msg == nullptr) {
             check_failed(ARMING_CHECK_AUX_AUTH, display_failure, "memory low for auxiliary authorisation");
@@ -1449,7 +1557,7 @@ bool AP_Arming::aux_auth_checks(bool display_failure)
 
     WITH_SEMAPHORE(aux_auth_sem);
 
-    // check results for each auxiliary authorisation id
+    // 检查每个辅助授权ID的结果
     bool some_failures = false;
     bool failure_msg_sent = false;
     bool waiting_for_responses = false;
@@ -1470,7 +1578,7 @@ bool AP_Arming::aux_auth_checks(bool display_failure)
         }
     }
 
-    // send failure or waiting message
+    // 发送失败或等待消息
     if (some_failures) {
         if (!failure_msg_sent) {
             check_failed(ARMING_CHECK_AUX_AUTH, display_failure, "Auxiliary authorisation refused");
@@ -1481,12 +1589,13 @@ bool AP_Arming::aux_auth_checks(bool display_failure)
         return false;
     }
 
-    // if we got this far all auxiliary checks must have passed
+    // 如果执行到这里说明所有辅助检查都通过了
     return true;
 }
 #endif  // AP_ARMING_AUX_AUTH_ENABLED
 
 #if HAL_GENERATOR_ENABLED
+// 执行发电机检查
 bool AP_Arming::generator_checks(bool display_failure) const
 {
     const AP_Generator *generator = AP::generator();
@@ -1503,7 +1612,7 @@ bool AP_Arming::generator_checks(bool display_failure) const
 #endif  // HAL_GENERATOR_ENABLED
 
 #if AP_OPENDRONEID_ENABLED
-// OpenDroneID Checks
+// 执行OpenDroneID检查
 bool AP_Arming::opendroneid_checks(bool display_failure)
 {
     auto &opendroneid = AP::opendroneid();
@@ -1517,7 +1626,7 @@ bool AP_Arming::opendroneid_checks(bool display_failure)
 }
 #endif  // AP_OPENDRONEID_ENABLED
 
-//Check for multiple RC in serial protocols
+// 检查是否有多个串口配置为RC输入
 bool AP_Arming::serial_protocol_checks(bool display_failure)
 {
     if (AP::serialmanager().have_serial(AP_SerialManager::SerialProtocol_RCIN, 1)) {
@@ -1527,38 +1636,40 @@ bool AP_Arming::serial_protocol_checks(bool display_failure)
     return true;
 }
 
-//Check for estop
+// 检查紧急停止状态
 bool AP_Arming::estop_checks(bool display_failure)
 {
+    // 如果没有处于紧急停止状态,则通过检查
     if (!SRV_Channels::get_emergency_stop()) {
-       // not emergency-stopped, so no prearm failure:
        return true;
     }
 #if AP_RC_CHANNEL_ENABLED
-    // vehicle is emergency-stopped; if this *appears* to have been done via switch then we do not fail prearms:
+    // 如果通过开关触发了紧急停止,则不会导致预解锁检查失败
     const RC_Channel *chan = rc().find_channel_for_option(RC_Channel::AUX_FUNC::ARM_EMERGENCY_STOP);
     if (chan != nullptr) {
-        // an RC channel is configured for arm_emergency_stop option, so estop maybe activated via this switch
+        // 如果配置了紧急停止开关
         if (chan->get_aux_switch_pos() == RC_Channel::AuxSwitchPos::LOW) {
-            // switch is configured and is in estop position, so likely the reason we are estopped, so no prearm failure
-            return true;  // no prearm failure
+            // 开关在紧急停止位置,可能是导致紧急停止的原因,所以不会导致预解锁检查失败
+            return true;  
         }
     }
 #endif  // AP_RC_CHANNEL_ENABLED
+    // 其他情况下报告紧急停止错误
     check_failed(display_failure,"Motors Emergency Stopped");
     return false;
 }
 
+// 执行预解锁检查
 bool AP_Arming::pre_arm_checks(bool report)
 {
 #if !APM_BUILD_COPTER_OR_HELI
+    // 如果已经解锁或不需要解锁检查,则跳过检查
     if (armed || arming_required() == Required::NO) {
-        // if we are already armed or don't need any arming checks
-        // then skip the checks
         return true;
     }
 #endif
 
+    // 执行所有预解锁检查项目
     bool checks_result = hardware_safety_check(report)
 #if HAL_HAVE_IMU_HEATER
         &  heater_min_temperature_checks(report)
@@ -1636,7 +1747,8 @@ bool AP_Arming::pre_arm_checks(bool report)
         &  serial_protocol_checks(report)
         &  estop_checks(report);
 
-    if (!checks_result && last_prearm_checks_result) { // check went from true to false
+    // 如果检查结果从通过变为失败,立即报告
+    if (!checks_result && last_prearm_checks_result) { 
         report_immediately = true;
     }
     last_prearm_checks_result = checks_result;
@@ -1644,9 +1756,11 @@ bool AP_Arming::pre_arm_checks(bool report)
     return checks_result;
 }
 
+// 执行解锁检查
 bool AP_Arming::arm_checks(AP_Arming::Method method)
 {
 #if AP_RC_CHANNEL_ENABLED
+    // 检查遥控器
     if (check_enabled(ARMING_CHECK_RC)) {
         if (!rc_arm_checks(method)) {
             return false;
@@ -1654,24 +1768,23 @@ bool AP_Arming::arm_checks(AP_Arming::Method method)
     }
 #endif
 
-    // ensure the GPS drivers are ready on any final changes
+    // 确保GPS驱动准备就绪
     if (check_enabled(ARMING_CHECK_GPS_CONFIG)) {
         if (!AP::gps().prepare_for_arming()) {
             return false;
         }
     }
 
-    // note that this will prepare AP_Logger to start logging
-    // so should be the last check to be done before arming
+    // 准备日志记录器开始记录
+    // 应该是解锁前的最后一个检查
 
-    // Note also that we need to PrepForArming() regardless of whether
-    // the arming check flag is set - disabling the arming check
-    // should not stop logging from working.
+    // 注意即使禁用了解锁检查,也需要PrepForArming()
+    // 禁用解锁检查不应该阻止日志记录工作
 
 #if HAL_LOGGING_ENABLED
     AP_Logger *logger = AP_Logger::get_singleton();
     if (logger->logging_present()) {
-        // If we're configured to log, prep it
+        // 如果配置了日志记录,准备解锁
         logger->PrepForArming();
         if (!logger->logging_started() &&
             check_enabled(ARMING_CHECK_LOGGING)) {
@@ -1685,6 +1798,7 @@ bool AP_Arming::arm_checks(AP_Arming::Method method)
 }
 
 #if !AP_GPS_BLENDED_ENABLED
+// 检查GPS混合自动切换
 bool AP_Arming::blending_auto_switch_checks(bool report)
 {
     if (AP::gps().get_auto_switch_type() == 2) {
@@ -1698,17 +1812,17 @@ bool AP_Arming::blending_auto_switch_checks(bool report)
 #endif
 
 #if AP_ARMING_CRASHDUMP_ACK_ENABLED
+// 检查崩溃转储
 bool AP_Arming::crashdump_checks(bool report)
 {
+    // 如果没有崩溃转储数据,通过检查
     if (hal.util->last_crash_dump_size() == 0) {
-        // no crash dump data
         return true;
     }
 
-    // see if the user has acknowledged the failure and wants to fly anyway:
+    // 检查用户是否确认了故障并希望继续飞行
     if (crashdump_ack.acked) {
-        // they may have acked the problem, that doesn't mean we don't
-        // continue to warn them they're on thin ice:
+        // 即使用户确认了问题,我们仍然继续警告他们处于危险状态
         if (report) {
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CrashDump data detected");
         }
@@ -1721,6 +1835,7 @@ bool AP_Arming::crashdump_checks(bool report)
 }
 #endif  // AP_ARMING_CRASHDUMP_ACK_ENABLED
 
+// 执行强制性检查
 bool AP_Arming::mandatory_checks(bool report)
 {
     bool ret = true;
@@ -1732,22 +1847,24 @@ bool AP_Arming::mandatory_checks(bool report)
     return ret;
 }
 
-//returns true if arming occurred successfully
+// 尝试解锁,成功返回true
 bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
 {
-    if (armed) { //already armed
+    // 如果已经解锁则返回false
+    if (armed) { 
         return false;
     }
 
-    running_arming_checks = true;  // so we show Arm: rather than Disarm: in messages
+    running_arming_checks = true;  // 在消息中显示Arm而不是Disarm
 
+    // 执行解锁检查
     if ((!do_arming_checks && mandatory_checks(true)) || (pre_arm_checks(true) && arm_checks(method))) {
         armed = true;
 
         _last_arm_method = method;
 
 #if HAL_LOGGING_ENABLED
-        Log_Write_Arm(!do_arming_checks, method); // note Log_Write_Armed takes forced not do_arming_checks
+        Log_Write_Arm(!do_arming_checks, method); // 注意Log_Write_Armed接受forced而不是do_arming_checks
 #endif
 
     } else {
@@ -1759,12 +1876,13 @@ bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
 
     running_arming_checks = false;
 
+    // 如果解锁检查被禁用,显示警告
     if (armed && do_arming_checks && checks_to_perform == 0) {
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Warning: Arming Checks Disabled");
     }
     
 #if HAL_GYROFFT_ENABLED
-    // make sure the FFT subsystem is enabled if arming checks have been disabled
+    // 如果解锁检查被禁用,确保FFT子系统被启用
     AP_GyroFFT *fft = AP::fft();
     if (fft != nullptr) {
         fft->prepare_for_arming();
@@ -1772,9 +1890,8 @@ bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
 #endif
 
 #if AP_TERRAIN_AVAILABLE
+    // 如果已解锁,告诉地形系统设置参考位置
     if (armed) {
-        // tell terrain we have just armed, so it can setup
-        // a reference location for terrain adjustment
         auto *terrain = AP::terrain();
         if (terrain != nullptr) {
             terrain->set_reference_location();
@@ -1783,6 +1900,7 @@ bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
 #endif
 
 #if AP_FENCE_ENABLED
+    // 如果已解锁,自动启用地理围栏
     if (armed) {
         auto *fence = AP::fence();
         if (fence != nullptr) {
@@ -1796,22 +1914,24 @@ bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
     return armed;
 }
 
-//returns true if disarming occurred successfully
+// 尝试加锁,成功返回true
 bool AP_Arming::disarm(const AP_Arming::Method method, bool do_disarm_checks)
 {
-    if (!armed) { // already disarmed
+    // 如果已经加锁则返回false
+    if (!armed) { 
         return false;
     }
     armed = false;
     _last_disarm_method = method;
 
 #if HAL_LOGGING_ENABLED
-    Log_Write_Disarm(!do_disarm_checks, method);  // Log_Write_Disarm takes "force"
+    Log_Write_Disarm(!do_disarm_checks, method);  // Log_Write_Disarm接受"force"参数
 
     check_forced_logging(method);
 #endif
 
 #if HAL_HAVE_SAFETY_SWITCH
+    // 如果配置了加锁时启用安全开关,则强制启用安全开关
     AP_BoardConfig *board_cfg = AP_BoardConfig::get_singleton();
     if ((board_cfg != nullptr) &&
         (board_cfg->get_safety_button_options() & AP_BoardConfig::BOARD_SAFETY_OPTION_SAFETY_ON_DISARM)) {
@@ -1820,6 +1940,7 @@ bool AP_Arming::disarm(const AP_Arming::Method method, bool do_disarm_checks)
 #endif // HAL_HAVE_SAFETY_SWITCH
 
 #if HAL_GYROFFT_ENABLED
+    // 加锁时保存FFT参数
     AP_GyroFFT *fft = AP::fft();
     if (fft != nullptr) {
         fft->save_params_on_disarm();
@@ -1827,38 +1948,46 @@ bool AP_Arming::disarm(const AP_Arming::Method method, bool do_disarm_checks)
 #endif
 
 #if AP_FENCE_ENABLED
+    // 加锁时自动禁用地理围栏
     AC_Fence *fence = AP::fence();
     if (fence != nullptr) {
         fence->auto_disable_fence_on_disarming();
     }
 #endif
 #if defined(HAL_ARM_GPIO_PIN)
+    // 更新GPIO引脚状态
     update_arm_gpio();
 #endif
     return true;
 }
 
 #if defined(HAL_ARM_GPIO_PIN)
+// 更新GPIO引脚状态以反映当前的解锁状态
 void AP_Arming::update_arm_gpio()
 {
     if (!AP_BoardConfig::arming_gpio_disabled()) {
+        // 根据解锁状态和极性设置GPIO引脚电平
         hal.gpio->write(HAL_ARM_GPIO_PIN, HAL_ARM_GPIO_POL_INVERT ? !armed : armed);
     }
 }
 #endif
 
+// 发送解锁/加锁状态变化的消息
 void AP_Arming::send_arm_disarm_statustext(const char *str) const
 {
+    // 如果禁用了状态变化消息则直接返回
     if (option_enabled(AP_Arming::Option::DISABLE_STATUSTEXT_ON_STATE_CHANGE)) {
         return;
     }
+    // 发送状态变化消息
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "%s", str);
 }
 
+// 获取是否需要解锁
 AP_Arming::Required AP_Arming::arming_required() const
 {
 #if AP_OPENDRONEID_ENABLED
-    // cannot be disabled if OpenDroneID is present
+    // 如果启用了OpenDroneID,则不能禁用解锁要求
     if (AP_OpenDroneID::get_singleton() != nullptr && AP::opendroneid().enabled()) {
         if (require != Required::YES_MIN_PWM && require != Required::YES_ZERO_PWM) {
             return Required::YES_MIN_PWM;
@@ -1869,23 +1998,25 @@ AP_Arming::Required AP_Arming::arming_required() const
 }
 
 #if AP_RC_CHANNEL_ENABLED
-// Copter and sub share the same RC input limits
-// Copter checks that min and max have been configured by default, Sub does not
+// 执行Copter和Sub共用的遥控器输入限制检查
+// Copter默认检查最小和最大值是否已配置,Sub不检查
 bool AP_Arming::rc_checks_copter_sub(const bool display_failure, const RC_Channel *channels[4]) const
 {
-    // set rc-checks to success if RC checks are disabled
+    // 如果禁用了遥控器检查则返回成功
     if (!check_enabled(ARMING_CHECK_RC)) {
         return true;
     }
 
     bool ret = true;
 
+    // 通道名称数组
     const char *channel_names[] = { "Roll", "Pitch", "Throttle", "Yaw" };
 
+    // 检查每个通道
     for (uint8_t i=0; i<ARRAY_SIZE(channel_names);i++) {
         const RC_Channel *channel = channels[i];
         const char *channel_name = channel_names[i];
-        // check if radio has been calibrated
+        // 检查遥控器是否已校准
         if (channel->get_radio_min() > RC_Channel::RC_CALIB_MIN_LIMIT_PWM) {
             check_failed(ARMING_CHECK_RC, display_failure, "%s radio min too high", channel_name);
             ret = false;
@@ -1900,9 +2031,10 @@ bool AP_Arming::rc_checks_copter_sub(const bool display_failure, const RC_Channe
 #endif  // AP_RC_CHANNEL_ENABLED
 
 #if HAL_VISUALODOM_ENABLED
-// check visual odometry is working
+// 检查视觉里程计是否工作正常
 bool AP_Arming::visodom_checks(bool display_failure) const
 {
+    // 如果禁用了视觉检查则返回成功
     if (!check_enabled(ARMING_CHECK_VISION)) {
         return true;
     }
@@ -1921,21 +2053,28 @@ bool AP_Arming::visodom_checks(bool display_failure) const
 #endif
 
 #if AP_RC_CHANNEL_ENABLED
-// check disarm switch is asserted
+// 检查加锁开关是否已按下
+// 检查加锁开关状态
 bool AP_Arming::disarm_switch_checks(bool display_failure) const
 {
+    // 查找配置为加锁功能的遥控通道
     const RC_Channel *chan = rc().find_channel_for_option(RC_Channel::AUX_FUNC::DISARM);
+    // 如果找到加锁通道且开关位于高位
     if (chan != nullptr &&
         chan->get_aux_switch_pos() == RC_Channel::AuxSwitchPos::HIGH) {
+        // 报告加锁开关打开错误
         check_failed(display_failure, "Disarm Switch on");
+        // 返回检查失败
         return false;
     }
 
+    // 加锁开关检查通过
     return true;
 }
 #endif  // AP_RC_CHANNEL_ENABLED
 
 #if HAL_LOGGING_ENABLED
+// 记录解锁事件
 void AP_Arming::Log_Write_Arm(const bool forced, const AP_Arming::Method method)
 {
     const struct log_Arm_Disarm pkt {
@@ -1950,6 +2089,7 @@ void AP_Arming::Log_Write_Arm(const bool forced, const AP_Arming::Method method)
     AP::logger().Write_Event(LogEvent::ARMED);
 }
 
+// 记录加锁事件
 void AP_Arming::Log_Write_Disarm(const bool forced, const AP_Arming::Method method)
 {
     const struct log_Arm_Disarm pkt {
@@ -1964,10 +2104,10 @@ void AP_Arming::Log_Write_Disarm(const bool forced, const AP_Arming::Method meth
     AP::logger().Write_Event(LogEvent::DISARMED);
 }
 
-// check if we should keep logging after disarming
+// 检查加锁后是否应该继续记录日志
 void AP_Arming::check_forced_logging(const AP_Arming::Method method)
 {
-    // keep logging if disarmed for a bad reason
+    // 如果是因为故障而加锁则继续记录日志
     switch(method) {
         case Method::TERMINATION:
         case Method::CPUFAILSAFE:
@@ -1989,7 +2129,7 @@ void AP_Arming::check_forced_logging(const AP_Arming::Method method)
         case Method::PILOT_INPUT_FAILSAFE:
         case Method::DEADRECKON_FAILSAFE:
         case Method::BLACKBOX:
-            // keep logging for longer if disarmed for a bad reason
+            // 如果是因为故障而加锁,则继续记录日志
             AP::logger().set_long_log_persist(true);
             return;
 
@@ -2010,17 +2150,17 @@ void AP_Arming::check_forced_logging(const AP_Arming::Method method)
         case Method::LANDING:
         case Method::DDS:
         case Method::UNKNOWN:
+            // 如果是正常加锁,则停止记录日志
             AP::logger().set_long_log_persist(false);
             return;
     }
 }
 #endif  // HAL_LOGGING_ENABLED
 
+// AP_Arming单例指针
 AP_Arming *AP_Arming::_singleton = nullptr;
 
-/*
- * Get the AP_Arming singleton
- */
+// 获取AP_Arming单例
 AP_Arming *AP_Arming::get_singleton()
 {
     return AP_Arming::_singleton;
@@ -2028,6 +2168,7 @@ AP_Arming *AP_Arming::get_singleton()
 
 namespace AP {
 
+// 获取AP_Arming单例的引用
 AP_Arming &arming()
 {
     return *AP_Arming::get_singleton();

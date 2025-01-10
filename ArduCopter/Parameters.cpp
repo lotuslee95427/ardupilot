@@ -338,11 +338,12 @@ const AP_Param::Info Copter::var_info[] = {
     GOBJECT(arming,                 "ARMING_", AP_Arming_Copter),
 
     // @Param: DISARM_DELAY
-    // @DisplayName: Disarm delay
-    // @Description: Delay before automatic disarm in seconds after landing touchdown detection. A value of zero disables auto disarm. If Emergency Motor stop active, delay time is half this value.
+    // @DisplayName: 锁定延时
+    // @Description: 着陆检测到触地后自动锁定前的延时时间(秒)。设为0则禁用自动锁定。如果紧急电机停止激活,延时时间减半。
     // @Units: s
     // @Range: 0 127
     // @User: Advanced
+    // 定义自动锁定延时参数,默认值为AUTO_DISARMING_DELAY
     GSCALAR(disarm_delay, "DISARM_DELAY",           AUTO_DISARMING_DELAY),
     
     // @Param: ANGLE_MAX

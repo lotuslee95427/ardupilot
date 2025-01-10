@@ -12,6 +12,31 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+   AP_MotorsTailsitter.cpp - 尾座式飞行器电机控制类实现文件
+
+   该类实现了尾座式飞行器和双轴飞行器的电机控制功能:
+
+   主要功能:
+   - 初始化差动推力电机和倾转舵机
+   - 设置电机更新频率
+   - 输出控制信号到电机和舵机
+   - 支持差动推力控制
+   - 支持倾转电机控制
+   - 支持基于盘载荷的最小出流速度限制
+
+   电机配置:
+   - 通道1: 右侧推力电机
+   - 通道2: 左侧推力电机
+   - 通道3: 右侧倾转舵机
+   - 通道4: 左侧倾转舵机
+
+   关键参数:
+   - 舵机输出范围:±4500
+   - 支持差动推力控制
+   - 支持倾转电机控制
+   - 支持外部设置最小油门值
+*/
 
 /*
  *       AP_MotorsTailsitter.cpp - ArduCopter motors library for tailsitters and bicopters
