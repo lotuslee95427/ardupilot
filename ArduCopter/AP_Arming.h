@@ -23,7 +23,14 @@ public:
     bool rc_calibration_checks(bool display_failure) override;
 
     // 锁定和解锁电机的方法
+    // 锁定电机
+    // method: 锁定方法(如遥控器、地面站等)
+    // do_disarm_checks: 是否执行锁定前的检查,默认为true
     bool disarm(AP_Arming::Method method, bool do_disarm_checks=true) override;
+
+    // 解锁电机
+    // method: 解锁方法(如遥控器、地面站等) 
+    // do_arming_checks: 是否执行解锁前的检查,默认为true
     bool arm(AP_Arming::Method method, bool do_arming_checks=true) override;
 
 protected:

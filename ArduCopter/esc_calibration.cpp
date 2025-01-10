@@ -148,36 +148,42 @@ void Copter::esc_calibration_notify()
     }
 }
 
+// ESC校准设置函数
 void Copter::esc_calibration_setup()
 {
-    // clear esc flag for next time
+    // 清除ESC校准标志位,为下次校准做准备
     g.esc_calibrate.set_and_save(ESCCAL_NONE);
 
     if (motors->is_normal_pwm_type()) {
-        // run at full speed for oneshot ESCs (actually done on push)
+        // 对于oneshot类型的ESC,以最大速率运行(实际在push时执行)
         motors->set_update_rate(g.rc_speed);
     } else {
-        // reduce update rate to motors to 50Hz
+        // 对于其他类型ESC,将更新率降至50Hz
         motors->set_update_rate(50);
     }
 
-    // disable safety if requested
+    // 如果需要,禁用安全开关
     BoardConfig.init_safety();
 
-    // wait for safety switch to be pressed
+    // 等待按下安全开关
     uint32_t tstart = 0;
     while (hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED) {
         const uint32_t tnow = AP_HAL::millis();
         if (tnow - tstart >= 5000) {
+            // 每5秒向地面站发送一次提示消息
             gcs().send_text(MAV_SEVERITY_INFO,"ESC calibration: Push safety switch");
             tstart = tnow;
         }
+        // 更新LED指示灯状态
         esc_calibration_notify();
+        // 短暂延时
         hal.scheduler->delay(3);
     }
 
-    // arm and enable motors
+    // 解锁并使能电机
     motors->armed(true);
+    // 根据电机掩码使能对应的输出通道
     SRV_Channels::enable_by_mask(motors->get_motor_mask());
+    // 设置软件解锁标志
     hal.util->set_soft_armed(true);
 }

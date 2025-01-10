@@ -620,39 +620,41 @@ bool RC_Channel::debounce_completed(int8_t position)
 }
 
 //
-// support for auxiliary switches:
+// 辅助开关相关功能支持
 //
 
-// init_aux_switch_function - initialize aux functions
+// 初始化辅助功能
+// ch_option: 通道选项
+// ch_flag: 辅助开关位置
 void RC_Channel::init_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos ch_flag)
 {
-    // init channel options
+    // 根据通道选项初始化
     switch (ch_option) {
-    // the following functions do not need to be initialised:
+    // 以下功能不需要初始化:
 #if AP_ARMING_ENABLED
-    case AUX_FUNC::ARMDISARM:
-    case AUX_FUNC::ARMDISARM_AIRMODE:
+    case AUX_FUNC::ARMDISARM:        // 解锁/上锁
+    case AUX_FUNC::ARMDISARM_AIRMODE: // 空中模式解锁/上锁
 #endif
 #if AP_BATTERY_ENABLED
-    case AUX_FUNC::BATTERY_MPPT_ENABLE:
+    case AUX_FUNC::BATTERY_MPPT_ENABLE: // 电池MPPT使能
 #endif
 #if AP_CAMERA_ENABLED
-    case AUX_FUNC::CAMERA_TRIGGER:
+    case AUX_FUNC::CAMERA_TRIGGER:    // 相机触发
 #endif
 #if AP_MISSION_ENABLED
-    case AUX_FUNC::CLEAR_WP:
+    case AUX_FUNC::CLEAR_WP:         // 清除航点
 #endif
-    case AUX_FUNC::COMPASS_LEARN:
+    case AUX_FUNC::COMPASS_LEARN:    // 指南针学习
 #if AP_ARMING_ENABLED
-    case AUX_FUNC::DISARM:
+    case AUX_FUNC::DISARM:           // 上锁
 #endif
-    case AUX_FUNC::DO_NOTHING:
+    case AUX_FUNC::DO_NOTHING:       // 无动作
 #if AP_LANDINGGEAR_ENABLED
-    case AUX_FUNC::LANDING_GEAR:
+    case AUX_FUNC::LANDING_GEAR:     // 起落架
 #endif
-    case AUX_FUNC::LOST_VEHICLE_SOUND:
+    case AUX_FUNC::LOST_VEHICLE_SOUND: // 丢失飞行器声音
 #if AP_SERVORELAYEVENTS_ENABLED && AP_RELAY_ENABLED
-    case AUX_FUNC::RELAY:
+    case AUX_FUNC::RELAY:            // 继电器1-6
     case AUX_FUNC::RELAY2:
     case AUX_FUNC::RELAY3:
     case AUX_FUNC::RELAY4:
@@ -660,23 +662,23 @@ void RC_Channel::init_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos 
     case AUX_FUNC::RELAY6:
 #endif
 #if HAL_VISUALODOM_ENABLED
-    case AUX_FUNC::VISODOM_ALIGN:
+    case AUX_FUNC::VISODOM_ALIGN:    // 视觉里程计对齐
 #endif
 #if AP_AHRS_ENABLED
-    case AUX_FUNC::EKF_LANE_SWITCH:
-    case AUX_FUNC::EKF_YAW_RESET:
+    case AUX_FUNC::EKF_LANE_SWITCH:  // EKF通道切换
+    case AUX_FUNC::EKF_YAW_RESET:    // EKF偏航重置
 #endif
 #if HAL_GENERATOR_ENABLED
-    case AUX_FUNC::GENERATOR: // don't turn generator on or off initially
+    case AUX_FUNC::GENERATOR:        // 发电机控制
 #endif
 #if AP_AHRS_ENABLED
-    case AUX_FUNC::EKF_SOURCE_SET:
+    case AUX_FUNC::EKF_SOURCE_SET:   // 设置EKF源
 #endif
 #if HAL_TORQEEDO_ENABLED
-    case AUX_FUNC::TORQEEDO_CLEAR_ERR:
+    case AUX_FUNC::TORQEEDO_CLEAR_ERR: // 清除Torqeedo错误
 #endif
 #if AP_SCRIPTING_ENABLED
-    case AUX_FUNC::SCRIPTING_1:
+    case AUX_FUNC::SCRIPTING_1:      // 脚本功能1-8
     case AUX_FUNC::SCRIPTING_2:
     case AUX_FUNC::SCRIPTING_3:
     case AUX_FUNC::SCRIPTING_4:
@@ -686,94 +688,95 @@ void RC_Channel::init_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos 
     case AUX_FUNC::SCRIPTING_8:
 #endif
 #if AP_VIDEOTX_ENABLED
-    case AUX_FUNC::VTX_POWER:
+    case AUX_FUNC::VTX_POWER:        // 图传功率控制
 #endif
 #if AP_OPTICALFLOW_CALIBRATOR_ENABLED
-    case AUX_FUNC::OPTFLOW_CAL:
+    case AUX_FUNC::OPTFLOW_CAL:      // 光流校准
 #endif
-    case AUX_FUNC::TURBINE_START:
+    case AUX_FUNC::TURBINE_START:    // 涡轮启动
 #if HAL_MOUNT_ENABLED
-    case AUX_FUNC::MOUNT1_ROLL:
-    case AUX_FUNC::MOUNT1_PITCH:
-    case AUX_FUNC::MOUNT1_YAW:
-    case AUX_FUNC::MOUNT2_ROLL:
-    case AUX_FUNC::MOUNT2_PITCH:
-    case AUX_FUNC::MOUNT2_YAW:
+    case AUX_FUNC::MOUNT1_ROLL:      // 云台1横滚
+    case AUX_FUNC::MOUNT1_PITCH:     // 云台1俯仰
+    case AUX_FUNC::MOUNT1_YAW:       // 云台1偏航
+    case AUX_FUNC::MOUNT2_ROLL:      // 云台2横滚
+    case AUX_FUNC::MOUNT2_PITCH:     // 云台2俯仰
+    case AUX_FUNC::MOUNT2_YAW:       // 云台2偏航
 #endif
 #if HAL_GENERATOR_ENABLED
-    case AUX_FUNC::LOWEHEISER_STARTER:
+    case AUX_FUNC::LOWEHEISER_STARTER: // Loweheiser启动器
 #endif
 #if COMPASS_CAL_ENABLED
-    case AUX_FUNC::MAG_CAL:
+    case AUX_FUNC::MAG_CAL:          // 磁罗盘校准
 #endif
 #if AP_CAMERA_ENABLED
-    case AUX_FUNC::CAMERA_IMAGE_TRACKING:
+    case AUX_FUNC::CAMERA_IMAGE_TRACKING: // 相机图像跟踪
 #endif
 #if HAL_MOUNT_ENABLED
-    case AUX_FUNC::MOUNT_LRF_ENABLE:
+    case AUX_FUNC::MOUNT_LRF_ENABLE: // 云台激光测距使能
 #endif
 #if HAL_GENERATOR_ENABLED
-    case AUX_FUNC::LOWEHEISER_THROTTLE:
+    case AUX_FUNC::LOWEHEISER_THROTTLE: // Loweheiser油门
 #endif
         break;
 
 #if HAL_ADSB_ENABLED
-    case AUX_FUNC::AVOID_ADSB:
+    case AUX_FUNC::AVOID_ADSB:       // ADSB避障
 #endif
-    case AUX_FUNC::AVOID_PROXIMITY:
+    case AUX_FUNC::AVOID_PROXIMITY:   // 接近避障
 #if AP_FENCE_ENABLED
-    case AUX_FUNC::FENCE:
+    case AUX_FUNC::FENCE:            // 地理围栏
 #endif
 #if AP_GPS_ENABLED
-    case AUX_FUNC::GPS_DISABLE:
-    case AUX_FUNC::GPS_DISABLE_YAW:
+    case AUX_FUNC::GPS_DISABLE:      // 禁用GPS
+    case AUX_FUNC::GPS_DISABLE_YAW:  // 禁用GPS偏航
 #endif
 #if AP_GRIPPER_ENABLED
-    case AUX_FUNC::GRIPPER:
+    case AUX_FUNC::GRIPPER:          // 抓取器
 #endif
 #if AP_INERTIALSENSOR_KILL_IMU_ENABLED
-    case AUX_FUNC::KILL_IMU1:
+    case AUX_FUNC::KILL_IMU1:        // 关闭IMU1-3
     case AUX_FUNC::KILL_IMU2:
     case AUX_FUNC::KILL_IMU3:
 #endif
 #if AP_MISSION_ENABLED
-    case AUX_FUNC::MISSION_RESET:
+    case AUX_FUNC::MISSION_RESET:    // 任务重置
 #endif
-    case AUX_FUNC::MOTOR_ESTOP:
-    case AUX_FUNC::RC_OVERRIDE_ENABLE:
+    case AUX_FUNC::MOTOR_ESTOP:      // 电机紧急停止
+    case AUX_FUNC::RC_OVERRIDE_ENABLE: // 遥控器覆盖使能
 #if HAL_RUNCAM_ENABLED
-    case AUX_FUNC::RUNCAM_CONTROL:
-    case AUX_FUNC::RUNCAM_OSD_CONTROL:
+    case AUX_FUNC::RUNCAM_CONTROL:   // RunCam控制
+    case AUX_FUNC::RUNCAM_OSD_CONTROL: // RunCam OSD控制
 #endif
 #if HAL_SPRAYER_ENABLED
-    case AUX_FUNC::SPRAYER:
+    case AUX_FUNC::SPRAYER:          // 喷洒器
 #endif
 #if AP_AIRSPEED_ENABLED
-    case AUX_FUNC::DISABLE_AIRSPEED_USE:
+    case AUX_FUNC::DISABLE_AIRSPEED_USE: // 禁用空速计
 #endif
-    case AUX_FUNC::FFT_NOTCH_TUNE:
+    case AUX_FUNC::FFT_NOTCH_TUNE:   // FFT陷波调谐
 #if HAL_MOUNT_ENABLED
-    case AUX_FUNC::RETRACT_MOUNT1:
-    case AUX_FUNC::RETRACT_MOUNT2:
-    case AUX_FUNC::MOUNT_LOCK:
+    case AUX_FUNC::RETRACT_MOUNT1:   // 收回云台1
+    case AUX_FUNC::RETRACT_MOUNT2:   // 收回云台2
+    case AUX_FUNC::MOUNT_LOCK:       // 云台锁定
 #endif
 #if HAL_LOGGING_ENABLED
-    case AUX_FUNC::LOG_PAUSE:
+    case AUX_FUNC::LOG_PAUSE:        // 暂停日志记录
 #endif
-    case AUX_FUNC::ARM_EMERGENCY_STOP:
+    case AUX_FUNC::ARM_EMERGENCY_STOP: // 紧急停止解锁
 #if AP_CAMERA_ENABLED
-    case AUX_FUNC::CAMERA_REC_VIDEO:
-    case AUX_FUNC::CAMERA_ZOOM:
-    case AUX_FUNC::CAMERA_MANUAL_FOCUS:
-    case AUX_FUNC::CAMERA_AUTO_FOCUS:
-    case AUX_FUNC::CAMERA_LENS:
+    case AUX_FUNC::CAMERA_REC_VIDEO: // 相机录像
+    case AUX_FUNC::CAMERA_ZOOM:      // 相机变焦
+    case AUX_FUNC::CAMERA_MANUAL_FOCUS: // 相机手动对焦
+    case AUX_FUNC::CAMERA_AUTO_FOCUS:   // 相机自动对焦
+    case AUX_FUNC::CAMERA_LENS:      // 相机镜头控制
 #endif
 #if AP_AHRS_ENABLED
-    case AUX_FUNC::AHRS_TYPE:
+    case AUX_FUNC::AHRS_TYPE:        // AHRS类型
         run_aux_function(ch_option, ch_flag, AuxFuncTriggerSource::INIT);
         break;
 #endif
     default:
+        // 发送初始化失败消息
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Failed to init: RC%u_OPTION: %u\n",
                         (unsigned)(this->ch_in+1), (unsigned)ch_option);
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -786,113 +789,98 @@ void RC_Channel::init_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos 
 
 #if AP_RC_CHANNEL_AUX_FUNCTION_STRINGS_ENABLED
 
+// 辅助功能名称查找表
 const RC_Channel::LookupTable RC_Channel::lookuptable[] = {
 #if AP_MISSION_ENABLED
-    { AUX_FUNC::SAVE_WP,"SaveWaypoint"},
+    { AUX_FUNC::SAVE_WP,"SaveWaypoint"},           // 保存航点
 #endif
 #if AP_CAMERA_ENABLED
-    { AUX_FUNC::CAMERA_TRIGGER,"CameraTrigger"},
+    { AUX_FUNC::CAMERA_TRIGGER,"CameraTrigger"},   // 相机触发
 #endif
 #if AP_RANGEFINDER_ENABLED
-    { AUX_FUNC::RANGEFINDER,"Rangefinder"},
+    { AUX_FUNC::RANGEFINDER,"Rangefinder"},        // 测距仪
 #endif
 #if AP_FENCE_ENABLED
-    { AUX_FUNC::FENCE,"Fence"},
+    { AUX_FUNC::FENCE,"Fence"},                    // 地理围栏
 #endif
 #if HAL_SPRAYER_ENABLED
-    { AUX_FUNC::SPRAYER,"Sprayer"},
+    { AUX_FUNC::SPRAYER,"Sprayer"},               // 喷洒器
 #endif
 #if HAL_PARACHUTE_ENABLED
-    { AUX_FUNC::PARACHUTE_ENABLE,"ParachuteEnable"},
-    { AUX_FUNC::PARACHUTE_RELEASE,"ParachuteRelease"},
-    { AUX_FUNC::PARACHUTE_3POS,"Parachute3Position"},
+    { AUX_FUNC::PARACHUTE_ENABLE,"ParachuteEnable"}, // 降落伞使能
+    { AUX_FUNC::PARACHUTE_RELEASE,"ParachuteRelease"}, // 降落伞释放
+    { AUX_FUNC::PARACHUTE_3POS,"Parachute3Position"}, // 降落伞三位置
 #endif
 #if AP_MISSION_ENABLED
-    { AUX_FUNC::MISSION_RESET,"MissionReset"},
+    { AUX_FUNC::MISSION_RESET,"MissionReset"},     // 任务重置
 #endif
 #if HAL_MOUNT_ENABLED
-    { AUX_FUNC::RETRACT_MOUNT1,"RetractMount1"},
-    { AUX_FUNC::RETRACT_MOUNT2,"RetractMount2"},
+    { AUX_FUNC::RETRACT_MOUNT1,"RetractMount1"},   // 收回云台1
+    { AUX_FUNC::RETRACT_MOUNT2,"RetractMount2"},   // 收回云台2
 #endif
 #if AP_SERVORELAYEVENTS_ENABLED && AP_RELAY_ENABLED
-    { AUX_FUNC::RELAY,"Relay1"},
+    { AUX_FUNC::RELAY,"Relay1"},                   // 继电器1
 #endif
-    { AUX_FUNC::MOTOR_ESTOP,"MotorEStop"},
-    { AUX_FUNC::MOTOR_INTERLOCK,"MotorInterlock"},
+    { AUX_FUNC::MOTOR_ESTOP,"MotorEStop"},         // 电机紧急停止
+    { AUX_FUNC::MOTOR_INTERLOCK,"MotorInterlock"}, // 电机联锁
 #if AP_SERVORELAYEVENTS_ENABLED && AP_RELAY_ENABLED
-    { AUX_FUNC::RELAY2,"Relay2"},
-    { AUX_FUNC::RELAY3,"Relay3"},
-    { AUX_FUNC::RELAY4,"Relay4"},
+    { AUX_FUNC::RELAY2,"Relay2"},                  // 继电器2
+    { AUX_FUNC::RELAY3,"Relay3"},                  // 继电器3
+    { AUX_FUNC::RELAY4,"Relay4"},                  // 继电器4
 #endif
-    { AUX_FUNC::PRECISION_LOITER,"PrecisionLoiter"},
-    { AUX_FUNC::AVOID_PROXIMITY,"AvoidProximity"},
+    { AUX_FUNC::PRECISION_LOITER,"PrecisionLoiter"}, // 精确悬停
+    { AUX_FUNC::AVOID_PROXIMITY,"AvoidProximity"}, // 接近避障
 #if AP_WINCH_ENABLED
-    { AUX_FUNC::WINCH_ENABLE,"WinchEnable"},
-    { AUX_FUNC::WINCH_CONTROL,"WinchControl"},
+    { AUX_FUNC::WINCH_ENABLE,"WinchEnable"},       // 绞车使能
+    { AUX_FUNC::WINCH_CONTROL,"WinchControl"},     // 绞车控制
 #endif
 #if AP_MISSION_ENABLED
-    { AUX_FUNC::CLEAR_WP,"ClearWaypoint"},
+    { AUX_FUNC::CLEAR_WP,"ClearWaypoint"},         // 清除航点
 #endif
-    { AUX_FUNC::COMPASS_LEARN,"CompassLearn"},
-    { AUX_FUNC::SAILBOAT_TACK,"SailboatTack"},
+    { AUX_FUNC::COMPASS_LEARN,"CompassLearn"},     // 指南针学习
+    { AUX_FUNC::SAILBOAT_TACK,"SailboatTack"},     // 帆船抢风
 #if AP_GPS_ENABLED
-    { AUX_FUNC::GPS_DISABLE,"GPSDisable"},
-    { AUX_FUNC::GPS_DISABLE_YAW,"GPSDisableYaw"},
+    { AUX_FUNC::GPS_DISABLE,"GPSDisable"},         // 禁用GPS
+    { AUX_FUNC::GPS_DISABLE_YAW,"GPSDisableYaw"},  // 禁用GPS偏航
 #endif
 #if AP_AIRSPEED_ENABLED
-    { AUX_FUNC::DISABLE_AIRSPEED_USE,"DisableAirspeedUse"},
+    { AUX_FUNC::DISABLE_AIRSPEED_USE,"DisableAirspeedUse"}, // 禁用空速计
 #endif
 #if AP_SERVORELAYEVENTS_ENABLED && AP_RELAY_ENABLED
-    { AUX_FUNC::RELAY5,"Relay5"},
-    { AUX_FUNC::RELAY6,"Relay6"},
+    { AUX_FUNC::RELAY5,"Relay5"},                  // 继电器5
+    { AUX_FUNC::RELAY6,"Relay6"},                  // 继电器6
 #endif
-    { AUX_FUNC::SAILBOAT_MOTOR_3POS,"SailboatMotor"},
-    { AUX_FUNC::SURFACE_TRACKING,"SurfaceTracking"},
+    { AUX_FUNC::SAILBOAT_MOTOR_3POS,"SailboatMotor"}, // 帆船电机
+    { AUX_FUNC::SURFACE_TRACKING,"SurfaceTracking"}, // 表面跟踪
 #if HAL_RUNCAM_ENABLED
-    { AUX_FUNC::RUNCAM_CONTROL,"RunCamControl"},
-    { AUX_FUNC::RUNCAM_OSD_CONTROL,"RunCamOSDControl"},
+    { AUX_FUNC::RUNCAM_CONTROL,"RunCamControl"},   // RunCam控制
+    { AUX_FUNC::RUNCAM_OSD_CONTROL,"RunCamOSDControl"}, // RunCam OSD控制
 #endif
 #if HAL_VISUALODOM_ENABLED
-    { AUX_FUNC::VISODOM_ALIGN,"VisOdomAlign"},
+    { AUX_FUNC::VISODOM_ALIGN,"VisOdomAlign"},     // 视觉里程计对齐
 #endif
-    { AUX_FUNC::AIRMODE, "AirMode"},
+    { AUX_FUNC::AIRMODE, "AirMode"},               // 空中模式
 #if AP_CAMERA_ENABLED
-    { AUX_FUNC::CAM_MODE_TOGGLE,"CamModeToggle"},
+    { AUX_FUNC::CAM_MODE_TOGGLE,"CamModeToggle"},  // 相机模式切换
 #endif
 #if HAL_GENERATOR_ENABLED
-    { AUX_FUNC::GENERATOR,"Generator"},
+    { AUX_FUNC::GENERATOR,"Generator"},            // 发电机
 #endif
 #if AP_BATTERY_ENABLED
-    { AUX_FUNC::BATTERY_MPPT_ENABLE,"Battery MPPT Enable"},
+    { AUX_FUNC::BATTERY_MPPT_ENABLE,"Battery MPPT Enable"}, // 电池MPPT使能
 #endif
 #if AP_AIRSPEED_AUTOCAL_ENABLE
-    { AUX_FUNC::ARSPD_CALIBRATE,"Calibrate Airspeed"},
+    { AUX_FUNC::ARSPD_CALIBRATE,"Calibrate Airspeed"}, // 空速校准
 #endif
 #if HAL_TORQEEDO_ENABLED
-    { AUX_FUNC::TORQEEDO_CLEAR_ERR, "Torqeedo Clear Err"},
+    { AUX_FUNC::TORQEEDO_CLEAR_ERR, "Torqeedo Clear Err"}, // 清除Torqeedo错误
 #endif
-    { AUX_FUNC::EMERGENCY_LANDING_EN, "Emergency Landing"},
-    { AUX_FUNC::WEATHER_VANE_ENABLE, "Weathervane"},
-    { AUX_FUNC::TURBINE_START, "Turbine Start"},
-    { AUX_FUNC::FFT_NOTCH_TUNE, "FFT Notch Tuning"},
+    { AUX_FUNC::EMERGENCY_LANDING_EN, "Emergency Landing"}, // 紧急着陆
+    { AUX_FUNC::WEATHER_VANE_ENABLE, "Weathervane"}, // 风向标
+    { AUX_FUNC::TURBINE_START, "Turbine Start"},   // 涡轮启动
+    { AUX_FUNC::FFT_NOTCH_TUNE, "FFT Notch Tuning"}, // FFT陷波调谐
 #if HAL_MOUNT_ENABLED
-    { AUX_FUNC::MOUNT_LOCK, "MountLock"},
-#endif
-#if HAL_LOGGING_ENABLED
-    { AUX_FUNC::LOG_PAUSE, "Pause Stream Logging"},
-#endif
-#if AP_CAMERA_ENABLED
-    { AUX_FUNC::CAMERA_REC_VIDEO, "Camera Record Video"},
-    { AUX_FUNC::CAMERA_ZOOM, "Camera Zoom"},
-    { AUX_FUNC::CAMERA_MANUAL_FOCUS, "Camera Manual Focus"},
-    { AUX_FUNC::CAMERA_AUTO_FOCUS, "Camera Auto Focus"},
-    { AUX_FUNC::CAMERA_IMAGE_TRACKING, "Camera Image Tracking"},
-    { AUX_FUNC::CAMERA_LENS, "Camera Lens"},
-#endif
-#if HAL_MOUNT_ENABLED
-    { AUX_FUNC::MOUNT_LRF_ENABLE, "Mount LRF Enable"},
-#endif
-};
+    { AUX_FUNC::MOUNT_LOCK, "MountLock"},          // 云台
 
 /* lookup the announcement for switch change */
 const char *RC_Channel::string_for_aux_function(AUX_FUNC function) const
@@ -1578,20 +1566,26 @@ bool RC_Channel::do_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos ch
         AP::gps().set_force_disable_yaw(ch_flag == AuxSwitchPos::HIGH);
         break;
 #endif  // AP_GPS_ENABLED
-
 #if AP_AIRSPEED_ENABLED
+    // 禁用空速计使用功能
     case AUX_FUNC::DISABLE_AIRSPEED_USE: {
+        // 获取空速计实例
         AP_Airspeed *airspeed = AP::airspeed();
+        // 如果空速计不存在则退出
         if (airspeed == nullptr) {
             break;
         }
+        // 根据开关位置设置
         switch (ch_flag) {
         case AuxSwitchPos::HIGH:
+            // 高位 - 强制禁用空速计
             airspeed->force_disable_use(true);
             break;
         case AuxSwitchPos::MIDDLE:
+            // 中位 - 不做任何操作
             break;
         case AuxSwitchPos::LOW:
+            // 低位 - 允许使用空速计
             airspeed->force_disable_use(false);
             break;
         }
@@ -1599,16 +1593,20 @@ bool RC_Channel::do_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos ch
     }
 #endif
 
+    // 电机紧急停止功能
     case AUX_FUNC::MOTOR_ESTOP:
+        // 根据开关位置设置
         switch (ch_flag) {
         case AuxSwitchPos::HIGH: {
+            // 高位 - 启用紧急停止
             SRV_Channels::set_emergency_stop(true);
             break;
         }
         case AuxSwitchPos::MIDDLE:
-            // nothing
+            // 中位 - 不做任何操作
             break;
         case AuxSwitchPos::LOW: {
+            // 低位 - 解除紧急停止
             SRV_Channels::set_emergency_stop(false);
             break;
         }
@@ -1794,19 +1792,24 @@ bool RC_Channel::do_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos ch
     }
 #endif
 
+    // 紧急停止解锁功能
     case AUX_FUNC::ARM_EMERGENCY_STOP: {
         switch (ch_flag) {
         case AuxSwitchPos::HIGH:
-            // request arm, disable emergency motor stop
+            // 开关在高位时:
+            // 1. 解除电机紧急停止
+            // 2. 请求通过辅助开关解锁
             SRV_Channels::set_emergency_stop(false);
             AP::arming().arm(AP_Arming::Method::AUXSWITCH, true);
             break;
         case AuxSwitchPos::MIDDLE:
-            // disable emergency motor stop
+            // 开关在中位时:
+            // 解除电机紧急停止
             SRV_Channels::set_emergency_stop(false);
             break;
         case AuxSwitchPos::LOW:
-            // enable emergency motor stop
+            // 开关在低位时:
+            // 启用电机紧急停止
             SRV_Channels::set_emergency_stop(true);
             break;
         }

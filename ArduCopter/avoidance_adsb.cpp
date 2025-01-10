@@ -34,18 +34,17 @@ MAV_COLLISION_ACTION AP_Avoidance_Copter::handle_avoidance(const AP_Avoidance::O
         copter.flightmode->mode_number() == Mode::Number::FLIP) {
         actual_action = MAV_COLLISION_ACTION_NONE;
     }
-
-    // if landed and we will take some kind of action, just disarm
+    // 如果飞机已着陆且需要采取避障动作,则直接解锁
     if ((actual_action > MAV_COLLISION_ACTION_REPORT) && copter.should_disarm_on_failsafe()) {
         copter.arming.disarm(AP_Arming::Method::ADSBCOLLISIONACTION);
         actual_action = MAV_COLLISION_ACTION_NONE;
     } else {
 
-        // take action based on requested action
+        // 根据请求的避障动作执行相应操作
         switch (actual_action) {
 
             case MAV_COLLISION_ACTION_RTL:
-                // attempt to switch to RTL, if this fails (i.e. flying in manual mode with bad position) do nothing
+                // 尝试切换到RTL模式,如果失败(例如在手动模式下位置不好)则不执行任何操作
                 if (failsafe_state_change) {
                     if (!copter.set_mode(Mode::Number::RTL, ModeReason::AVOIDANCE)) {
                         actual_action = MAV_COLLISION_ACTION_NONE;
@@ -54,7 +53,7 @@ MAV_COLLISION_ACTION AP_Avoidance_Copter::handle_avoidance(const AP_Avoidance::O
                 break;
 
             case MAV_COLLISION_ACTION_HOVER:
-                // attempt to switch to Loiter, if this fails (i.e. flying in manual mode with bad position) do nothing
+                // 尝试切换到悬停模式,如果失败(例如在手动模式下位置不好)则不执行任何操作
                 if (failsafe_state_change) {
                     if (!copter.set_mode(Mode::Number::LOITER, ModeReason::AVOIDANCE)) {
                         actual_action = MAV_COLLISION_ACTION_NONE;
@@ -63,26 +62,27 @@ MAV_COLLISION_ACTION AP_Avoidance_Copter::handle_avoidance(const AP_Avoidance::O
                 break;
 
             case MAV_COLLISION_ACTION_ASCEND_OR_DESCEND:
-                // climb or descend to avoid obstacle
+                // 通过上升或下降来避开障碍物
                 if (!handle_avoidance_vertical(obstacle, failsafe_state_change)) {
                     actual_action = MAV_COLLISION_ACTION_NONE;
                 }
                 break;
 
             case MAV_COLLISION_ACTION_MOVE_HORIZONTALLY:
-                // move horizontally to avoid obstacle
+                // 通过水平移动来避开障碍物
                 if (!handle_avoidance_horizontal(obstacle, failsafe_state_change)) {
                     actual_action = MAV_COLLISION_ACTION_NONE;
                 }
                 break;
 
             case MAV_COLLISION_ACTION_MOVE_PERPENDICULAR:
+                // 通过垂直移动来避开障碍物
                 if (!handle_avoidance_perpendicular(obstacle, failsafe_state_change)) {
                     actual_action = MAV_COLLISION_ACTION_NONE;
                 }
                 break;
 
-            // unsupported actions and those that require no response
+            // 不支持的动作和不需要响应的动作
             case MAV_COLLISION_ACTION_NONE:
                 return actual_action;
             case MAV_COLLISION_ACTION_REPORT:

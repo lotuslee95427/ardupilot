@@ -15,33 +15,33 @@
 // Yaw imbalance check
 #define YAW_IMBALANCE_IMAX_THRESHOLD 0.75f
 #define YAW_IMBALANCE_WARN_MS 10000
-
-// crash_check - disarms motors if a crash has been detected
-// crashes are detected by the vehicle being more than 20 degrees beyond it's angle limits continuously for more than 1 second
-// called at MAIN_LOOP_RATE
+// crash_check - 如果检测到坠机则解除电机
+// 当飞行器持续超过1秒钟偏离其角度限制超过20度时,认为发生了坠机
+// 以MAIN_LOOP_RATE频率调用
 void Copter::crash_check()
 {
-    static uint16_t crash_counter;  // number of iterations vehicle may have been crashed
+    // 记录飞行器可能已坠机的迭代次数
+    static uint16_t crash_counter;  
 
-    // return immediately if disarmed, or crash checking disabled
+    // 如果电机未解锁、已着陆或坠机检查被禁用,则立即退出
     if (!motors->armed() || ap.land_complete || g.fs_crash_check == 0) {
         crash_counter = 0;
         return;
     }
 
-    // exit immediately if in standby
+    // 如果处于待机状态则立即退出
     if (standby_active) {
         crash_counter = 0;
         return;
     }
 
-    // exit immediately if in force flying
+    // 如果处于强制飞行状态且不在着陆过程中则立即退出
     if (get_force_flying() && !flightmode->is_landing()) {
         crash_counter = 0;
         return;
     }
 
-    // return immediately if we are not in an angle stabilize flight mode or we are flipping
+    // 如果不是在角度稳定飞行模式或正在翻转则立即退出
     if (!flightmode->crash_check_enabled()) {
         crash_counter = 0;
         return;
@@ -235,64 +235,65 @@ void Copter::yaw_imbalance_check()
 #define PARACHUTE_CHECK_TRIGGER_SEC         1       // 1 second of loss of control triggers the parachute
 #define PARACHUTE_CHECK_ANGLE_DEVIATION_DEG 30.0f   // 30 degrees off from target indicates a loss of control
 
-// parachute_check - disarms motors and triggers the parachute if serious loss of control has been detected
-// vehicle is considered to have a "serious loss of control" by the vehicle being more than 30 degrees off from the target roll and pitch angles continuously for 1 second
-// called at MAIN_LOOP_RATE
+// 降落伞检查 - 如果检测到严重的控制丢失,则解除电机并触发降落伞
+// 当飞行器持续1秒钟偏离目标横滚和俯仰角度超过30度时,认为发生了"严重的控制丢失"
+// 以MAIN_LOOP_RATE频率调用
 void Copter::parachute_check()
 {
-    static uint16_t control_loss_count; // number of iterations we have been out of control
-    static int32_t baro_alt_start;
+    static uint16_t control_loss_count;  // 记录失控状态持续的迭代次数
+    static int32_t baro_alt_start;       // 记录开始失控时的气压高度
 
-    // exit immediately if parachute is not enabled
+    // 如果降落伞未启用则立即退出
     if (!parachute.enabled()) {
         return;
     }
 
-    // pass is_flying to parachute library
+    // 将飞行状态传递给降落伞库
     parachute.set_is_flying(!ap.land_complete);
 
-    // pass sink rate to parachute library
+    // 将下沉率传递给降落伞库
     parachute.set_sink_rate(-inertial_nav.get_velocity_z_up_cms() * 0.01f);
 
-    // exit immediately if in standby
+    // 如果处于待机状态则立即退出
     if (standby_active) {
         return;
     }
 
-    // call update to give parachute a chance to move servo or relay back to off position
+    // 调用update以让降落伞有机会将舵机或继电器移回关闭位置
     parachute.update();
 
-    // return immediately if motors are not armed or pilot's throttle is above zero
+    // 如果电机未解锁则立即退出
     if (!motors->armed()) {
         control_loss_count = 0;
         return;
     }
 
+    // 如果降落伞已触发释放则退出
     if (parachute.release_initiated()) {
         return;
     }
 
-    // return immediately if we are not in an angle stabilize flight mode or we are flipping
+    // 如果不是在角度稳定飞行模式或正在翻转则立即退出
     if (!flightmode->crash_check_enabled()) {
         control_loss_count = 0;
         return;
     }
 
-    // ensure we are flying
+    // 确保我们正在飞行
     if (ap.land_complete) {
         control_loss_count = 0;
         return;
     }
 
-    // ensure the first control_loss event is from above the min altitude
+    // 确保第一次控制丢失事件发生在最小高度之上
     if (control_loss_count == 0 && parachute.alt_min() != 0 && (current_loc.alt < (int32_t)parachute.alt_min() * 100)) {
         return;
     }
 
-    // trigger parachute release based on sink rate
+    // 基于下沉率触发降落伞释放
     parachute.check_sink_rate();
 
-    // check for angle error over 30 degrees
+    // 检查角度误差是否超过30度
     const float angle_error = attitude_control->get_att_error_angle_deg();
     if (angle_error <= PARACHUTE_CHECK_ANGLE_DEVIATION_DEG) {
         if (control_loss_count > 0) {
@@ -300,29 +301,29 @@ void Copter::parachute_check()
         }
         return;
     }
-
-    // increment counter
+    // 增加控制丢失计数器,但不超过触发阈值(PARACHUTE_CHECK_TRIGGER_SEC * 调度器循环频率)
     if (control_loss_count < (PARACHUTE_CHECK_TRIGGER_SEC*scheduler.get_loop_rate_hz())) {
         control_loss_count++;
     }
 
-    // record baro alt if we have just started losing control
+    // 如果刚开始丢失控制(计数器为1),记录当前气压高度作为参考值
     if (control_loss_count == 1) {
         baro_alt_start = baro_alt;
 
-    // exit if baro altitude change indicates we are not falling
+    // 如果当前气压高度大于等于初始高度,说明飞行器没有下降,退出检查
     } else if (baro_alt >= baro_alt_start) {
         control_loss_count = 0;
         return;
 
-    // To-Do: add check that the vehicle is actually falling
+    // 待办:添加检查确认飞行器确实在下降
 
-    // check if loss of control for at least 1 second
+    // 检查是否持续丢失控制超过1秒(PARACHUTE_CHECK_TRIGGER_SEC)
     } else if (control_loss_count >= (PARACHUTE_CHECK_TRIGGER_SEC*scheduler.get_loop_rate_hz())) {
-        // reset control loss counter
+        // 重置控制丢失计数器
         control_loss_count = 0;
+        // 记录错误日志:坠机检查-失控
         LOGGER_WRITE_ERROR(LogErrorSubsystem::CRASH_CHECK, LogErrorCode::CRASH_CHECK_LOSS_OF_CONTROL);
-        // release parachute
+        // 触发降落伞释放
         parachute_release();
     }
 }

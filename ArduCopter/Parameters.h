@@ -1,186 +1,166 @@
 #pragma once
 
+// 定义参数车辆名称为copter
 #define AP_PARAM_VEHICLE_NAME copter
 
+// 包含必要的头文件
 #include <AP_Common/AP_Common.h>
 #include "RC_Channel.h"
 #include <AP_Proximity/AP_Proximity.h>
 
+// 如果启用了FOLLOW模式,包含AP_Follow头文件
 #if MODE_FOLLOW_ENABLED
  # include <AP_Follow/AP_Follow.h>
 #endif
+// 如果启用了天气标功能,包含AC_WeatherVane头文件
 #if WEATHERVANE_ENABLED
  #include <AC_AttitudeControl/AC_WeatherVane.h>
 #endif
 
-// Global parameter class.
-//
+// 全局参数类
 class Parameters {
 public:
-    // The version of the layout as described by the parameter enum.
-    //
-    // When changing the parameter enum in an incompatible fashion, this
-    // value should be incremented by one.
-    //
-    // The increment will prevent old parameters from being used incorrectly
-    // by newer code.
-    //
+    // 参数布局版本号
+    // 当参数枚举发生不兼容的变化时,此值应该加1
+    // 这可以防止旧参数被新代码错误使用
     static const uint16_t        k_format_version = 120;
 
-    // Parameter identities.
+    // 参数标识符
+    // 这里定义的枚举用于确保每个参数或参数组都有唯一的ID号
+    // AP_Param使用此ID在EEPROM中存储和定位参数
     //
-    // The enumeration defined here is used to ensure that every parameter
-    // or parameter group has a unique ID number.  This number is used by
-    // AP_Param to store and locate parameters in EEPROM.
+    // 注意:没有编号的条目会被分配前一个条目之后的下一个编号
+    // 添加新条目时,确保它们不会重叠
     //
-    // Note that entries without a number are assigned the next number after
-    // the entry preceding them. When adding new entries, ensure that they
-    // don't overlap.
+    // 尝试将相关变量分组,并在枚举中为它们分配一个范围
+    // 将这些组按数字顺序放在枚举的末尾
     //
-    // Try to group related variables together, and assign them a set
-    // range in the enumeration. Place these groups in numerical order
-    // at the end of the enumeration.
-    //
-    // WARNING: Care should be taken when editing this enumeration as the
-    //          AP_Param load/save code depends on the values here to identify
-    //          variables saved in EEPROM.
-    //
-    //
+    // 警告:编辑此枚举时应小心,因为AP_Param加载/保存代码依赖这些值来识别EEPROM中保存的变量
     enum {
-        // Layout version number, always key zero.
-        //
+        // 布局版本号,始终是key 0
         k_param_format_version = 0,
-        k_param_software_type, // deprecated
-        k_param_ins_old,                        // *** Deprecated, remove with next eeprom number change
-        k_param_ins,                            // libraries/AP_InertialSensor variables
-        k_param_NavEKF2_old, // deprecated - remove
+        k_param_software_type, // 已弃用
+        k_param_ins_old,                        // *** 已弃用,下次eeprom号码更改时删除
+        k_param_ins,                            // AP_InertialSensor库变量
+        k_param_NavEKF2_old, // 已弃用 - 删除
         k_param_NavEKF2,
-        k_param_g2, // 2nd block of parameters
+        k_param_g2, // 第二块参数
         k_param_NavEKF3,
         k_param_can_mgr,
         k_param_osd,
 
-        // simulation
+        // 仿真参数
         k_param_sitl = 10,
 
-        // barometer object (needed for SITL)
+        // 气压计对象(SITL需要)
         k_param_barometer,
 
-        // scheduler object (for debugging)
+        // 调度器对象(用于调试)
         k_param_scheduler,
 
-        // relay object
+        // 继电器对象
         k_param_relay,
 
-        // (old) EPM object
+        // (旧)EPM对象
         k_param_epm_unused,
 
-        // BoardConfig object
+        // 板配置对象
         k_param_BoardConfig,
 
-        // GPS object
+        // GPS对象
         k_param_gps,
 
-        // Parachute object
+        // 降落伞对象
         k_param_parachute,
 
-        // Landing gear object
+        // 起落架对象
         k_param_landinggear,    // 18
 
-        // Input Management object
+        // 输入管理对象
         k_param_input_manager,  // 19
 
-        // Misc
-        //
-        k_param_log_bitmask_old = 20,           // Deprecated
-        k_param_log_last_filenumber,            // *** Deprecated - remove
-                                                // with next eeprom number
-                                                // change
-        k_param_toy_yaw_rate,                   // deprecated - remove
-        k_param_crosstrack_min_distance,    // deprecated - remove with next eeprom number change
-        k_param_rssi_pin,                   // unused, replaced by rssi_ library parameters
-        k_param_throttle_accel_enabled,     // deprecated - remove
+        // 杂项参数
+        k_param_log_bitmask_old = 20,           // 已弃用
+        k_param_log_last_filenumber,            // *** 已弃用 - 下次eeprom号码更改时删除
+        k_param_toy_yaw_rate,                   // 已弃用 - 删除
+        k_param_crosstrack_min_distance,    // 已弃用 - 下次eeprom号码更改时删除
+        k_param_rssi_pin,                   // 未使用,由rssi_库参数替代
+        k_param_throttle_accel_enabled,     // 已弃用 - 删除
         k_param_wp_yaw_behavior,
         k_param_acro_trainer,
-        k_param_pilot_speed_up,         // renamed from k_param_pilot_velocity_z_max
-        k_param_circle_rate,            // deprecated - remove
-        k_param_rangefinder_gain,       // deprecated - remove
-        k_param_ch8_option_old,         // deprecated
-        k_param_arming_check_old,       // deprecated - remove
+        k_param_pilot_speed_up,         // 从k_param_pilot_velocity_z_max重命名
+        k_param_circle_rate,            // 已弃用 - 删除
+        k_param_rangefinder_gain,       // 已弃用 - 删除
+        k_param_ch8_option_old,         // 已弃用
+        k_param_arming_check_old,       // 已弃用 - 删除
         k_param_sprayer,
         k_param_angle_max,
         k_param_gps_hdop_good,
         k_param_battery,
-        k_param_fs_batt_mah,            // unused - moved to AP_BattMonitor
-        k_param_angle_rate_max,         // remove
-        k_param_rssi_range,             // unused, replaced by rssi_ library parameters
-        k_param_rc_feel_rp,             // deprecated
-        k_param_NavEKF,                 // deprecated - remove
-        k_param_mission,                // mission library
+        k_param_fs_batt_mah,            // 未使用 - 移至AP_BattMonitor
+        k_param_angle_rate_max,         // 删除
+        k_param_rssi_range,             // 未使用,由rssi_库参数替代
+        k_param_rc_feel_rp,             // 已弃用
+        k_param_NavEKF,                 // 已弃用 - 删除
+        k_param_mission,                // 任务库
         k_param_rc_13_old,
         k_param_rc_14_old,
         k_param_rally,
         k_param_poshold_brake_rate,
         k_param_poshold_brake_angle_max,
         k_param_pilot_accel_z,
-        k_param_serial0_baud,           // deprecated - remove
-        k_param_serial1_baud,           // deprecated - remove
-        k_param_serial2_baud,           // deprecated - remove
+        k_param_serial0_baud,           // 已弃用 - 删除
+        k_param_serial1_baud,           // 已弃用 - 删除
+        k_param_serial2_baud,           // 已弃用 - 删除
         k_param_land_repositioning,
-        k_param_rangefinder, // rangefinder object
+        k_param_rangefinder, // 测距仪对象
         k_param_fs_ekf_thresh,
         k_param_terrain,
-        k_param_acro_rp_expo,           // deprecated - remove
+        k_param_acro_rp_expo,           // 已弃用 - 删除
         k_param_throttle_deadzone,
         k_param_optflow,
-        k_param_dcmcheck_thresh,        // deprecated - remove
+        k_param_dcmcheck_thresh,        // 已弃用 - 删除
         k_param_log_bitmask,
-        k_param_cli_enabled_old,        // deprecated - remove
+        k_param_cli_enabled_old,        // 已弃用 - 删除
         k_param_throttle_filt,
         k_param_throttle_behavior,
         k_param_pilot_takeoff_alt, // 64
 
-        // 65: AP_Limits Library
-        k_param_limits = 65,            // deprecated - remove
-        k_param_gpslock_limit,          // deprecated - remove
-        k_param_geofence_limit,         // deprecated - remove
-        k_param_altitude_limit,         // deprecated - remove
-        k_param_fence_old,              // only used for conversion
-        k_param_gps_glitch,             // deprecated
-        k_param_baro_glitch,            // 71 - deprecated
+        // AP_Limits库
+        k_param_limits = 65,            // 已弃用 - 删除
+        k_param_gpslock_limit,          // 已弃用 - 删除
+        k_param_geofence_limit,         // 已弃用 - 删除
+        k_param_altitude_limit,         // 已弃用 - 删除
+        k_param_fence_old,              // 仅用于转换
+        k_param_gps_glitch,             // 已弃用
+        k_param_baro_glitch,            // 71 - 已弃用
 
-        // AP_ADSB Library
+        // AP_ADSB库
         k_param_adsb,                   // 72
         k_param_notify,                 // 73
 
-        // 74: precision landing object
+        // 74: 精确着陆对象
         k_param_precland = 74,
 
-        //
-        // 75: Singlecopter, CoaxCopter
-        //
-        k_param_single_servo_1 = 75,    // remove
-        k_param_single_servo_2,         // remove
-        k_param_single_servo_3,         // remove
-        k_param_single_servo_4,         // 78 - remove
+        // 75: 单旋翼,共轴旋翼
+        k_param_single_servo_1 = 75,    // 删除
+        k_param_single_servo_2,         // 删除
+        k_param_single_servo_3,         // 删除
+        k_param_single_servo_4,         // 78 - 删除
 
-        //
-        // 80: Heli
-        //
-        k_param_heli_servo_1 = 80,  // remove
-        k_param_heli_servo_2,       // remove
-        k_param_heli_servo_3,       // remove
-        k_param_heli_servo_4,       // remove
-        k_param_heli_pitch_ff,      // remove
-        k_param_heli_roll_ff,       // remove
-        k_param_heli_yaw_ff,        // remove
-        k_param_heli_stab_col_min,  // remove
-        k_param_heli_stab_col_max,  // remove
-        k_param_heli_servo_rsc,     // 89 = full! - remove
+        // 80: 直升机
+        k_param_heli_servo_1 = 80,  // 删除
+        k_param_heli_servo_2,       // 删除
+        k_param_heli_servo_3,       // 删除
+        k_param_heli_servo_4,       // 删除
+        k_param_heli_pitch_ff,      // 删除
+        k_param_heli_roll_ff,       // 删除
+        k_param_heli_yaw_ff,        // 删除
+        k_param_heli_stab_col_min,  // 删除
+        k_param_heli_stab_col_max,  // 删除
+        k_param_heli_servo_rsc,     // 89 = 已满! - 删除
 
-        //
-        // 90: misc2
-        //
+        // 90: 杂项2
         k_param_motors = 90,
         k_param_disarm_delay,
         k_param_fs_crash_check,
@@ -192,10 +172,8 @@ public:
         // 97: RSSI
         k_param_rssi = 97,
                 
-        //
-        // 100: Inertial Nav
-        //
-        k_param_inertial_nav = 100, // deprecated
+        // 100: 惯性导航
+        k_param_inertial_nav = 100, // 已弃用
         k_param_wp_nav,
         k_param_attitude_control,
         k_param_pos_control,
@@ -203,17 +181,16 @@ public:
         k_param_loiter_nav,     // 105
         k_param_custom_control,
 
-        // 110: Telemetry control
-        //
+        // 110: 遥测控制
         k_param_gcs0 = 110,
         k_param_gcs1,
         k_param_sysid_this_mav,
         k_param_sysid_my_gcs,
-        k_param_serial1_baud_old, // deprecated
+        k_param_serial1_baud_old, // 已弃用
         k_param_telem_delay,
         k_param_gcs2,
-        k_param_serial2_baud_old, // deprecated
-        k_param_serial2_protocol, // deprecated
+        k_param_serial2_baud_old, // 已弃用
+        k_param_serial2_protocol, // 已弃用
         k_param_serial_manager_old,
         k_param_ch9_option_old,
         k_param_ch10_option_old,
@@ -226,52 +203,10 @@ public:
         k_param_gcs5,
         k_param_gcs6,
 
-        //
-        // 135 : reserved for Solo until features merged with master
-        //
+        // 135: 为Solo预留,直到功能合并到主分支
         k_param_rtl_speed_cms = 135,
         k_param_fs_batt_curr_rtl,
         k_param_rtl_cone_slope, // 137
-
-        //
-        // 140: Sensor parameters
-        //
-        k_param_imu = 140, // deprecated - can be deleted
-        k_param_battery_monitoring = 141,   // deprecated - can be deleted
-        k_param_volt_div_ratio, // deprecated - can be deleted
-        k_param_curr_amp_per_volt,  // deprecated - can be deleted
-        k_param_input_voltage,  // deprecated - can be deleted
-        k_param_pack_capacity,  // deprecated - can be deleted
-        k_param_compass_enabled_deprecated,
-        k_param_compass,
-        k_param_rangefinder_enabled_old, // deprecated
-        k_param_frame_type,
-        k_param_optflow_enabled,    // deprecated
-        k_param_fs_batt_voltage,    // unused - moved to AP_BattMonitor
-        k_param_ch7_option_old,
-        k_param_auto_slew_rate,     // deprecated - can be deleted
-        k_param_rangefinder_type_old,     // deprecated
-        k_param_super_simple = 155,
-        k_param_axis_enabled = 157, // deprecated - remove with next eeprom number change
-        k_param_copter_leds_mode,   // deprecated - remove with next eeprom number change
-        k_param_ahrs, // AHRS group // 159
-
-        //
-        // 160: Navigation parameters
-        //
-        k_param_rtl_altitude = 160,
-        k_param_crosstrack_gain,    // deprecated - remove with next eeprom number change
-        k_param_rtl_loiter_time,
-        k_param_rtl_alt_final,
-        k_param_tilt_comp, // 164 deprecated - remove with next eeprom number change
-
-
-        //
-        // Camera and mount parameters
-        //
-        k_param_camera = 165,
-        k_param_camera_mount,
-        k_param_camera_mount2,      // deprecated
 
         //
         // Battery monitoring parameters

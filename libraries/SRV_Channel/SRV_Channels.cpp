@@ -608,14 +608,21 @@ bool SRV_Channels::is_GPIO(uint8_t channel)
 }
 
 // Set E - stop
+// 设置电机紧急停止状态
+// state: true表示紧急停止,false表示解除紧急停止
 void SRV_Channels::set_emergency_stop(bool state) {
 #if HAL_LOGGING_ENABLED
+    // 状态发生变化时记录日志
     if (state != emergency_stop) {
+        // 获取日志记录器实例
         AP_Logger *logger = AP_Logger::get_singleton();
+        // 如果日志记录器可用且已启用,记录事件
         if (logger && logger->logging_enabled()) {
+            // 根据状态写入不同的事件日志
             logger->Write_Event(state ? LogEvent::MOTORS_EMERGENCY_STOPPED : LogEvent::MOTORS_EMERGENCY_STOP_CLEARED);
         }
     }
 #endif
+    // 更新紧急停止状态
     emergency_stop = state;
 }

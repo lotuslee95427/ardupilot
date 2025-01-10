@@ -162,34 +162,35 @@ bool Copter::ekf_over_threshold()
     return false;
 }
 
-
-// failsafe_ekf_event - perform ekf failsafe
+// failsafe_ekf_event - 执行EKF失效保护
 void Copter::failsafe_ekf_event()
 {
-    // EKF failsafe event has occurred
+    // 标记EKF失效保护事件已发生
     failsafe.ekf = true;
+    // 记录失效保护错误日志
     LOGGER_WRITE_ERROR(LogErrorSubsystem::FAILSAFE_EKFINAV, LogErrorCode::FAILSAFE_OCCURRED);
 
-    // if disarmed take no action
+    // 如果电机未解锁则不执行任何动作
     if (!motors->armed()) {
         return;
     }
 
-    // sometimes LAND *does* require GPS so ensure we are in non-GPS land
+    // 如果当前是LAND模式且使用GPS,则切换到不使用GPS的降落模式
     if (flightmode->mode_number() == Mode::Number::LAND && landing_with_GPS()) {
         mode_land.do_not_use_GPS();
         return;
     }
 
-    // does this mode require position?
+    // 如果当前飞行模式不需要GPS定位且不是强制降落模式,则退出
     if (!copter.flightmode->requires_GPS() && (g.fs_ekf_action != FS_EKF_ACTION_LAND_EVEN_STABILIZE)) {
         return;
     }
 
-    // take action based on fs_ekf_action parameter
+    // 根据fs_ekf_action参数执行相应动作
     switch (g.fs_ekf_action) {
         case FS_EKF_ACTION_ALTHOLD:
-            // AltHold
+            // 切换到定高模式
+            // 如果遥控器失效或无法切换到定高模式,则切换到带暂停的降落模式
             if (failsafe.radio || !set_mode(Mode::Number::ALT_HOLD, ModeReason::EKF_FAILSAFE)) {
                 set_mode_land_with_pause(ModeReason::EKF_FAILSAFE);
             }
@@ -197,12 +198,14 @@ void Copter::failsafe_ekf_event()
         case FS_EKF_ACTION_LAND:
         case FS_EKF_ACTION_LAND_EVEN_STABILIZE:
         default:
+            // 切换到带暂停的降落模式
             set_mode_land_with_pause(ModeReason::EKF_FAILSAFE);
             break;
     }
 
-    // set true if ekf action is triggered
+    // 设置EKF失效保护标志
     AP_Notify::flags.failsafe_ekf = true;
+    // 向地面站发送模式切换消息
     gcs().send_text(MAV_SEVERITY_CRITICAL, "EKF Failsafe: changed to %s Mode", flightmode->name());
 }
 
