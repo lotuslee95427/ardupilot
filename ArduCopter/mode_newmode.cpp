@@ -4,6 +4,12 @@
  * Init and run calls for stabilize flight mode
  */
 
+bool ModeNewMode::init(bool ignore_checks){
+    // 通过mavlink发送消息已切换到newmode
+    gcs().send_text(MAV_SEVERITY_INFO, "Switched to NewMode by LEH");
+    return true;
+}
+
 // stabilize_run - runs the main stabilize controller
 // should be called at 100hz or more
 void ModeNewMode::run()

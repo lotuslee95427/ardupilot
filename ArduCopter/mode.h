@@ -1645,6 +1645,7 @@ public:
     using Mode::Mode;
     Number mode_number() const override { return Number::STABILIZE; }
 
+    bool init(bool ignore_checks) override;
     virtual void run() override;
 
     bool requires_GPS() const override { return false; }
