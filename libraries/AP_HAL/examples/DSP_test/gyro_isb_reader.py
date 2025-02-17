@@ -4,6 +4,23 @@
 extract ISBH and ISBD messages from AP_Logging files and produce C++ arrays for consumption by the DSP subsystem
 从AP_Logging文件中提取ISBH和ISBD消息,并生成C++数组供DSP子系统使用
 '''
+
+"""
+详细分析：
+该脚本主要用于处理AP_Logging日志文件，从中提取两类特定的消息：ISBH和ISBD消息。
+其中：
+    1. ISBH消息通常包含数据头信息，如数据的基本参数、数据长度、传感器类型等；
+    2. ISBD消息则携带实际的传感器数据（例如X、Y、Z轴的测量值等）。
+    
+脚本的核心作用在于将这些从日志中解析出来的数据，整理并转换为C++数组格式，
+供嵌入式系统中的DSP子系统使用，从而实现后续数字信号处理（例如FFT处理、滤波等）。
+此外，该脚本还支持通过命令行参数对日志数据进行筛选（例如--condition参数），
+使得用户可以选择性地处理符合特定条件的日志记录。
+总结来说，这个工具充当了AP_Logging日志数据与C++ DSP模块间的数据桥梁，
+简化了数据预处理和转换流程，方便开发者进行信号分析和调试。
+"""
+
+
 from __future__ import print_function
 
 import os
