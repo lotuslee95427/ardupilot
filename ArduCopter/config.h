@@ -605,3 +605,7 @@
 #ifndef USER_PARAMS_ENABLED
   #define USER_PARAMS_ENABLED 0
 #endif
+
+#ifndef DYSENSOR_ENABLED
+    #define DYSENSOR_ENABLED 1
+#endif

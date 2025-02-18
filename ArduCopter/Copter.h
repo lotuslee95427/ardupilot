@@ -166,6 +166,10 @@
 
 #if HAL_ADSB_ENABLED
 #include "avoidance_adsb.h"
+
+#endif
+#if DYSENSOR_ENABLED
+#include <AP_DYsensor/AP_DYsensor.h>
 #endif
 // Local modules
 #include "Parameters.h"
@@ -229,6 +233,8 @@ public:
     friend class PayloadPlace;
 
     Copter(void);
+
+    void fast_loop();  // 添加函数声明
 
 private:
 
@@ -1087,3 +1093,7 @@ extern Copter copter;
 
 using AP_HAL::millis;
 using AP_HAL::micros;
+
+#if DYSENSOR_ENABLED
+extern AP_DYsensor dysensor;  // 在 AP_DYsensor_Copter.cpp 中定义
+#endif

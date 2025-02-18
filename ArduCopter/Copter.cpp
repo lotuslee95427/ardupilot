@@ -85,6 +85,8 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 #define SCHED_TASK(func, _interval_ticks, _max_time_micros, _prio) SCHED_TASK_CLASS(Copter, &copter, func, _interval_ticks, _max_time_micros, _prio)
 #define FAST_TASK(func) FAST_TASK_CLASS(Copter, &copter, func)
 
+
+
 /*
   scheduler table - all tasks should be listed here.
 
@@ -890,3 +892,15 @@ Copter copter;
 AP_Vehicle& vehicle = copter;
 
 AP_HAL_MAIN_CALLBACKS(&copter);
+
+void Copter::fast_loop()
+{
+    // update IMU, run EKF, etc
+    
+#if DYSENSOR_ENABLED
+    dysensor.update();
+#endif
+
+    // run the attitude controllers
+    update_flight_mode();
+}

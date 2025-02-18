@@ -27,7 +27,8 @@ def build(bld):
             'AP_Devo_Telem',
             'AC_AutoTune',
             'AP_KDECAN',
-            'AP_SurfaceDistance'
+            'AP_SurfaceDistance',
+            'AP_DYsensor',
         ],
     )
 
@@ -36,7 +37,13 @@ def build(bld):
         program_groups=['bin', 'copter'],
         use=vehicle + '_libs',
         defines=['FRAME_CONFIG=MULTICOPTER_FRAME'],
-        )
+        source=[
+            'AP_DYsensor_Copter.cpp',
+            'Copter.cpp',
+            'Parameters.cpp',
+            'system.cpp',
+        ]
+    )
 
     bld.ap_program(
         program_name='arducopter-heli',

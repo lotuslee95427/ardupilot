@@ -201,6 +201,12 @@ void Copter::init_ardupilot()
 
     // flag that initialisation has completed
     ap.initialised = true;
+
+#if DYSENSOR_ENABLED
+    if(dysensor.enabled) {
+        dysensor.init();
+    }
+#endif
 }
 
 

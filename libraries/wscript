@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+# encoding: utf-8
+
+def build(bld):
+    vehicle = bld.path.name
+    
+    bld.ap_stlib(
+        name=vehicle + '_libs',
+        ap_vehicle=vehicle,
+        ap_libraries=[
+            'AP_Common',
+            'AP_HAL',
+            'AP_HAL_Empty',
+            'AP_Math',
+            'AP_AHRS',
+            'AP_InertialSensor',
+            'AP_GPS',
+            'AP_Vehicle',
+            'AP_Notify',
+            'AP_BattMonitor',
+            'AP_DYsensor',
+            # ... other libraries ...
+        ]
+    ) 
