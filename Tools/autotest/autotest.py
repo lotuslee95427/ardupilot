@@ -1,26 +1,27 @@
 #!/usr/bin/env python3
 """
-ArduPilot automatic test suite.
+ArduPilot自动测试套件。
 
 Andrew Tridgell, October 2011
 
  AP_FLAKE8_CLEAN
 """
 from __future__ import print_function
-import atexit
-import fnmatch
-import copy
-import glob
-import optparse
-import os
-import re
-import shutil
-import signal
-import subprocess
-import sys
-import time
-import traceback
+import atexit  # 用于注册退出时的清理函数
+import fnmatch  # 用于文件名匹配
+import copy  # 用于对象的深拷贝
+import glob  # 用于文件路径匹配
+import optparse  # 用于命令行参数解析
+import os  # 用于操作系统相关功能
+import re  # 用于正则表达式
+import shutil  # 用于文件操作
+import signal  # 用于信号处理
+import subprocess  # 用于执行子进程
+import sys  # 用于系统相关功能
+import time  # 用于时间相关功能
+import traceback  # 用于异常跟踪
 
+# 导入各个飞行器类型的测试模块
 import blimp
 import rover
 import arducopter
@@ -44,12 +45,12 @@ build_opts = None
 
 
 def buildlogs_dirpath():
-    """Return BUILDLOGS directory path."""
+    """返回BUILDLOGS目录路径。"""
     return os.getenv("BUILDLOGS", util.reltopdir("../buildlogs"))
 
 
 def buildlogs_path(path):
-    """Return a string representing path in the buildlogs directory."""
+    """返回buildlogs目录中的文件路径。"""
     bits = [buildlogs_dirpath()]
     if isinstance(path, list):
         bits.extend(path)
@@ -59,12 +60,12 @@ def buildlogs_path(path):
 
 
 def build_all_filepath():
-    """Get build_all.sh path."""
+    """获取build_all.sh脚本路径。"""
     return util.reltopdir('Tools/scripts/build_all.sh')
 
 
 def build_all():
-    """Run the build_all.sh script."""
+    """运行build_all.sh脚本。"""
     print("Running build_all.sh")
     if util.run_cmd(build_all_filepath(), directory=util.reltopdir('.')) != 0:
         print("Failed build_all.sh")
@@ -73,14 +74,13 @@ def build_all():
 
 
 def build_binaries():
-    """Run the build_binaries.py script."""
+    """运行build_binaries.py脚本。"""
     print("Running build_binaries.py")
 
-    # copy the script (and various libraries used by the script) as it
-    # changes git branch, which can change the script while running
+    # 复制脚本(和脚本使用的各种库)因为它会切换git分支,这可能会在运行时改变脚本
     for thing in [
             "board_list.py",
-            "build_binaries_history.py",
+            "build_binaries_history.py", 
             "build_binaries.py",
             "build_sizes/build_sizes.py",
             "generate_manifest.py",
@@ -97,7 +97,7 @@ def build_binaries():
 
 
 def build_examples(**kwargs):
-    """Build examples."""
+    """编译示例程序。"""
     for target in 'Pixhawk1', 'navio', 'linux':
         print("Running build.examples for %s" % target)
         try:
@@ -111,7 +111,7 @@ def build_examples(**kwargs):
 
 
 def build_unit_tests(**kwargs):
-    """Build tests."""
+    """编译单元测试。"""
     for target in ['linux', 'sitl']:
         print("Running build.unit_tests for %s" % target)
         try:
@@ -125,13 +125,13 @@ def build_unit_tests(**kwargs):
 
 
 def run_unit_test(test):
-    """Run unit test file."""
+    """运行单个单元测试文件。"""
     print("Running (%s)" % test)
     subprocess.check_call([test])
 
 
 def run_unit_tests():
-    """Run all unit tests files."""
+    """运行所有单元测试文件。"""
     success = True
     fail_list = []
     for target in ['linux', 'sitl']:
@@ -155,7 +155,7 @@ def run_unit_tests():
 
 
 def run_clang_scan_build():
-    """Run Clang Scan-build utility."""
+    """运行Clang Scan-build工具。"""
     if util.run_cmd("scan-build python waf configure",
                     directory=util.reltopdir('.')) != 0:
         print("Failed scan-build-configure")
@@ -175,12 +175,12 @@ def run_clang_scan_build():
 
 
 def param_parse_filepath():
-    """Get param_parse.py script path."""
+    """获取param_parse.py脚本路径。"""
     return util.reltopdir('Tools/autotest/param_metadata/param_parse.py')
 
 
 def all_vehicles():
-    """Get all vehicles name."""
+    """获取所有飞行器名称。"""
     return ('ArduPlane',
             'ArduCopter',
             'Rover',
@@ -192,7 +192,7 @@ def all_vehicles():
 
 
 def build_parameters():
-    """Run the param_parse.py script."""
+    """运行param_parse.py脚本。"""
     print("Running param_parse.py")
     for vehicle in all_vehicles():
         if util.run_cmd([param_parse_filepath(), '--vehicle', vehicle],
@@ -203,12 +203,12 @@ def build_parameters():
 
 
 def mavtogpx_filepath():
-    """Get mavtogpx script path."""
+    """获取mavtogpx脚本路径。"""
     return util.reltopdir("modules/mavlink/pymavlink/tools/mavtogpx.py")
 
 
 def convert_gpx():
-    """Convert any tlog files to GPX and KML."""
+    """将tlog文件转换为GPX和KML格式。"""
     mavlog = glob.glob(buildlogs_path("*.tlog"))
     passed = True
     for m in mavlog:
@@ -230,14 +230,14 @@ def convert_gpx():
 
 
 def test_prerequisites():
-    """Check we have the right directories and tools to run tests."""
+    """检查是否有正确的目录和工具来运行测试。"""
     print("Testing prerequisites")
     util.mkdir_p(buildlogs_dirpath())
     return True
 
 
 def alarm_handler(signum, frame):
-    """Handle test timeout."""
+    """处理测试超时。"""
     global results, opts, tester
     try:
         print("Alarm handler called")
@@ -259,7 +259,7 @@ def alarm_handler(signum, frame):
 
 
 def should_run_step(step):
-    """See if a step should be skipped."""
+    """判断是否应该跳过某个步骤。"""
     for skip in skipsteps:
         if fnmatch.fnmatch(step.lower(), skip.lower()):
             return False
@@ -294,14 +294,14 @@ __bin_names = {
 
 
 def binary_path(step, debug=False):
-    """Get vehicle binary path."""
+    """获取飞行器二进制文件路径。"""
     try:
         vehicle = step.split(".")[1]
     except Exception:
         return None
 
     if vehicle not in __bin_names:
-        # cope with builds that don't have a specific binary
+        # 处理没有特定二进制文件的构建
         return None
 
     try:
@@ -324,7 +324,7 @@ def binary_path(step, debug=False):
 
 
 def split_specific_test_step(step):
-    """Extract test from argument."""
+    """从参数中提取测试。"""
     print('step=%s' % str(step))
     m = re.match("((fly|drive|dive|test)[.][^.]+)[.](.*)", step)
     if m is None:
@@ -333,7 +333,7 @@ def split_specific_test_step(step):
 
 
 def find_specific_test_to_run(step):
-    """Find test to run in argument."""
+    """在参数中查找要运行的测试。"""
     t = split_specific_test_step(step)
     if t is None:
         return None
@@ -373,7 +373,7 @@ supplementary_test_binary_map = {
 
 
 def run_specific_test(step, *args, **kwargs):
-    """Run a specific test."""
+    """运行特定测试。"""
     t = split_specific_test_step(step)
     if t is None:
         return []
@@ -395,8 +395,8 @@ def run_specific_test(step, *args, **kwargs):
 
 
 def run_step(step):
-    """Run one step."""
-    # remove old logs
+    """运行一个步骤。"""
+    # 删除旧日志
     util.run_cmd('/bin/rm -f logs/*.BIN logs/LASTLOG.TXT')
 
     if step == "prerequisites":
@@ -472,11 +472,11 @@ def run_step(step):
 
     binary = binary_path(step, debug=opts.debug)
 
-    # see if we need any supplementary binaries
+    # 检查是否需要任何补充二进制文件
     supplementary_binaries = []
     for k in supplementary_test_binary_map.keys():
         if step.startswith(k):
-            # this test needs to use supplementary binaries
+            # 此测试需要使用补充二进制文件
             for supplementary_test_binary in supplementary_test_binary_map[k]:
                 a = supplementary_test_binary.split(':')
                 if len(a) != 4:
@@ -491,8 +491,8 @@ def run_step(step):
                               "customisation" : customisation,
                               "param_file" : param_file}
                 supplementary_binaries.append(sup_binary)
-            # we are running in conjunction with a supplementary app
-            # can't have speedup
+            # 我们正在与补充应用程序一起运行
+            # 不能加速
             opts.speedup = 1.0
             break
 
@@ -521,15 +521,15 @@ def run_step(step):
     if opts.speedup is not None:
         fly_opts["speedup"] = opts.speedup
 
-    # handle "test.Copter" etc:
+    # 处理"test.Copter"等:
     if step in tester_class_map:
-        # create an instance of the tester class:
+        # 创建测试类的实例:
         global tester
         tester = tester_class_map[step](binary, **fly_opts)
-        # run the test and return its result and the tester itself
+        # 运行测试并返回其结果和测试器本身
         return tester.autotest(None, step_name=step), tester
 
-    # handle "test.Copter.CPUFailsafe" etc:
+    # 处理"test.Copter.CPUFailsafe"等:
     specific_test_to_run = find_specific_test_to_run(step)
     if specific_test_to_run is not None:
         return run_specific_test(specific_test_to_run, binary, **fly_opts)
@@ -565,29 +565,29 @@ def run_step(step):
 
 
 class TestResult(object):
-    """Test result class."""
+    """测试结果类。"""
 
     def __init__(self, name, result, elapsed):
-        """Init test result class."""
+        """初始化测试结果类。"""
         self.name = name
         self.result = result
         self.elapsed = "%.1f" % elapsed
 
 
 class TestFile(object):
-    """Test result file."""
+    """测试结果文件。"""
 
     def __init__(self, name, fname):
-        """Init test result file."""
+        """初始化测试结果文件。"""
         self.name = name
         self.fname = fname
 
 
 class TestResults(object):
-    """Test results class."""
+    """测试结果类。"""
 
     def __init__(self):
-        """Init test results class."""
+        """初始化测试结果类。"""
         self.date = time.asctime()
         self.githash = util.get_git_hash()
         self.tests = []
@@ -595,43 +595,43 @@ class TestResults(object):
         self.images = []
 
     def add(self, name, result, elapsed):
-        """Add a result."""
+        """添加一个结果。"""
         self.tests.append(TestResult(name, result, elapsed))
 
     def addfile(self, name, fname):
-        """Add a result file."""
+        """添加一个结果文件。"""
         self.files.append(TestFile(name, fname))
 
     def addimage(self, name, fname):
-        """Add a result image."""
+        """添加一个结果图像。"""
         self.images.append(TestFile(name, fname))
 
     def addglob(self, name, pattern):
-        """Add a set of files."""
+        """添加一组文件。"""
         for f in glob.glob(buildlogs_path(pattern)):
             self.addfile(name, os.path.basename(f))
 
     def addglobimage(self, name, pattern):
-        """Add a set of images."""
+        """添加一组图像。"""
         for f in glob.glob(buildlogs_path(pattern)):
             self.addimage(name, os.path.basename(f))
 
     def generate_badge(self):
-        """Get the badge template, populates and saves the result to buildlogs path."""
+        """获取徽章模板,填充并将结果保存到buildlogs路径。"""
         passed_tests = len([t for t in self.tests if "PASSED" in t.result])
         total_tests = len(self.tests)
         badge_color = "#4c1" if passed_tests == total_tests else "#e05d44"
 
         badge_text = "{0}/{1}".format(passed_tests, total_tests)
-        # Text length so it is not stretched by svg
+        # 文本长度,使其不被svg拉伸
         text_length = len(badge_text) * 70
 
-        # Load template file
+        # 加载模板文件
         template_path = 'Tools/autotest/web/autotest-badge-template.svg'
         with open(util.reltopdir(template_path), "r") as f:
             template = f.read()
 
-        # Add our results to the template
+        # 将结果添加到模板中
         badge = template.format(color=badge_color,
                                 text=badge_text,
                                 text_length=text_length)
@@ -644,7 +644,7 @@ def copy_tree(f, t, dirs_exist_ok=False):
 
 
 def write_webresults(results_to_write):
-    """Write webpage results."""
+    """写入网页结果。"""
     t = mavtemplate.MAVTemplate()
     for h in glob.glob(util.reltopdir('Tools/autotest/web/*.html')):
         html = util.loadfile(h)
@@ -658,7 +658,7 @@ def write_webresults(results_to_write):
 
 
 def write_fullresults():
-    """Write out full results set."""
+    """写出完整的结果集。"""
     global results
     results.addglob("Google Earth track", '*.kmz')
     results.addfile('Full Logs', 'autotest-output.txt')
@@ -666,7 +666,7 @@ def write_fullresults():
     results.addglob("MAVLink log", '*.tlog')
     results.addglob("GPX track", '*.gpx')
 
-    # results common to all vehicles:
+    # 所有飞行器通用的结果:
     vehicle_files = [
         ('{vehicle} core', '{vehicle}.core'),
         ('{vehicle} ELF', '{vehicle}.elf'),
@@ -698,7 +698,7 @@ def write_fullresults():
 
 
 def run_tests(steps):
-    """Run a list of steps."""
+    """运行一系列步骤。"""
     global results
 
     corefiles = glob.glob("core*")
