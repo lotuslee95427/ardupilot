@@ -259,6 +259,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #if HAL_BUTTON_ENABLED
     SCHED_TASK_CLASS(AP_Button,            &copter.button,              update,           5, 100, 168),
 #endif
+    SCHED_TASK(update_dysensor,          60,    100,  57),
 };
 
 void Copter::get_scheduler_tasks(const AP_Scheduler::Task *&tasks,

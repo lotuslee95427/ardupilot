@@ -201,6 +201,8 @@ void Copter::init_ardupilot()
 
     // flag that initialisation has completed
     ap.initialised = true;
+    // 初始化 DYsensor
+    dysensor.init();
 }
 
 

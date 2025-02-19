@@ -27,6 +27,8 @@
 
 #include <AP_HAL/AP_HAL.h>
 
+#include <AP_DYsensor/AP_DYsensor.h>
+
 // Common dependencies
 #include <AP_Common/AP_Common.h>            // Common definitions and utility routines for the ArduPilot libraries
 #include <AP_Common/Location.h>             // Library having the implementation of location class         
@@ -230,6 +232,10 @@ public:
 
     Copter(void);
 
+    // DYsensor update wrapper function
+    void update_dysensor() {
+        dysensor.update();
+    }
 private:
 
     // key aircraft parameters passed to multiple libraries
@@ -238,6 +244,9 @@ private:
     // Global parameters are all contained within the 'g' class.
     Parameters g;
     ParametersG2 g2;
+
+    // DYsensor
+    AP_DYsensor dysensor;
 
     // used to detect MAVLink acks from GCS to stop compassmot
     uint8_t command_ack_counter;

@@ -13,6 +13,7 @@ def build(bld):
             'AC_Sprayer',
             'AC_Autorotation',
             'AC_WPNav',
+            'AP_DYsensor',
             'AP_Camera',
             'AP_IRLock',
             'AP_InertialNav',
