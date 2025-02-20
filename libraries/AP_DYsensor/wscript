@@ -1,0 +1,9 @@
+#!/usr/bin/env python
+# encoding: utf-8
+
+def build(bld):
+    bld.ap_component(
+        name='AP_DYsensor',
+        vehicle=['copter'],
+        libraries=['AP_HAL'],
+    ) 
