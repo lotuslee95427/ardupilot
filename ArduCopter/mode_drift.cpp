@@ -71,6 +71,9 @@ void ModeDrift::run()
     roll_vel = constrain_float(roll_vel, -DRIFT_SPEEDLIMIT, DRIFT_SPEEDLIMIT);
     pitch_vel = constrain_float(pitch_vel, -DRIFT_SPEEDLIMIT, DRIFT_SPEEDLIMIT);
 
+    // 更新横滚输入值:
+    // - 保留96%的历史值以提供平滑过渡
+    // - 加入4%的新偏航通道输入值
     roll_input = roll_input * .96f + (float)channel_yaw->get_control_in() * .04f;
 
     // convert user input into desired roll velocity
